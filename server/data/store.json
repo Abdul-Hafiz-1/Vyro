@@ -1,0 +1,1474 @@
+{
+  "agents": {
+    "agent_buyer_studio": {
+      "id": "agent_buyer_studio",
+      "ownerId": "user_main",
+      "businessName": "Apex Studio Ventures",
+      "name": "Studio Buyer",
+      "type": "buyer",
+      "description": "Autonomous procurement agent for digital services, landing pages, and UI engineering.",
+      "category": "Design",
+      "capabilities": [
+        "Requirements Analysis",
+        "Autonomous Negotiation",
+        "Budget Enforcement",
+        "Specification Review"
+      ],
+      "status": "active",
+      "verificationStatus": "verified",
+      "catalog": [],
+      "pricingConstraints": {
+        "defaultBudget": 150,
+        "maxBudget": 200,
+        "flexibilityPercent": 10
+      },
+      "negotiationStrategy": "balanced",
+      "approvalPolicy": "explicit_human_required",
+      "isDemo": true,
+      "avatarSeed": "studio-buyer",
+      "createdAt": "2026-11-05T13:51:29.936Z",
+      "updatedAt": "2026-11-05T13:51:29.936Z"
+    },
+    "agent_seller_pixel": {
+      "id": "agent_seller_pixel",
+      "ownerId": "seller_pixel_co",
+      "businessName": "Pixel Studio Collective",
+      "name": "Pixel Studio Agent",
+      "type": "seller",
+      "description": "Specialized in high-conversion landing pages, brand identity, and responsive Tailwind interfaces.",
+      "category": "Design",
+      "capabilities": [
+        "Landing Page Design",
+        "Tailwind CSS",
+        "Framer Motion",
+        "Responsive UI",
+        "Contact Forms"
+      ],
+      "status": "active",
+      "verificationStatus": "verified",
+      "catalog": [
+        {
+          "id": "cat_pixel_landing",
+          "name": "Professional Responsive Landing Page",
+          "description": "Custom modern landing page with hero, pricing matrix, responsive layout, and form integration.",
+          "startingPrice": 180,
+          "minPrice": 140,
+          "deliveryDays": 5,
+          "includedDeliverables": [
+            "Responsive Landing Page Layout",
+            "Interactive Pricing Section",
+            "Integrated Contact Form",
+            "Mobile Optimization",
+            "Framer Motion Micro-interactions"
+          ]
+        }
+      ],
+      "pricingConstraints": {
+        "startingPrice": 180,
+        "minAcceptablePrice": 140,
+        "flexibilityPercent": 22
+      },
+      "negotiationStrategy": "balanced",
+      "approvalPolicy": "explicit_human_required",
+      "isDemo": true,
+      "avatarSeed": "pixel-studio",
+      "createdAt": "2026-11-05T13:51:29.936Z",
+      "updatedAt": "2026-11-05T13:51:29.936Z"
+    },
+    "agent_seller_northstar": {
+      "id": "agent_seller_northstar",
+      "ownerId": "seller_northstar_inc",
+      "businessName": "Northstar Interactive",
+      "name": "Northstar Agent",
+      "type": "seller",
+      "description": "Enterprise-grade UI/UX design studio focused on design systems, precision typography, and sleek SaaS pages.",
+      "category": "Design",
+      "capabilities": [
+        "Design Systems",
+        "SaaS Landing Pages",
+        "Design-to-Code",
+        "Accessibility QA",
+        "Interactive Prototypes"
+      ],
+      "status": "active",
+      "verificationStatus": "verified",
+      "catalog": [
+        {
+          "id": "cat_northstar_saas",
+          "name": "Enterprise SaaS Web Interface",
+          "description": "High-polish SaaS landing page with dark mode, interactive component library, and responsive forms.",
+          "startingPrice": 195,
+          "minPrice": 155,
+          "deliveryDays": 4,
+          "includedDeliverables": [
+            "Bespoke Dark Design System",
+            "Interactive Component Highlights",
+            "Validated Contact / Lead Form",
+            "Performance-Optimized Codebase",
+            "30-Day Support Period"
+          ]
+        }
+      ],
+      "pricingConstraints": {
+        "startingPrice": 195,
+        "minAcceptablePrice": 155,
+        "flexibilityPercent": 20
+      },
+      "negotiationStrategy": "quality_first",
+      "approvalPolicy": "explicit_human_required",
+      "isDemo": true,
+      "avatarSeed": "northstar",
+      "createdAt": "2026-11-05T13:51:29.936Z",
+      "updatedAt": "2026-11-05T13:51:29.936Z"
+    },
+    "agent_seller_launchcraft": {
+      "id": "agent_seller_launchcraft",
+      "ownerId": "seller_launchcraft_ltd",
+      "businessName": "LaunchCraft Velocity",
+      "name": "LaunchCraft Agent",
+      "type": "seller",
+      "description": "Rapid turnaround landing page engineering. Optimized for speed to market and conversion performance.",
+      "category": "Development",
+      "capabilities": [
+        "Rapid Prototyping",
+        "Vite & React Deployments",
+        "SEO Optimization",
+        "Analytics Setup",
+        "Forms & Webhooks"
+      ],
+      "status": "active",
+      "verificationStatus": "verified",
+      "catalog": [
+        {
+          "id": "cat_launchcraft_rapid",
+          "name": "Rapid Deployment Landing Page",
+          "description": "Fast 3-day turnaround landing page with built-in analytics, clean layout, and conversion sections.",
+          "startingPrice": 160,
+          "minPrice": 135,
+          "deliveryDays": 3,
+          "includedDeliverables": [
+            "Lightweight Fast-Loading Page",
+            "Conversion-Focused Copy Layout",
+            "Contact Form with Email Routing",
+            "Responsive Mobile Navigation",
+            "Production Vercel/Netlify Ready"
+          ]
+        }
+      ],
+      "pricingConstraints": {
+        "startingPrice": 160,
+        "minAcceptablePrice": 135,
+        "flexibilityPercent": 15
+      },
+      "negotiationStrategy": "expedited",
+      "approvalPolicy": "explicit_human_required",
+      "isDemo": true,
+      "avatarSeed": "launchcraft",
+      "createdAt": "2026-11-05T13:51:29.936Z",
+      "updatedAt": "2026-11-05T13:51:29.936Z"
+    },
+    "agent_seller_aether": {
+      "id": "agent_seller_aether",
+      "ownerId": "seller_aether_sec",
+      "businessName": "Aether Security Labs",
+      "name": "Aether Sec Agent",
+      "type": "seller",
+      "description": "Automated and human-augmented security audits for APIs, smart contracts, and auth flows.",
+      "category": "Security",
+      "capabilities": [
+        "API Security Auditing",
+        "OWASP Top 10 Review",
+        "Penetration Testing",
+        "Compliance Review"
+      ],
+      "status": "active",
+      "verificationStatus": "verified",
+      "catalog": [
+        {
+          "id": "cat_aether_audit",
+          "name": "Fast-Track API & Auth Security Audit",
+          "description": "Comprehensive static & dynamic vulnerability assessment with actionable remediation reports.",
+          "startingPrice": 420,
+          "minPrice": 360,
+          "deliveryDays": 7,
+          "includedDeliverables": [
+            "Vulnerability Scan & Triage",
+            "Auth Token & Session Safety Report",
+            "Actionable Remediation Patches",
+            "Executive Security Certificate"
+          ]
+        }
+      ],
+      "pricingConstraints": {
+        "startingPrice": 420,
+        "minAcceptablePrice": 360,
+        "flexibilityPercent": 14
+      },
+      "negotiationStrategy": "quality_first",
+      "approvalPolicy": "explicit_human_required",
+      "isDemo": true,
+      "avatarSeed": "aether-sec",
+      "createdAt": "2026-11-05T13:51:29.936Z",
+      "updatedAt": "2026-11-05T13:51:29.936Z"
+    }
+  },
+  "requests": {
+    "req_demo_1793886719940": {
+      "id": "req_demo_1793886719940",
+      "userId": "user_main",
+      "buyerAgentId": "agent_buyer_studio",
+      "rawInput": "I need a professionally designed landing page for my new business. My maximum budget is $150. I need it within five days.",
+      "title": "High-Impact Brand Landing Page with Contact Form",
+      "category": "Design",
+      "requiredCapabilities": [
+        "Landing Page Design",
+        "Tailwind CSS",
+        "Responsive UI",
+        "Contact Forms"
+      ],
+      "deliverables": [
+        "Responsive Landing Page Layout",
+        "Interactive Pricing Section",
+        "Integrated Contact Form",
+        "Mobile Optimization"
+      ],
+      "maxBudget": 150,
+      "currency": "USD",
+      "deadlineDays": 5,
+      "qualityRequirements": "Modern typographic hierarchy, high performance, clean responsive breakpoints.",
+      "status": "completed",
+      "createdAt": "2026-11-05T13:51:59.940Z",
+      "updatedAt": "2026-11-05T14:06:10.704Z",
+      "selectedSellerAgentIds": [
+        "agent_seller_pixel",
+        "agent_seller_northstar",
+        "agent_seller_launchcraft"
+      ]
+    }
+  },
+  "negotiations": {
+    "neg_38d9c1ba": {
+      "id": "neg_38d9c1ba",
+      "requestId": "req_demo_1793886719940",
+      "buyerAgentId": "agent_buyer_studio",
+      "sellerAgentId": "agent_seller_pixel",
+      "status": "agreement_reached",
+      "currentRound": 3,
+      "maxRounds": 4,
+      "currentProposal": {
+        "id": "prop_5c608991",
+        "negotiationId": "neg_38d9c1ba",
+        "senderAgentId": "agent_seller_pixel",
+        "round": 3,
+        "price": 143,
+        "currency": "USD",
+        "deliverables": [
+          "Responsive Landing Page Layout",
+          "Interactive Pricing Section",
+          "Integrated Contact Form",
+          "Mobile Optimization",
+          "Framer Motion Micro-interactions"
+        ],
+        "deliveryDays": 5,
+        "terms": "Standard Verified Escrow via PayPal Sandbox",
+        "validUntil": "2026-11-07T13:52:00.004Z",
+        "status": "accepted",
+        "createdAt": "2026-11-05T13:52:00.004Z"
+      },
+      "messages": [
+        {
+          "id": "msg_2eaf6118",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_pixel",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "request",
+          "content": "Hello Pixel Studio Collective. On behalf of our team, we are requesting a commercial proposal for \"High-Impact Brand Landing Page with Contact Form\". Maximum authorized budget: $150. Target turnaround: 5 days. Deliverables: Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form, Mobile Optimization.",
+          "payload": {
+            "maxBudget": 150,
+            "deadlineDays": 5,
+            "deliverables": [
+              "Responsive Landing Page Layout",
+              "Interactive Pricing Section",
+              "Integrated Contact Form",
+              "Mobile Optimization"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "initiate_negotiation",
+              "args": {
+                "sellerAgentId": "agent_seller_pixel",
+                "requestId": "req_demo_1793886719940"
+              },
+              "result": {
+                "status": "dispatched"
+              },
+              "timestamp": "2026-11-05T13:51:59.943Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:51:59.943Z"
+        },
+        {
+          "id": "msg_e6564f60",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_seller_pixel",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 1,
+          "messageType": "proposal",
+          "content": "Greetings from Pixel Studio Collective. We reviewed your specifications for \"High-Impact Brand Landing Page with Contact Form\". We can deliver the full scope including Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form for $165 within 5 business days.",
+          "payload": {
+            "proposalId": "prop_2b43e57e",
+            "price": 165,
+            "deliveryDays": 5,
+            "deliverables": [
+              "Responsive Landing Page Layout",
+              "Interactive Pricing Section",
+              "Integrated Contact Form",
+              "Mobile Optimization",
+              "Framer Motion Micro-interactions"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "generate_proposal",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 140
+              },
+              "result": {
+                "action": "proposal",
+                "agreedPrice": 165,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:51:59.950Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:51:59.950Z"
+        },
+        {
+          "id": "msg_ab0609ff",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_pixel",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $165. We are targeting a budget of $145 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $145?",
+          "payload": {
+            "counterPrice": 145
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 1,
+                "targetBudget": 150,
+                "tacticalOffer": 145
+              },
+              "result": {
+                "counterPrice": 145
+              },
+              "timestamp": "2026-11-05T13:51:59.955Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:51:59.955Z"
+        },
+        {
+          "id": "msg_e7dd983c",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_seller_pixel",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "We appreciate your counteroffer of $145. To ensure top-tier engineering and QA, our best feasible compromise is $163 with all 4 core deliverables included.",
+          "payload": {
+            "counterPrice": 163
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 140,
+                "buyerOffer": 145
+              },
+              "result": {
+                "action": "counteroffer",
+                "agreedPrice": 163,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:51:59.972Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:51:59.972Z"
+        },
+        {
+          "id": "msg_186c54c3",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_pixel",
+          "senderRole": "buyer",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $163. We are targeting a budget of $143 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $143?",
+          "payload": {
+            "counterPrice": 143
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 2,
+                "targetBudget": 150,
+                "tacticalOffer": 143
+              },
+              "result": {
+                "counterPrice": 143
+              },
+              "timestamp": "2026-11-05T13:52:00.000Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.000Z"
+        },
+        {
+          "id": "msg_d358c451",
+          "negotiationId": "neg_38d9c1ba",
+          "senderAgentId": "agent_seller_pixel",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 3,
+          "messageType": "acceptance",
+          "content": "Agreed. Pixel Studio Collective accepts your offer of $143. All requested deliverables and 5-day completion guarantee are fully locked in.",
+          "payload": {
+            "agreedPrice": 143
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 140,
+                "buyerOffer": 143
+              },
+              "result": {
+                "action": "acceptance",
+                "agreedPrice": 143,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:52:00.004Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.004Z"
+        }
+      ],
+      "agreementId": "agr_488bf4d9",
+      "createdAt": "2026-11-05T13:51:59.943Z",
+      "updatedAt": "2026-11-05T13:52:00.009Z"
+    },
+    "neg_ba384e43": {
+      "id": "neg_ba384e43",
+      "requestId": "req_demo_1793886719940",
+      "buyerAgentId": "agent_buyer_studio",
+      "sellerAgentId": "agent_seller_northstar",
+      "status": "in_negotiation",
+      "currentRound": 4,
+      "maxRounds": 4,
+      "currentProposal": {
+        "id": "prop_65fd4c7e",
+        "negotiationId": "neg_ba384e43",
+        "senderAgentId": "agent_seller_northstar",
+        "round": 4,
+        "price": 155,
+        "currency": "USD",
+        "deliverables": [
+          "Bespoke Dark Design System",
+          "Interactive Component Highlights",
+          "Validated Contact / Lead Form",
+          "Performance-Optimized Codebase",
+          "30-Day Support Period"
+        ],
+        "deliveryDays": 4,
+        "terms": "Standard Verified Escrow via PayPal Sandbox",
+        "validUntil": "2026-11-07T13:52:00.256Z",
+        "status": "pending",
+        "createdAt": "2026-11-05T13:52:00.255Z"
+      },
+      "messages": [
+        {
+          "id": "msg_70a244ba",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_northstar",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "request",
+          "content": "Hello Northstar Interactive. On behalf of our team, we are requesting a commercial proposal for \"High-Impact Brand Landing Page with Contact Form\". Maximum authorized budget: $150. Target turnaround: 5 days. Deliverables: Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form, Mobile Optimization.",
+          "payload": {
+            "maxBudget": 150,
+            "deadlineDays": 5,
+            "deliverables": [
+              "Responsive Landing Page Layout",
+              "Interactive Pricing Section",
+              "Integrated Contact Form",
+              "Mobile Optimization"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "initiate_negotiation",
+              "args": {
+                "sellerAgentId": "agent_seller_northstar",
+                "requestId": "req_demo_1793886719940"
+              },
+              "result": {
+                "status": "dispatched"
+              },
+              "timestamp": "2026-11-05T13:52:00.010Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.010Z"
+        },
+        {
+          "id": "msg_7877ec8d",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_seller_northstar",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 1,
+          "messageType": "proposal",
+          "content": "Greetings from Northstar Interactive. We reviewed your specifications for \"High-Impact Brand Landing Page with Contact Form\". We can deliver the full scope including Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form for $165 within 4 business days.",
+          "payload": {
+            "proposalId": "prop_0d81a775",
+            "price": 165,
+            "deliveryDays": 4,
+            "deliverables": [
+              "Bespoke Dark Design System",
+              "Interactive Component Highlights",
+              "Validated Contact / Lead Form",
+              "Performance-Optimized Codebase",
+              "30-Day Support Period"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "generate_proposal",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 155
+              },
+              "result": {
+                "action": "proposal",
+                "agreedPrice": 165,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:52:00.023Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.023Z"
+        },
+        {
+          "id": "msg_d5c29d92",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_northstar",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $165. We are targeting a budget of $145 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $145?",
+          "payload": {
+            "counterPrice": 145
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 1,
+                "targetBudget": 150,
+                "tacticalOffer": 145
+              },
+              "result": {
+                "counterPrice": 145
+              },
+              "timestamp": "2026-11-05T13:52:00.027Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.027Z"
+        },
+        {
+          "id": "msg_69752f8f",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_seller_northstar",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "Your offer of $145 is below our operational threshold ($155). Our floor price for this production scope is $155 with 100% deliverable coverage.",
+          "payload": {
+            "counterPrice": 155
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 155,
+                "buyerOffer": 145
+              },
+              "result": {
+                "action": "counteroffer",
+                "agreedPrice": 155,
+                "constrainedByMinPrice": true
+              },
+              "timestamp": "2026-11-05T13:52:00.038Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.038Z"
+        },
+        {
+          "id": "msg_5de5bf37",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_northstar",
+          "senderRole": "buyer",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $155. We are targeting a budget of $136 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $136?",
+          "payload": {
+            "counterPrice": 136
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 2,
+                "targetBudget": 150,
+                "tacticalOffer": 136
+              },
+              "result": {
+                "counterPrice": 136
+              },
+              "timestamp": "2026-11-05T13:52:00.120Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.120Z"
+        },
+        {
+          "id": "msg_6f220981",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_seller_northstar",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 3,
+          "messageType": "counteroffer",
+          "content": "Your offer of $136 is below our operational threshold ($155). Our floor price for this production scope is $155 with 100% deliverable coverage.",
+          "payload": {
+            "counterPrice": 155
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 155,
+                "buyerOffer": 136
+              },
+              "result": {
+                "action": "counteroffer",
+                "agreedPrice": 155,
+                "constrainedByMinPrice": true
+              },
+              "timestamp": "2026-11-05T13:52:00.138Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.138Z"
+        },
+        {
+          "id": "msg_b9a8f488",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_northstar",
+          "senderRole": "buyer",
+          "round": 3,
+          "messageType": "counteroffer",
+          "content": "Our ceiling budget for this milestone is $144. Can you deliver the complete scope for $144 within 4 days?",
+          "payload": {
+            "counterPrice": 144
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 3,
+                "proposedPrice": 155,
+                "counterPrice": 144
+              },
+              "result": {
+                "counterPrice": 144,
+                "savings": 11
+              },
+              "timestamp": "2026-11-05T13:52:00.142Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.142Z"
+        },
+        {
+          "id": "msg_a6ac1587",
+          "negotiationId": "neg_ba384e43",
+          "senderAgentId": "agent_seller_northstar",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 4,
+          "messageType": "counteroffer",
+          "content": "Your offer of $144 is below our operational threshold ($155). Our floor price for this production scope is $155 with 100% deliverable coverage.",
+          "payload": {
+            "counterPrice": 155
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 155,
+                "buyerOffer": 144
+              },
+              "result": {
+                "action": "counteroffer",
+                "agreedPrice": 155,
+                "constrainedByMinPrice": true
+              },
+              "timestamp": "2026-11-05T13:52:00.255Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.255Z"
+        }
+      ],
+      "agreementId": null,
+      "createdAt": "2026-11-05T13:52:00.010Z",
+      "updatedAt": "2026-11-05T13:52:00.257Z"
+    },
+    "neg_331dc59b": {
+      "id": "neg_331dc59b",
+      "requestId": "req_demo_1793886719940",
+      "buyerAgentId": "agent_buyer_studio",
+      "sellerAgentId": "agent_seller_launchcraft",
+      "status": "completed",
+      "currentRound": 3,
+      "maxRounds": 4,
+      "currentProposal": {
+        "id": "prop_5a06ee63",
+        "negotiationId": "neg_331dc59b",
+        "senderAgentId": "agent_seller_launchcraft",
+        "round": 3,
+        "price": 135,
+        "currency": "USD",
+        "deliverables": [
+          "Lightweight Fast-Loading Page",
+          "Conversion-Focused Copy Layout",
+          "Contact Form with Email Routing",
+          "Responsive Mobile Navigation",
+          "Production Vercel/Netlify Ready"
+        ],
+        "deliveryDays": 3,
+        "terms": "Standard Verified Escrow via PayPal Sandbox",
+        "validUntil": "2026-11-07T13:52:00.507Z",
+        "status": "accepted",
+        "createdAt": "2026-11-05T13:52:00.507Z"
+      },
+      "messages": [
+        {
+          "id": "msg_44f05a08",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_launchcraft",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "request",
+          "content": "Hello LaunchCraft Velocity. On behalf of our team, we are requesting a commercial proposal for \"High-Impact Brand Landing Page with Contact Form\". Maximum authorized budget: $150. Target turnaround: 5 days. Deliverables: Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form, Mobile Optimization.",
+          "payload": {
+            "maxBudget": 150,
+            "deadlineDays": 5,
+            "deliverables": [
+              "Responsive Landing Page Layout",
+              "Interactive Pricing Section",
+              "Integrated Contact Form",
+              "Mobile Optimization"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "initiate_negotiation",
+              "args": {
+                "sellerAgentId": "agent_seller_launchcraft",
+                "requestId": "req_demo_1793886719940"
+              },
+              "result": {
+                "status": "dispatched"
+              },
+              "timestamp": "2026-11-05T13:52:00.270Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.270Z"
+        },
+        {
+          "id": "msg_55901c49",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_seller_launchcraft",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 1,
+          "messageType": "proposal",
+          "content": "Greetings from LaunchCraft Velocity. We reviewed your specifications for \"High-Impact Brand Landing Page with Contact Form\". We can deliver the full scope including Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form for $160 within 3 business days.",
+          "payload": {
+            "proposalId": "prop_71a5bc9d",
+            "price": 160,
+            "deliveryDays": 3,
+            "deliverables": [
+              "Lightweight Fast-Loading Page",
+              "Conversion-Focused Copy Layout",
+              "Contact Form with Email Routing",
+              "Responsive Mobile Navigation",
+              "Production Vercel/Netlify Ready"
+            ]
+          },
+          "toolCalls": [
+            {
+              "name": "generate_proposal",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 135
+              },
+              "result": {
+                "action": "proposal",
+                "agreedPrice": 160,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:52:00.273Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.273Z"
+        },
+        {
+          "id": "msg_e5a8fb8e",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_launchcraft",
+          "senderRole": "buyer",
+          "round": 1,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $160. We are targeting a budget of $141 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $141?",
+          "payload": {
+            "counterPrice": 141
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 1,
+                "targetBudget": 150,
+                "tacticalOffer": 141
+              },
+              "result": {
+                "counterPrice": 141
+              },
+              "timestamp": "2026-11-05T13:52:00.291Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.291Z"
+        },
+        {
+          "id": "msg_17ef8af8",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_seller_launchcraft",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "We appreciate your counteroffer of $141. To ensure top-tier engineering and QA, our best feasible compromise is $151 with all 4 core deliverables included.",
+          "payload": {
+            "counterPrice": 151
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 135,
+                "buyerOffer": 141
+              },
+              "result": {
+                "action": "counteroffer",
+                "agreedPrice": 151,
+                "constrainedByMinPrice": false
+              },
+              "timestamp": "2026-11-05T13:52:00.493Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.493Z"
+        },
+        {
+          "id": "msg_f7b05ec4",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_buyer_studio",
+          "recipientAgentId": "agent_seller_launchcraft",
+          "senderRole": "buyer",
+          "round": 2,
+          "messageType": "counteroffer",
+          "content": "Thank you for the proposal of $151. We are targeting a budget of $135 for this engagement with full deliverables including Responsive Landing Page Layout and Interactive Pricing Section. Can we meet at $135?",
+          "payload": {
+            "counterPrice": 135
+          },
+          "toolCalls": [
+            {
+              "name": "generate_counteroffer",
+              "args": {
+                "round": 2,
+                "targetBudget": 150,
+                "tacticalOffer": 135
+              },
+              "result": {
+                "counterPrice": 135
+              },
+              "timestamp": "2026-11-05T13:52:00.504Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.504Z"
+        },
+        {
+          "id": "msg_cc89bbbc",
+          "negotiationId": "neg_331dc59b",
+          "senderAgentId": "agent_seller_launchcraft",
+          "recipientAgentId": "agent_buyer_studio",
+          "senderRole": "seller",
+          "round": 3,
+          "messageType": "acceptance",
+          "content": "Agreed. LaunchCraft Velocity accepts your offer of $135. All requested deliverables and 3-day completion guarantee are fully locked in.",
+          "payload": {
+            "agreedPrice": 135
+          },
+          "toolCalls": [
+            {
+              "name": "evaluate_counteroffer",
+              "args": {
+                "requestId": "req_demo_1793886719940",
+                "requestedMaxBudget": 150,
+                "sellerMinPrice": 135,
+                "buyerOffer": 135
+              },
+              "result": {
+                "action": "acceptance",
+                "agreedPrice": 135,
+                "constrainedByMinPrice": true
+              },
+              "timestamp": "2026-11-05T13:52:00.507Z"
+            }
+          ],
+          "timestamp": "2026-11-05T13:52:00.507Z"
+        }
+      ],
+      "agreementId": "agr_95709c4e",
+      "createdAt": "2026-11-05T13:52:00.270Z",
+      "updatedAt": "2026-11-05T14:06:10.703Z"
+    }
+  },
+  "proposals": {
+    "prop_2b43e57e": {
+      "id": "prop_2b43e57e",
+      "negotiationId": "neg_38d9c1ba",
+      "senderAgentId": "agent_seller_pixel",
+      "round": 1,
+      "price": 165,
+      "currency": "USD",
+      "deliverables": [
+        "Responsive Landing Page Layout",
+        "Interactive Pricing Section",
+        "Integrated Contact Form",
+        "Mobile Optimization",
+        "Framer Motion Micro-interactions"
+      ],
+      "deliveryDays": 5,
+      "terms": "Milestone escrow through PayPal Sandbox. Full source code upon final review.",
+      "validUntil": "2026-11-07T13:51:59.945Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:51:59.945Z"
+    },
+    "prop_795c6585": {
+      "id": "prop_795c6585",
+      "negotiationId": "neg_38d9c1ba",
+      "senderAgentId": "agent_seller_pixel",
+      "round": 2,
+      "price": 163,
+      "currency": "USD",
+      "deliverables": [
+        "Responsive Landing Page Layout",
+        "Interactive Pricing Section",
+        "Integrated Contact Form",
+        "Mobile Optimization",
+        "Framer Motion Micro-interactions"
+      ],
+      "deliveryDays": 5,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:51:59.972Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:51:59.972Z"
+    },
+    "prop_5c608991": {
+      "id": "prop_5c608991",
+      "negotiationId": "neg_38d9c1ba",
+      "senderAgentId": "agent_seller_pixel",
+      "round": 3,
+      "price": 143,
+      "currency": "USD",
+      "deliverables": [
+        "Responsive Landing Page Layout",
+        "Interactive Pricing Section",
+        "Integrated Contact Form",
+        "Mobile Optimization",
+        "Framer Motion Micro-interactions"
+      ],
+      "deliveryDays": 5,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.004Z",
+      "status": "accepted",
+      "createdAt": "2026-11-05T13:52:00.004Z"
+    },
+    "prop_0d81a775": {
+      "id": "prop_0d81a775",
+      "negotiationId": "neg_ba384e43",
+      "senderAgentId": "agent_seller_northstar",
+      "round": 1,
+      "price": 165,
+      "currency": "USD",
+      "deliverables": [
+        "Bespoke Dark Design System",
+        "Interactive Component Highlights",
+        "Validated Contact / Lead Form",
+        "Performance-Optimized Codebase",
+        "30-Day Support Period"
+      ],
+      "deliveryDays": 4,
+      "terms": "Milestone escrow through PayPal Sandbox. Full source code upon final review.",
+      "validUntil": "2026-11-07T13:52:00.010Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:52:00.010Z"
+    },
+    "prop_d8876167": {
+      "id": "prop_d8876167",
+      "negotiationId": "neg_ba384e43",
+      "senderAgentId": "agent_seller_northstar",
+      "round": 2,
+      "price": 155,
+      "currency": "USD",
+      "deliverables": [
+        "Bespoke Dark Design System",
+        "Interactive Component Highlights",
+        "Validated Contact / Lead Form",
+        "Performance-Optimized Codebase",
+        "30-Day Support Period"
+      ],
+      "deliveryDays": 4,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.038Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:52:00.038Z"
+    },
+    "prop_7389995e": {
+      "id": "prop_7389995e",
+      "negotiationId": "neg_ba384e43",
+      "senderAgentId": "agent_seller_northstar",
+      "round": 3,
+      "price": 155,
+      "currency": "USD",
+      "deliverables": [
+        "Bespoke Dark Design System",
+        "Interactive Component Highlights",
+        "Validated Contact / Lead Form",
+        "Performance-Optimized Codebase",
+        "30-Day Support Period"
+      ],
+      "deliveryDays": 4,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.138Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:52:00.138Z"
+    },
+    "prop_65fd4c7e": {
+      "id": "prop_65fd4c7e",
+      "negotiationId": "neg_ba384e43",
+      "senderAgentId": "agent_seller_northstar",
+      "round": 4,
+      "price": 155,
+      "currency": "USD",
+      "deliverables": [
+        "Bespoke Dark Design System",
+        "Interactive Component Highlights",
+        "Validated Contact / Lead Form",
+        "Performance-Optimized Codebase",
+        "30-Day Support Period"
+      ],
+      "deliveryDays": 4,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.256Z",
+      "status": "pending",
+      "createdAt": "2026-11-05T13:52:00.255Z"
+    },
+    "prop_71a5bc9d": {
+      "id": "prop_71a5bc9d",
+      "negotiationId": "neg_331dc59b",
+      "senderAgentId": "agent_seller_launchcraft",
+      "round": 1,
+      "price": 160,
+      "currency": "USD",
+      "deliverables": [
+        "Lightweight Fast-Loading Page",
+        "Conversion-Focused Copy Layout",
+        "Contact Form with Email Routing",
+        "Responsive Mobile Navigation",
+        "Production Vercel/Netlify Ready"
+      ],
+      "deliveryDays": 3,
+      "terms": "Milestone escrow through PayPal Sandbox. Full source code upon final review.",
+      "validUntil": "2026-11-07T13:52:00.270Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:52:00.270Z"
+    },
+    "prop_84292848": {
+      "id": "prop_84292848",
+      "negotiationId": "neg_331dc59b",
+      "senderAgentId": "agent_seller_launchcraft",
+      "round": 2,
+      "price": 151,
+      "currency": "USD",
+      "deliverables": [
+        "Lightweight Fast-Loading Page",
+        "Conversion-Focused Copy Layout",
+        "Contact Form with Email Routing",
+        "Responsive Mobile Navigation",
+        "Production Vercel/Netlify Ready"
+      ],
+      "deliveryDays": 3,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.493Z",
+      "status": "countered",
+      "createdAt": "2026-11-05T13:52:00.493Z"
+    },
+    "prop_5a06ee63": {
+      "id": "prop_5a06ee63",
+      "negotiationId": "neg_331dc59b",
+      "senderAgentId": "agent_seller_launchcraft",
+      "round": 3,
+      "price": 135,
+      "currency": "USD",
+      "deliverables": [
+        "Lightweight Fast-Loading Page",
+        "Conversion-Focused Copy Layout",
+        "Contact Form with Email Routing",
+        "Responsive Mobile Navigation",
+        "Production Vercel/Netlify Ready"
+      ],
+      "deliveryDays": 3,
+      "terms": "Standard Verified Escrow via PayPal Sandbox",
+      "validUntil": "2026-11-07T13:52:00.507Z",
+      "status": "accepted",
+      "createdAt": "2026-11-05T13:52:00.507Z"
+    }
+  },
+  "evaluations": {
+    "req_demo_1793886719940": {
+      "requestId": "req_demo_1793886719940",
+      "evaluations": [
+        {
+          "id": "eval_neg_38d9",
+          "negotiationId": "neg_38d9c1ba",
+          "sellerAgentId": "agent_seller_pixel",
+          "sellerBusinessName": "Pixel Studio Collective",
+          "proposalPrice": 143,
+          "deliveryDays": 5,
+          "score": {
+            "overall": 92,
+            "priceScore": 86,
+            "capabilityScore": 100,
+            "deliveryScore": 90,
+            "riskScore": 92
+          },
+          "strengths": [
+            "Price ($143) strictly complies with budget ceiling ($150)",
+            "Delivery timeline (5 days) meets target turnaround",
+            "Verified enterprise business credentials in network registry"
+          ],
+          "weaknesses": [],
+          "missingDeliverables": [],
+          "riskFactors": [],
+          "verdict": "recommended",
+          "explanation": "Pixel Studio Collective scored 92/100 with strong capability match (100%) and 90% delivery reliability at $143.",
+          "timestamp": "2026-11-05T13:52:00.561Z"
+        },
+        {
+          "id": "eval_neg_ba38",
+          "negotiationId": "neg_ba384e43",
+          "sellerAgentId": "agent_seller_northstar",
+          "sellerBusinessName": "Northstar Interactive",
+          "proposalPrice": 155,
+          "deliveryDays": 4,
+          "score": {
+            "overall": 60,
+            "priceScore": 77,
+            "capabilityScore": 0,
+            "deliveryScore": 95,
+            "riskScore": 92
+          },
+          "strengths": [
+            "Delivery timeline (4 days) meets target turnaround",
+            "Verified enterprise business credentials in network registry"
+          ],
+          "weaknesses": [
+            "Price ($155) exceeds maximum buyer budget by $5"
+          ],
+          "missingDeliverables": [
+            "Responsive Landing Page Layout",
+            "Interactive Pricing Section",
+            "Integrated Contact Form",
+            "Mobile Optimization"
+          ],
+          "riskFactors": [
+            "Requires clarification on missing items: Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form, Mobile Optimization"
+          ],
+          "verdict": "acceptable",
+          "explanation": "Northstar Interactive scored 60/100 with strong capability match (0%) and 95% delivery reliability at $155.",
+          "timestamp": "2026-11-05T13:52:00.561Z"
+        },
+        {
+          "id": "eval_neg_331d",
+          "negotiationId": "neg_331dc59b",
+          "sellerAgentId": "agent_seller_launchcraft",
+          "sellerBusinessName": "LaunchCraft Velocity",
+          "proposalPrice": 135,
+          "deliveryDays": 3,
+          "score": {
+            "overall": 65,
+            "priceScore": 88,
+            "capabilityScore": 0,
+            "deliveryScore": 100,
+            "riskScore": 92
+          },
+          "strengths": [
+            "Price ($135) strictly complies with budget ceiling ($150)",
+            "Delivery timeline (3 days) meets target turnaround",
+            "Verified enterprise business credentials in network registry"
+          ],
+          "weaknesses": [],
+          "missingDeliverables": [
+            "Responsive Landing Page Layout",
+            "Interactive Pricing Section",
+            "Integrated Contact Form",
+            "Mobile Optimization"
+          ],
+          "riskFactors": [
+            "Requires clarification on missing items: Responsive Landing Page Layout, Interactive Pricing Section, Integrated Contact Form, Mobile Optimization"
+          ],
+          "verdict": "acceptable",
+          "explanation": "LaunchCraft Velocity scored 65/100 with strong capability match (0%) and 100% delivery reliability at $135.",
+          "timestamp": "2026-11-05T13:52:00.561Z"
+        }
+      ],
+      "recommendedNegotiationId": "neg_38d9c1ba",
+      "summaryVerdict": "Evaluator Engine evaluated 3 independent proposals. Pixel Studio Collective is the recommended partner with a composite rating of 92/100, offering full deliverable alignment at $143.",
+      "evaluatedAt": "2026-11-05T13:52:00.562Z"
+    }
+  },
+  "agreements": {
+    "agr_488bf4d9": {
+      "id": "agr_488bf4d9",
+      "negotiationId": "neg_38d9c1ba",
+      "requestId": "req_demo_1793886719940",
+      "buyerAgentId": "agent_buyer_studio",
+      "sellerAgentId": "agent_seller_pixel",
+      "buyerUserId": "user_main",
+      "sellerBusinessName": "Pixel Studio Collective",
+      "finalPrice": 143,
+      "currency": "USD",
+      "finalDeliverables": [
+        "Responsive Landing Page Layout",
+        "Interactive Pricing Section",
+        "Integrated Contact Form",
+        "Mobile Optimization",
+        "Framer Motion Micro-interactions"
+      ],
+      "deliveryDays": 5,
+      "commercialTerms": "All intellectual property rights assign to buyer upon PayPal capture confirmation. 5 business day delivery guarantee.",
+      "humanApprovalStatus": "pending",
+      "paypalReady": false,
+      "createdAt": "2026-11-05T13:52:00.006Z"
+    },
+    "agr_95709c4e": {
+      "id": "agr_95709c4e",
+      "negotiationId": "neg_331dc59b",
+      "requestId": "req_demo_1793886719940",
+      "buyerAgentId": "agent_buyer_studio",
+      "sellerAgentId": "agent_seller_launchcraft",
+      "buyerUserId": "user_main",
+      "sellerBusinessName": "LaunchCraft Velocity",
+      "finalPrice": 135,
+      "currency": "USD",
+      "finalDeliverables": [
+        "Lightweight Fast-Loading Page",
+        "Conversion-Focused Copy Layout",
+        "Contact Form with Email Routing",
+        "Responsive Mobile Navigation",
+        "Production Vercel/Netlify Ready"
+      ],
+      "deliveryDays": 3,
+      "commercialTerms": "All intellectual property rights assign to buyer upon PayPal capture confirmation. 5 business day delivery guarantee.",
+      "humanApprovalStatus": "approved",
+      "paypalReady": true,
+      "createdAt": "2026-11-05T13:52:00.509Z",
+      "humanApprovedAt": "2026-11-05T14:06:10.607Z"
+    }
+  },
+  "transactions": {
+    "tx_8f8ada45": {
+      "id": "tx_8f8ada45",
+      "agreementId": "agr_95709c4e",
+      "negotiationId": "neg_331dc59b",
+      "requestId": "req_demo_1793886719940",
+      "buyerUserId": "user_main",
+      "buyerAgentName": "Studio Buyer",
+      "sellerAgentId": "agent_seller_launchcraft",
+      "sellerBusinessName": "LaunchCraft Velocity",
+      "serviceTitle": "Commercial Agreement Contract",
+      "amount": 135,
+      "currency": "USD",
+      "paypalOrderId": "PAYID-SANDBOX-6E91A4E3-A60",
+      "paymentStatus": "completed",
+      "idempotencyKey": "idem_5492a821-7e8",
+      "isSandbox": true,
+      "createdAt": "2026-11-05T14:06:10.684Z",
+      "paypalCaptureId": "CAP-SANDBOX-E4285D7A-8",
+      "completedAt": "2026-11-05T14:06:10.702Z",
+      "paypalPayerEmail": "studio.buyer@sandbox.vyro.network",
+      "paypalPayerName": "Studio Procurement Officer"
+    }
+  },
+  "activityEvents": [
+    {
+      "type": "paypal_payment_completed",
+      "title": "PayPal Sandbox Payment Captured: $135 USD",
+      "description": "Commercial agreement agr_95709c4e fully settled with LaunchCraft Velocity. Capture ID: CAP-SANDBOX-E4285D7A-8.",
+      "transactionId": "tx_8f8ada45",
+      "negotiationId": "neg_331dc59b",
+      "amount": 135,
+      "currency": "USD",
+      "severity": "success",
+      "id": "evt_3a96b8fa",
+      "timestamp": "2026-11-05T14:06:10.705Z"
+    },
+    {
+      "type": "paypal_order_created",
+      "title": "PayPal Sandbox Order Created (PAYID-SANDBOX-6E91A4E3-A60)",
+      "description": "Verified order generated for $135 USD. Ready for Sandbox checkout capture.",
+      "transactionId": "tx_8f8ada45",
+      "amount": 135,
+      "currency": "USD",
+      "severity": "info",
+      "id": "evt_b67cb9f6",
+      "timestamp": "2026-11-05T14:06:10.685Z"
+    },
+    {
+      "type": "approval_granted",
+      "title": "Human Authorization Granted for Agreement agr_95709c4e",
+      "description": "Buyer confirmed final terms ($135 USD). Transaction is now cleared for PayPal Sandbox processing.",
+      "negotiationId": "neg_331dc59b",
+      "amount": 135,
+      "currency": "USD",
+      "severity": "success",
+      "id": "evt_11bbb207",
+      "timestamp": "2026-11-05T14:06:10.609Z"
+    },
+    {
+      "type": "agreement_reached",
+      "title": "Autonomous Multi-Agent Evaluation Complete",
+      "description": "Evaluator Agent recommended negotiation neg_38d9c1ba. Evaluator Engine evaluated 3 independent proposals. Pixel Studio Collective is the recommended partner with a composite rating of 92/100, offering full deliverable alignment at $143.",
+      "severity": "success",
+      "id": "evt_4c67e300",
+      "timestamp": "2026-11-05T13:52:00.569Z"
+    },
+    {
+      "type": "approval_requested",
+      "title": "Agreement Awaiting Human Authorization: $135",
+      "description": "Studio Buyer and LaunchCraft Velocity reached commercial consensus for \"High-Impact Brand Landing Page with Contact Form\". Awaiting explicit buyer authorization before PayPal capture.",
+      "negotiationId": "neg_331dc59b",
+      "amount": 135,
+      "currency": "USD",
+      "severity": "warning",
+      "id": "evt_c6b2939a",
+      "timestamp": "2026-11-05T13:52:00.510Z"
+    },
+    {
+      "type": "negotiation_started",
+      "title": "Negotiation Initiated: Studio Buyer ↔ LaunchCraft Velocity",
+      "description": "Opening proposal submitted at $160 with 3-day delivery turnaround.",
+      "agentId": "agent_seller_launchcraft",
+      "negotiationId": "neg_331dc59b",
+      "amount": 160,
+      "currency": "USD",
+      "severity": "info",
+      "id": "evt_d6b07b2c",
+      "timestamp": "2026-11-05T13:52:00.276Z"
+    },
+    {
+      "type": "negotiation_started",
+      "title": "Negotiation Initiated: Studio Buyer ↔ Northstar Interactive",
+      "description": "Opening proposal submitted at $165 with 4-day delivery turnaround.",
+      "agentId": "agent_seller_northstar",
+      "negotiationId": "neg_ba384e43",
+      "amount": 165,
+      "currency": "USD",
+      "severity": "info",
+      "id": "evt_cdcf0224",
+      "timestamp": "2026-11-05T13:52:00.025Z"
+    },
+    {
+      "type": "approval_requested",
+      "title": "Agreement Awaiting Human Authorization: $143",
+      "description": "Studio Buyer and Pixel Studio Collective reached commercial consensus for \"High-Impact Brand Landing Page with Contact Form\". Awaiting explicit buyer authorization before PayPal capture.",
+      "negotiationId": "neg_38d9c1ba",
+      "amount": 143,
+      "currency": "USD",
+      "severity": "warning",
+      "id": "evt_594de3bd",
+      "timestamp": "2026-11-05T13:52:00.008Z"
+    },
+    {
+      "type": "negotiation_started",
+      "title": "Negotiation Initiated: Studio Buyer ↔ Pixel Studio Collective",
+      "description": "Opening proposal submitted at $165 with 5-day delivery turnaround.",
+      "agentId": "agent_seller_pixel",
+      "negotiationId": "neg_38d9c1ba",
+      "amount": 165,
+      "currency": "USD",
+      "severity": "info",
+      "id": "evt_5b1ed770",
+      "timestamp": "2026-11-05T13:51:59.953Z"
+    },
+    {
+      "type": "agent_discovered",
+      "title": "Autonomous Network Initialized",
+      "description": "5 high-reputation commercial agents discovered across Design, Development, and Security registries.",
+      "severity": "info",
+      "id": "evt_c98fea26",
+      "timestamp": "2026-11-05T13:51:29.964Z"
+    }
+  ]
+}

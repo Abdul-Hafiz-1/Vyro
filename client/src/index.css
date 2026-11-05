@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: dark;
+  }
+  
+  body {
+    background-color: #0B0C0F;
+    color: #F2F2F0;
+    font-family: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0B0C0F;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #292D36;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #363C47;
+}
+
+/* Tabular numbers for financial metrics */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Noise texture or subtle grid if needed */
+.bg-grid-pattern {
+  background-size: 32px 32px;
+  background-image: 
+    linear-gradient(to right, rgba(41, 45, 54, 0.25) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(41, 45, 54, 0.25) 1px, transparent 1px);
+}

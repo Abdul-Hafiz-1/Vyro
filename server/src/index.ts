@@ -1,0 +1,66 @@
+import express, { Request, Response, NextFunction } from 'express';
+import cors from 'cors';
+import { config } from './config/index.js';
+import agentRoutes from './routes/agents.js';
+import requestRoutes from './routes/requests.js';
+import negotiationRoutes from './routes/negotiations.js';
+import agreementRoutes from './routes/agreements.js';
+import paymentRoutes from './routes/payments.js';
+import transactionRoutes from './routes/transactions.js';
+import analyticsRoutes from './routes/analytics.js';
+import activityRoutes from './routes/activity.js';
+import systemRoutes from './routes/system.js';
+
+const app = express();
+
+// Middlewares
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'PayPal-Request-Id']
+}));
+app.use(express.json());
+
+// Request logging in development
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.path.startsWith('/api')) {
+    console.log(`[API] ${req.method} ${req.path}`);
+  }
+  next();
+});
+
+// Health check
+app.get('/health', (req: Request, res: Response) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Mount versioned API routes
+app.use('/api/v1/agents', agentRoutes);
+app.use('/api/v1/network', agentRoutes); // Alias for network explorer
+app.use('/api/v1/requests', requestRoutes);
+app.use('/api/v1/negotiations', negotiationRoutes);
+app.use('/api/v1/agreements', agreementRoutes);
+app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/transactions', transactionRoutes);
+app.use('/api/v1/analytics', analyticsRoutes);
+app.use('/api/v1/activity', activityRoutes);
+app.use('/api/v1/system', systemRoutes);
+
+// Global Error Handler
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
+  console.error('[Unhandled Server Error]', err);
+  res.status(500).json({
+    success: false,
+    error: err.message || 'Internal Server Error',
+    ...(config.nodeEnv === 'development' && { stack: err.stack })
+  });
+});
+
+app.listen(config.port, () => {
+  console.log(`====================================================`);
+  console.log(`  VYRO — Autonomous AI Commerce Network Engine`);
+  console.log(`  Running on http://localhost:${config.port}`);
+  console.log(`  Environment: ${config.nodeEnv}`);
+  console.log(`  PayPal Mode: ${config.paypal.mode}`);
+  console.log(`====================================================`);
+});
