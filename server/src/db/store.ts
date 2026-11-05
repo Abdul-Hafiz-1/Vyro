@@ -313,14 +313,14 @@ export class MemoryStore {
       updatedAt: now
     };
 
-    // 2. Pixel Studio (Demonstration Seller Agent)
+    // 2. Seller A — Pixel Studio (Initial: $180, Min: $145, Delivery: 5d)
     const pixelStudio: Agent = {
       id: 'agent_seller_pixel',
       ownerId: 'seller_pixel_co',
       businessName: 'Pixel Studio Collective',
       name: 'Pixel Studio Agent',
       type: 'seller',
-      description: 'Specialized in high-conversion landing pages, brand identity, and responsive Tailwind interfaces.',
+      description: 'Specialized in high-conversion SaaS landing pages, Tailwind CSS, and responsive layouts.',
       category: 'Design',
       capabilities: ['Landing Page Design', 'Tailwind CSS', 'Framer Motion', 'Responsive UI', 'Contact Forms'],
       status: 'active',
@@ -331,7 +331,7 @@ export class MemoryStore {
           name: 'Professional Responsive Landing Page',
           description: 'Custom modern landing page with hero, pricing matrix, responsive layout, and form integration.',
           startingPrice: 180,
-          minPrice: 140,
+          minPrice: 145,
           deliveryDays: 5,
           includedDeliverables: [
             'Responsive Landing Page Layout',
@@ -344,8 +344,8 @@ export class MemoryStore {
       ],
       pricingConstraints: {
         startingPrice: 180,
-        minAcceptablePrice: 140,
-        flexibilityPercent: 22
+        minAcceptablePrice: 145,
+        flexibilityPercent: 20
       },
       negotiationStrategy: 'balanced',
       approvalPolicy: 'explicit_human_required',
@@ -355,56 +355,14 @@ export class MemoryStore {
       updatedAt: now
     };
 
-    // 3. Northstar Design (Demonstration Seller Agent)
-    const northstarDesign: Agent = {
-      id: 'agent_seller_northstar',
-      ownerId: 'seller_northstar_inc',
-      businessName: 'Northstar Interactive',
-      name: 'Northstar Agent',
-      type: 'seller',
-      description: 'Enterprise-grade UI/UX design studio focused on design systems, precision typography, and sleek SaaS pages.',
-      category: 'Design',
-      capabilities: ['Design Systems', 'SaaS Landing Pages', 'Design-to-Code', 'Accessibility QA', 'Interactive Prototypes'],
-      status: 'active',
-      verificationStatus: 'verified',
-      catalog: [
-        {
-          id: 'cat_northstar_saas',
-          name: 'Enterprise SaaS Web Interface',
-          description: 'High-polish SaaS landing page with dark mode, interactive component library, and responsive forms.',
-          startingPrice: 195,
-          minPrice: 155,
-          deliveryDays: 4,
-          includedDeliverables: [
-            'Bespoke Dark Design System',
-            'Interactive Component Highlights',
-            'Validated Contact / Lead Form',
-            'Performance-Optimized Codebase',
-            '30-Day Support Period'
-          ]
-        }
-      ],
-      pricingConstraints: {
-        startingPrice: 195,
-        minAcceptablePrice: 155,
-        flexibilityPercent: 20
-      },
-      negotiationStrategy: 'quality_first',
-      approvalPolicy: 'explicit_human_required',
-      isDemo: true,
-      avatarSeed: 'northstar',
-      createdAt: now,
-      updatedAt: now
-    };
-
-    // 4. LaunchCraft (Demonstration Seller Agent)
+    // 3. Seller B — LaunchCraft Velocity (Initial: $130, Min: $120, Delivery: 8d)
     const launchCraft: Agent = {
       id: 'agent_seller_launchcraft',
       ownerId: 'seller_launchcraft_ltd',
       businessName: 'LaunchCraft Velocity',
       name: 'LaunchCraft Agent',
       type: 'seller',
-      description: 'Rapid turnaround landing page engineering. Optimized for speed to market and conversion performance.',
+      description: 'Budget-oriented web engineering. Lower costs with standard 8-day turnaround schedule.',
       category: 'Development',
       capabilities: ['Rapid Prototyping', 'Vite & React Deployments', 'SEO Optimization', 'Analytics Setup', 'Forms & Webhooks'],
       status: 'active',
@@ -412,11 +370,11 @@ export class MemoryStore {
       catalog: [
         {
           id: 'cat_launchcraft_rapid',
-          name: 'Rapid Deployment Landing Page',
-          description: 'Fast 3-day turnaround landing page with built-in analytics, clean layout, and conversion sections.',
-          startingPrice: 160,
-          minPrice: 135,
-          deliveryDays: 3,
+          name: 'Economy SaaS Landing Page Package',
+          description: 'Standard 8-day turnaround landing page with basic analytics and conversion sections.',
+          startingPrice: 130,
+          minPrice: 120,
+          deliveryDays: 8,
           includedDeliverables: [
             'Lightweight Fast-Loading Page',
             'Conversion-Focused Copy Layout',
@@ -427,14 +385,56 @@ export class MemoryStore {
         }
       ],
       pricingConstraints: {
+        startingPrice: 130,
+        minAcceptablePrice: 120,
+        flexibilityPercent: 10
+      },
+      negotiationStrategy: 'balanced',
+      approvalPolicy: 'explicit_human_required',
+      isDemo: true,
+      avatarSeed: 'launchcraft',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    // 4. Seller C — Northstar Interactive (Initial: $160, Min: $150, Delivery: 4d)
+    const northstarDesign: Agent = {
+      id: 'agent_seller_northstar',
+      ownerId: 'seller_northstar_inc',
+      businessName: 'Northstar Interactive',
+      name: 'Northstar Agent',
+      type: 'seller',
+      description: 'Fast-track premium UI/UX design studio. Expedited 4-day delivery turnaround with strict pricing floors.',
+      category: 'Design',
+      capabilities: ['Design Systems', 'SaaS Landing Pages', 'Design-to-Code', 'Accessibility QA', 'Interactive Prototypes'],
+      status: 'active',
+      verificationStatus: 'verified',
+      catalog: [
+        {
+          id: 'cat_northstar_saas',
+          name: 'Expedited Enterprise SaaS Web Interface',
+          description: 'Fast 4-day turnaround SaaS landing page with dark mode, interactive components, and lead form.',
+          startingPrice: 160,
+          minPrice: 150,
+          deliveryDays: 4,
+          includedDeliverables: [
+            'Bespoke Dark Design System',
+            'Interactive Component Highlights',
+            'Validated Contact / Lead Form',
+            'Performance-Optimized Codebase',
+            'Expedited 4-Day SLA Guarantee'
+          ]
+        }
+      ],
+      pricingConstraints: {
         startingPrice: 160,
-        minAcceptablePrice: 135,
-        flexibilityPercent: 15
+        minAcceptablePrice: 150,
+        flexibilityPercent: 8
       },
       negotiationStrategy: 'expedited',
       approvalPolicy: 'explicit_human_required',
       isDemo: true,
-      avatarSeed: 'launchcraft',
+      avatarSeed: 'northstar',
       createdAt: now,
       updatedAt: now
     };

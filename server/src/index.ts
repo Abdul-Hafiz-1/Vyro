@@ -10,6 +10,7 @@ import transactionRoutes from './routes/transactions.js';
 import analyticsRoutes from './routes/analytics.js';
 import activityRoutes from './routes/activity.js';
 import systemRoutes from './routes/system.js';
+import aiRoutes from './routes/ai.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/system', systemRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

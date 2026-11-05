@@ -28,10 +28,13 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  // System
+  // System & AI Diagnostics
   getSystemStatus: () => fetchJson<{ service: string; version: string; providers: any }>(`${API_BASE}/system/status`),
   resetDemoData: () => fetchJson<{ message: string }>(`${API_BASE}/system/reset-demo`, { method: 'POST' }),
   seedDemoFlow: () => fetchJson<{ request: CommerceRequest; negotiations: Negotiation[]; evaluation: MultiProposalComparison; agreement: Agreement }>(`${API_BASE}/system/seed-demo-flow`, { method: 'POST' }),
+  getAIStatus: () => fetchJson<{ status: string; model: string; isLive: boolean; latencyMs?: number; lastTestedAt?: string; errorMessage?: string }>(`${API_BASE}/ai/status`),
+  testAI: (apiKey?: string) => fetchJson<{ status: string; model: string; isLive: boolean; latencyMs?: number; lastTestedAt?: string; errorMessage?: string }>(`${API_BASE}/ai/test`, { method: 'POST', body: JSON.stringify({ apiKey }) }),
+  configureAI: (apiKey: string) => fetchJson<{ status: string; model: string; isLive: boolean; latencyMs?: number; lastTestedAt?: string; errorMessage?: string }>(`${API_BASE}/ai/configure`, { method: 'POST', body: JSON.stringify({ apiKey }) }),
 
   // Network & Agents
   getAgents: (params?: { type?: string; category?: string; status?: string }) => {

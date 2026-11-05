@@ -1,19 +1,18 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import {
-  Globe2,
   Bot,
   Scale,
   CreditCard,
-  DollarSign,
-  TrendingUp,
   ArrowRight,
   ShieldCheck,
   Play,
   Clock,
   CheckCircle2,
-  AlertCircle
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
@@ -27,19 +26,25 @@ export const OverviewPage: React.FC = () => {
   const { data: analytics, refetch: refetchAnalytics } = useQuery({
     queryKey: ['analytics'],
     queryFn: api.getAnalytics,
-    refetchInterval: 10000
+    refetchInterval: 8000
   });
 
   const { data: negotiations } = useQuery({
     queryKey: ['negotiationsOverview'],
     queryFn: () => api.getNegotiations(),
-    refetchInterval: 8000
+    refetchInterval: 6000
+  });
+
+  const { data: agreements } = useQuery({
+    queryKey: ['agreementsOverview'],
+    queryFn: api.getAgreements,
+    refetchInterval: 6000
   });
 
   const { data: transactions } = useQuery({
     queryKey: ['transactionsOverview'],
     queryFn: api.getTransactions,
-    refetchInterval: 8000
+    refetchInterval: 6000
   });
 
   const { data: activity } = useQuery({
@@ -48,15 +53,20 @@ export const OverviewPage: React.FC = () => {
     refetchInterval: 6000
   });
 
+  // Pending Human Authorization agreements (Priority 1 Attention)
+  const pendingAgreements = (agreements || []).filter(a => a.humanApprovalStatus === 'pending');
+
   const handleLaunchGuidedDemo = async () => {
     setIsSeedingDemo(true);
+    toast.info('Initiating multi-agent procurement across 3 sellers...');
     try {
       const result = await api.seedDemoFlow();
       refetchAnalytics();
+      toast.success('Autonomous negotiation complete. Recommended agreement formed!');
       const recommendedNeg = result.negotiations.find(n => n.id === result.evaluation.recommendedNegotiationId) || result.negotiations[0];
       navigate(`/app/negotiations/${recommendedNeg.id}`);
-    } catch (err) {
-      console.error('Demo flow failed:', err);
+    } catch (err: any) {
+      toast.error(err.message || 'Demo flow initiation failed');
       navigate('/app/requests/new');
     } finally {
       setIsSeedingDemo(false);
@@ -76,18 +86,43 @@ export const OverviewPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Top Banner / Welcome & Quick Action */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-vyro-border gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-              Network Command Console
-            </h1>
-            <Badge variant="accent" size="sm">Mesh Live</Badge>
+    <div className="space-y-6">
+      {/* Action Banner: Pending Human Authorizations */}
+      {pendingAgreements.length > 0 && (
+        <div className="p-4 rounded-[6px] bg-vyro-warning-bg border border-vyro-warning/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-[4px] bg-vyro-warning/20 border border-vyro-warning/40 flex items-center justify-center text-vyro-warning shrink-0">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-vyro-text">
+                  Action Required: {pendingAgreements.length} Agreement Awaiting Human Authorization
+                </h3>
+                <Badge variant="warning" size="sm">Gate Locked</Badge>
+              </div>
+              <p className="text-xs text-vyro-muted mt-0.5">
+                {pendingAgreements[0].sellerBusinessName} consensus reached at ${pendingAgreements[0].finalPrice} {pendingAgreements[0].currency}. Review and approve to clear for PayPal capture.
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-vyro-muted">
-            Autonomous procurement agents, pricing negotiations, and PayPal Sandbox settlements.
+
+          <Link to={`/app/negotiations/${pendingAgreements[0].negotiationId}`}>
+            <Button variant="accent" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
+              Review & Authorize
+            </Button>
+          </Link>
+        </div>
+      )}
+
+      {/* Header & Quick Action */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-border gap-4">
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-vyro-text">
+            Network Operations
+          </h1>
+          <p className="text-xs text-vyro-muted mt-0.5">
+            Autonomous procurement agent telemetry, multi-party negotiations, and PayPal Sandbox captures.
           </p>
         </div>
 
@@ -99,236 +134,156 @@ export const OverviewPage: React.FC = () => {
             onClick={handleLaunchGuidedDemo}
             leftIcon={<Play className="w-3.5 h-3.5 text-vyro-accent" />}
           >
-            Run Guided Hackathon Flow
+            Run 3-Seller Benchmark Demo
           </Button>
           <Link to="/app/requests/new">
             <Button variant="accent" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-              Create Request
+              New Request
             </Button>
           </Link>
         </div>
       </div>
 
-      {/* Real Metrics Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border">
-          <div className="flex items-center justify-between text-xs font-mono text-vyro-muted mb-2">
-            <span>ACTIVE AGENTS</span>
-            <Bot className="w-4 h-4 text-vyro-accent" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-vyro-text">
-            {stats.activeAgents}
-          </div>
-          <span className="text-[10px] text-vyro-subtle font-mono block mt-1">
-            Buyer & Seller Nodes
-          </span>
+      {/* Streamlined High-Density Metrics Bar */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex flex-col justify-between">
+          <span className="text-[10px] font-mono uppercase text-vyro-subtle">Network Nodes</span>
+          <div className="text-xl font-bold font-mono text-vyro-text mt-1">{stats.activeAgents} Active</div>
+          <span className="text-[10px] text-vyro-muted font-mono mt-0.5">1 Buyer • 4 Sellers</span>
         </div>
 
-        <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border">
-          <div className="flex items-center justify-between text-xs font-mono text-vyro-muted mb-2">
-            <span>NEGOTIATIONS</span>
-            <Scale className="w-4 h-4 text-vyro-warning" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-vyro-text">
-            {stats.activeNegotiations}
-          </div>
-          <span className="text-[10px] text-vyro-subtle font-mono block mt-1">
-            Active Multi-Turn Channels
-          </span>
+        <div className="p-3.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex flex-col justify-between">
+          <span className="text-[10px] font-mono uppercase text-vyro-subtle">Active Channels</span>
+          <div className="text-xl font-bold font-mono text-vyro-warning mt-1">{stats.activeNegotiations} Negotiations</div>
+          <span className="text-[10px] text-vyro-muted font-mono mt-0.5">Avg {stats.averageNegotiationRounds} turns / deal</span>
         </div>
 
-        <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border">
-          <div className="flex items-center justify-between text-xs font-mono text-vyro-muted mb-2">
-            <span>AGREEMENTS</span>
-            <CheckCircle2 className="w-4 h-4 text-vyro-success" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-vyro-text">
-            {stats.agreementsReached}
-          </div>
-          <span className="text-[10px] text-vyro-subtle font-mono block mt-1">
-            Consensus Formed
-          </span>
+        <div className="p-3.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex flex-col justify-between">
+          <span className="text-[10px] font-mono uppercase text-vyro-subtle">Consensus Formed</span>
+          <div className="text-xl font-bold font-mono text-vyro-success mt-1">{stats.agreementsReached} Agreed</div>
+          <span className="text-[10px] text-vyro-muted font-mono mt-0.5">Evaluator Recommended</span>
         </div>
 
-        <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border">
-          <div className="flex items-center justify-between text-xs font-mono text-vyro-muted mb-2">
-            <span>PAYPAL VOLUME</span>
-            <CreditCard className="w-4 h-4 text-vyro-success" />
-          </div>
-          <div className="text-2xl font-bold font-mono text-vyro-text">
-            ${stats.totalTransactionVolume}
-          </div>
-          <span className="text-[10px] text-vyro-success font-mono block mt-1">
-            PayPal Sandbox Captured
-          </span>
+        <div className="p-3.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex flex-col justify-between">
+          <span className="text-[10px] font-mono uppercase text-vyro-subtle">Captured Settlement</span>
+          <div className="text-xl font-bold font-mono text-vyro-text mt-1">${stats.totalTransactionVolume} USD</div>
+          <span className="text-[10px] text-vyro-success font-mono mt-0.5">PayPal Sandbox Verified</span>
         </div>
       </div>
 
-      {/* Network Topology Visualizer Widget */}
+      {/* Topology Canvas */}
       <div>
-        <div className="flex items-center justify-between mb-3 text-xs font-mono text-vyro-muted">
-          <span>ACTIVE NETWORK ACTIVITY TOPOLOGY</span>
-          <Link to="/app/network" className="text-vyro-accent hover:underline flex items-center gap-1">
-            <span>View Full Registry</span>
-            <ArrowRight className="w-3.5 h-3.5" />
+        <div className="flex items-center justify-between mb-2 text-xs font-mono text-vyro-muted">
+          <span>ACTIVE NETWORK TOPOLOGY</span>
+          <Link to="/app/network" className="text-vyro-accent hover:underline flex items-center gap-1 text-[11px]">
+            <span>Registry ({stats.activeAgents} verified)</span>
+            <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
         <NetworkVisualizer interactive={true} />
       </div>
 
-      {/* Two Column Section: Active Negotiations & Telemetry Stream */}
+      {/* Two Column: Active Negotiations & Telemetry */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Active Negotiations (2 cols) */}
-        <div className="lg:col-span-2 bg-vyro-surface border border-vyro-border rounded-[8px] p-5">
-          <div className="flex items-center justify-between pb-3 mb-4 border-b border-vyro-border">
+        {/* Active Negotiations */}
+        <div className="lg:col-span-2 bg-vyro-surface border border-vyro-border rounded-[6px] p-4">
+          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-vyro-border">
             <div>
-              <h3 className="text-sm font-semibold text-vyro-text tracking-tight">Active Negotiations</h3>
-              <p className="text-[11px] text-vyro-muted">Live agent counteroffers & agreement states</p>
+              <h3 className="text-xs font-mono font-semibold uppercase text-vyro-text tracking-wider">
+                Active Commercial Channels
+              </h3>
             </div>
             <Link to="/app/negotiations">
-              <Button variant="ghost" size="sm">
-                View All
+              <Button variant="ghost" size="sm" className="text-xs h-7">
+                All ({negotiations?.length || 0})
               </Button>
             </Link>
           </div>
 
           {negotiations && negotiations.length > 0 ? (
             <div className="divide-y divide-vyro-border/50">
-              {negotiations.slice(0, 4).map((neg) => (
-                <div
-                  key={neg.id}
-                  onClick={() => navigate(`/app/negotiations/${neg.id}`)}
-                  className="py-3 flex items-center justify-between hover:bg-vyro-hover/50 px-2 rounded cursor-pointer transition-colors"
-                >
-                  <div className="min-w-0 pr-4">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-vyro-text truncate">{neg.id}</span>
-                      <Badge
-                        variant={
-                          neg.status === 'agreement_reached' || neg.status === 'completed' ? 'success' :
-                          neg.status === 'in_negotiation' ? 'accent' : 'default'
-                        }
-                        size="sm"
-                      >
-                        {neg.status.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                    </div>
-                    <span className="text-[11px] text-vyro-muted font-mono block mt-0.5 truncate">
-                      Round {neg.currentRound} / {neg.maxRounds} • {neg.messages.length} messages
-                    </span>
-                  </div>
+              {negotiations.slice(0, 4).map((neg) => {
+                const isAgreed = neg.status === 'agreement_reached' || neg.status === 'completed';
 
-                  <div className="text-right shrink-0">
-                    <span className="text-sm font-bold font-mono text-vyro-text block">
-                      ${neg.currentProposal?.price || 150}
-                    </span>
-                    <span className="text-[10px] text-vyro-subtle font-mono">
-                      {new Date(neg.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                return (
+                  <div
+                    key={neg.id}
+                    onClick={() => navigate(`/app/negotiations/${neg.id}`)}
+                    className="py-2.5 px-2 flex items-center justify-between hover:bg-vyro-hover/50 rounded cursor-pointer transition-colors"
+                  >
+                    <div className="min-w-0 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs font-bold text-vyro-text">{neg.id}</span>
+                        <Badge
+                          variant={
+                            neg.status === 'completed' ? 'success' :
+                            neg.status === 'agreement_reached' ? 'warning' : 'accent'
+                          }
+                          size="sm"
+                        >
+                          {neg.status.replace('_', ' ').toUpperCase()}
+                        </Badge>
+                      </div>
+                      <span className="text-[11px] text-vyro-muted font-mono block mt-0.5 truncate">
+                        Round {neg.currentRound}/{neg.maxRounds} • {neg.messages.length} messages
+                      </span>
+                    </div>
+
+                    <div className="text-right shrink-0 font-mono">
+                      <span className="text-xs font-bold text-vyro-text block">
+                        ${neg.currentProposal?.price || 150} USD
+                      </span>
+                      <span className="text-[10px] text-vyro-subtle">
+                        {neg.currentProposal?.deliveryDays || 5}d turnaround
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="py-8 text-center text-xs text-vyro-muted">
-              <Scale className="w-8 h-8 text-vyro-subtle mx-auto mb-2" />
-              <p>No negotiations currently active.</p>
+              <Scale className="w-6 h-6 text-vyro-subtle mx-auto mb-1.5" />
+              <p>No active negotiations.</p>
               <Button
                 size="sm"
                 variant="outline"
-                className="mt-3"
+                className="mt-2.5 text-xs h-7"
                 onClick={handleLaunchGuidedDemo}
               >
-                Trigger Demo Flow
+                Launch Demo Scenario
               </Button>
             </div>
           )}
         </div>
 
-        {/* Telemetry Activity Feed (1 col) */}
-        <div className="bg-vyro-surface border border-vyro-border rounded-[8px] p-5">
-          <div className="flex items-center justify-between pb-3 mb-4 border-b border-vyro-border">
-            <h3 className="text-sm font-semibold text-vyro-text tracking-tight">Network Activity</h3>
-            <span className="w-2 h-2 rounded-full bg-vyro-success animate-pulse-subtle" />
+        {/* Telemetry Stream */}
+        <div className="bg-vyro-surface border border-vyro-border rounded-[6px] p-4">
+          <div className="flex items-center justify-between pb-2.5 mb-3 border-b border-vyro-border">
+            <h3 className="text-xs font-mono font-semibold uppercase text-vyro-text tracking-wider">
+              Network Telemetry
+            </h3>
+            <span className="w-1.5 h-1.5 rounded-full bg-vyro-success animate-pulse-subtle" />
           </div>
 
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             {activity && activity.length > 0 ? (
-              activity.map((evt) => (
-                <div key={evt.id} className="p-2.5 rounded bg-vyro-card border border-vyro-border/60 text-xs">
-                  <div className="flex items-center justify-between text-vyro-text font-medium text-[11px] mb-1">
-                    <span className="truncate pr-2">{evt.title}</span>
+              activity.slice(0, 5).map((evt) => (
+                <div key={evt.id} className="p-2 rounded bg-vyro-card border border-vyro-border/50 text-xs">
+                  <div className="flex items-center justify-between font-medium text-vyro-text text-[11px] mb-0.5">
+                    <span className="truncate pr-1">{evt.title}</span>
                     <span className="font-mono text-[9px] text-vyro-subtle shrink-0">
                       {new Date(evt.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
-                  <p className="text-[10px] text-vyro-muted leading-relaxed">{evt.description}</p>
+                  <p className="text-[10px] text-vyro-muted leading-tight">{evt.description}</p>
                 </div>
               ))
             ) : (
-              <p className="text-xs text-vyro-muted py-6 text-center">No telemetry events recorded.</p>
+              <p className="text-xs text-vyro-muted py-6 text-center">No telemetry recorded.</p>
             )}
           </div>
         </div>
-      </div>
-
-      {/* Recent Settled Transactions Table */}
-      <div className="bg-vyro-surface border border-vyro-border rounded-[8px] p-5">
-        <div className="flex items-center justify-between pb-3 mb-4 border-b border-vyro-border">
-          <div>
-            <h3 className="text-sm font-semibold text-vyro-text tracking-tight">Recent Captured Payments</h3>
-            <p className="text-[11px] text-vyro-muted">Verified settlements via PayPal Sandbox Orders API</p>
-          </div>
-          <Link to="/app/transactions">
-            <Button variant="ghost" size="sm">
-              Ledger
-            </Button>
-          </Link>
-        </div>
-
-        {transactions && transactions.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
-              <thead>
-                <tr className="border-b border-vyro-border text-vyro-subtle text-[10px] uppercase">
-                  <th className="pb-2">Transaction ID</th>
-                  <th className="pb-2">Contracted Seller</th>
-                  <th className="pb-2">Amount</th>
-                  <th className="pb-2">PayPal Ref</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2 text-right">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-vyro-border/40 text-vyro-text">
-                {transactions.slice(0, 4).map((tx) => (
-                  <tr
-                    key={tx.id}
-                    onClick={() => navigate(`/app/transactions/${tx.id}`)}
-                    className="hover:bg-vyro-hover/50 cursor-pointer"
-                  >
-                    <td className="py-2.5 font-bold text-vyro-accent">{tx.id}</td>
-                    <td className="py-2.5">{tx.sellerBusinessName}</td>
-                    <td className="py-2.5 font-bold">${tx.amount} {tx.currency}</td>
-                    <td className="py-2.5 text-vyro-muted text-[11px]">{tx.paypalCaptureId || tx.paypalOrderId}</td>
-                    <td className="py-2.5">
-                      <Badge variant="success" size="sm">
-                        {tx.paymentStatus.toUpperCase()}
-                      </Badge>
-                    </td>
-                    <td className="py-2.5 text-right text-vyro-muted">
-                      {new Date(tx.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <div className="py-6 text-center text-xs text-vyro-muted">
-            <CreditCard className="w-6 h-6 text-vyro-subtle mx-auto mb-1.5" />
-            <p>No settled transactions yet. Authorize an agreement to capture payment.</p>
-          </div>
-        )}
       </div>
     </div>
   );

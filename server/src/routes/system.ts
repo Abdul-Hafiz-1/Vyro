@@ -75,8 +75,11 @@ router.post('/seed-demo-flow', async (req: Request, res: Response) => {
       updatedAt: new Date().toISOString()
     });
 
-    // 2. Discover seller agents: Pixel Studio, Northstar Design, LaunchCraft
-    const sellerIds = ['agent_seller_pixel', 'agent_seller_northstar', 'agent_seller_launchcraft'];
+    // 2. Discover candidate seller agents:
+    // Seller A: Pixel Studio (Initial $180, Floor $145, 5d)
+    // Seller B: LaunchCraft (Initial $130, Floor $120, 8d - breaches 5d deadline)
+    // Seller C: Northstar (Initial $160, Floor $150, 4d - beats deadline at $150)
+    const sellerIds = ['agent_seller_pixel', 'agent_seller_launchcraft', 'agent_seller_northstar'];
 
     // 3. Run multi-agent negotiations
     const { negotiations, evaluation } = await negotiationOrchestrator.runMultiAgentNegotiation(

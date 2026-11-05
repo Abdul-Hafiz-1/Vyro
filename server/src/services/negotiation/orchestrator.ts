@@ -201,7 +201,7 @@ export class NegotiationOrchestrator {
         currentProp.status = 'countered';
         store.saveProposal(currentProp);
 
-        const counterPrice = buyerResp.counterPrice || request.maxBudget;
+        const counterPrice = buyerResp.proposedPrice || request.maxBudget;
 
         const buyerCounterMsg: NegotiationMessage = {
           id: `msg_${uuidv4().substring(0, 8)}`,

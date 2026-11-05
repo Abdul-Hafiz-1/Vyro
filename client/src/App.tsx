@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'sonner';
 
 // Public Pages
 import { LandingPage } from './pages/public/LandingPage';
@@ -34,6 +35,19 @@ const queryClient = new QueryClient({
 export const App: React.FC = () => {
   return (
     <QueryClientProvider client={queryClient}>
+      <Toaster
+        theme="dark"
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: '#171A21',
+            border: '1px solid #292D36',
+            color: '#F2F2F0',
+            fontFamily: 'Geist, Inter, sans-serif',
+            fontSize: '13px'
+          }
+        }}
+      />
       <BrowserRouter>
         <Routes>
           {/* Public Routes */}
