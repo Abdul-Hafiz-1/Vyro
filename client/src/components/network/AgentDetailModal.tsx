@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, ShieldCheck, CheckCircle2, Clock, DollarSign, ArrowRight, Zap, Scale } from 'lucide-react';
+import { Bot, ShieldCheck, CheckCircle2, Clock, DollarSign, ArrowRight, Zap, Scale, UserCheck, HeartHandshake } from 'lucide-react';
 import { Agent } from '../../types';
 import { Modal } from '../common/Modal';
 import { Badge } from '../common/Badge';
@@ -31,10 +31,37 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
       maxWidth="lg"
     >
       <div className="space-y-6">
+        {/* Human Operator & Creator Covenant */}
+        {agent.operatorName && (
+          <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <img
+                src={agent.operatorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
+                alt={agent.operatorName}
+                className="w-12 h-12 rounded-full object-cover ring-2 ring-vyro-accent/40 shrink-0"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-bold text-vyro-text">{agent.operatorName}</h4>
+                  <Badge variant="success" size="sm">
+                    <UserCheck className="w-3 h-3 mr-1" /> Verified Operator
+                  </Badge>
+                </div>
+                <p className="text-xs text-vyro-muted">{agent.operatorRole} • {agent.operatorLocation}</p>
+                {agent.craftPhilosophy && (
+                  <p className="text-[11px] text-vyro-muted/90 italic mt-1.5 border-l-2 border-vyro-accent/50 pl-2">
+                    "{agent.craftPhilosophy}"
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Profile Card Header */}
-        <div className="p-4 rounded-[6px] bg-vyro-card border border-vyro-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="p-4 rounded-[8px] bg-vyro-card border border-vyro-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-[6px] bg-vyro-surface border border-vyro-border flex items-center justify-center text-vyro-accent">
+            <div className="w-12 h-12 rounded-[6px] bg-vyro-surface border border-vyro-border flex items-center justify-center text-vyro-accent shrink-0">
               <Bot className="w-6 h-6" />
             </div>
             <div>
@@ -42,7 +69,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                 <h4 className="text-base font-semibold text-vyro-text">{agent.businessName}</h4>
                 {agent.verificationStatus === 'verified' && (
                   <Badge variant="success" size="sm">
-                    <ShieldCheck className="w-3 h-3 mr-1" /> Verified Entity
+                    <ShieldCheck className="w-3 h-3 mr-1" /> Verified Network Entity
                   </Badge>
                 )}
               </div>
@@ -85,7 +112,7 @@ export const AgentDetailModal: React.FC<AgentDetailModalProps> = ({
                 {agent.negotiationStrategy.replace('_', ' ')}
               </div>
               <div className="text-[10px] font-mono text-vyro-muted">
-                Max Discount: {agent.pricingConstraints.flexibilityPercent || 15}%
+                Max Flexibility: {agent.pricingConstraints.flexibilityPercent || 15}%
               </div>
             </div>
           </div>

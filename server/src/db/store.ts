@@ -309,6 +309,11 @@ export class MemoryStore {
       approvalPolicy: 'explicit_human_required',
       isDemo: true,
       avatarSeed: 'studio-buyer',
+      operatorName: 'Alex Mercer',
+      operatorRole: 'Founder & Head of Product',
+      operatorLocation: 'San Francisco, CA',
+      operatorAvatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+      craftPhilosophy: 'I delegate procurement so our team can spend our days building rather than reading sales decks.',
       createdAt: now,
       updatedAt: now
     };
@@ -351,6 +356,11 @@ export class MemoryStore {
       approvalPolicy: 'explicit_human_required',
       isDemo: true,
       avatarSeed: 'pixel-studio',
+      operatorName: 'Elena Vance',
+      operatorRole: 'Lead Product Designer',
+      operatorLocation: 'Berlin, Germany',
+      operatorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+      craftPhilosophy: 'Design is not superficial styling; it is commercial clarity. My agent protects my creative focus so I only do deep design work.',
       createdAt: now,
       updatedAt: now
     };
@@ -393,6 +403,11 @@ export class MemoryStore {
       approvalPolicy: 'explicit_human_required',
       isDemo: true,
       avatarSeed: 'launchcraft',
+      operatorName: 'Kenji Sato',
+      operatorRole: 'Systems & Frontend Lead',
+      operatorLocation: 'Tokyo, Japan',
+      operatorAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+      craftPhilosophy: 'Pragmatic, high-uptime code for fast-scaling startups. Let the bot negotiate the scope so I can push commits.',
       createdAt: now,
       updatedAt: now
     };
@@ -435,6 +450,11 @@ export class MemoryStore {
       approvalPolicy: 'explicit_human_required',
       isDemo: true,
       avatarSeed: 'northstar',
+      operatorName: 'Marcus Thorne',
+      operatorRole: 'Principal UX Architect',
+      operatorLocation: 'London, UK',
+      operatorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+      craftPhilosophy: 'Speed without architectural rigor is debt. My agent guards our 4-day delivery commitment with strict pricing boundaries.',
       createdAt: now,
       updatedAt: now
     };

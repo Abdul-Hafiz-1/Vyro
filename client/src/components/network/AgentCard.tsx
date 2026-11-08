@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bot, CheckCircle, Clock, ShieldCheck, Tag, ArrowRight } from 'lucide-react';
+import { Bot, CheckCircle, Clock, ShieldCheck, Tag, ArrowRight, UserCheck } from 'lucide-react';
 import { Agent } from '../../types';
 import { Badge } from '../common/Badge';
 import { Button } from '../common/Button';
@@ -18,19 +18,33 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onInitiat
   const minPrice = isSeller ? agent.pricingConstraints.minAcceptablePrice || agent.catalog[0]?.minPrice : undefined;
 
   return (
-    <div className="bg-vyro-surface border border-vyro-border rounded-[8px] p-5 flex flex-col justify-between hover:border-vyro-border-light transition-all group hover:shadow-lg">
+    <div className="bg-vyro-surface border border-vyro-border rounded-[10px] p-5 flex flex-col justify-between hover:border-vyro-border-light transition-all group hover:shadow-lg relative overflow-hidden">
       <div>
         {/* Top Header */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-[6px] border flex items-center justify-center shrink-0 ${
-              isSeller ? 'bg-vyro-card border-vyro-border text-vyro-text' : 'bg-vyro-hover border-vyro-border text-vyro-accent'
-            }`}>
-              <Bot className="w-5 h-5" />
-            </div>
+            {agent.operatorAvatar ? (
+              <div className="relative">
+                <img
+                  src={agent.operatorAvatar}
+                  alt={agent.operatorName || agent.name}
+                  className="w-10 h-10 rounded-full object-cover ring-2 ring-vyro-border shrink-0"
+                />
+                <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-vyro-surface border border-vyro-border flex items-center justify-center text-vyro-accent">
+                  <Bot className="w-2.5 h-2.5" />
+                </div>
+              </div>
+            ) : (
+              <div className={`w-10 h-10 rounded-[6px] border flex items-center justify-center shrink-0 ${
+                isSeller ? 'bg-vyro-card border-vyro-border text-vyro-text' : 'bg-vyro-hover border-vyro-border text-vyro-accent'
+              }`}>
+                <Bot className="w-5 h-5" />
+              </div>
+            )}
+
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors truncate max-w-[180px]">
+                <h3 className="text-sm font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors truncate max-w-[170px]">
                   {agent.name}
                 </h3>
                 {agent.verificationStatus === 'verified' && (
@@ -49,6 +63,14 @@ export const AgentCard: React.FC<AgentCardProps> = ({ agent, onSelect, onInitiat
             {agent.status}
           </Badge>
         </div>
+
+        {/* Human Operator Tag if available */}
+        {agent.operatorName && (
+          <div className="flex items-center gap-1.5 mb-3 text-[11px] font-mono text-vyro-accent bg-vyro-card/80 px-2 py-1 rounded border border-vyro-border/50">
+            <UserCheck className="w-3.5 h-3.5 shrink-0 text-vyro-success" />
+            <span className="truncate">Principal: {agent.operatorName} ({agent.operatorLocation || 'Verified'})</span>
+          </div>
+        )}
 
         {/* Description */}
         <p className="text-xs text-vyro-muted line-clamp-2 mb-4 leading-relaxed">

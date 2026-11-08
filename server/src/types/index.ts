@@ -39,6 +39,11 @@ export interface Agent {
   approvalPolicy: ApprovalPolicy;
   isDemo?: boolean;
   avatarSeed?: string;
+  operatorName?: string;
+  operatorRole?: string;
+  operatorLocation?: string;
+  operatorAvatar?: string;
+  craftPhilosophy?: string;
   createdAt: string;
   updatedAt: string;
 }

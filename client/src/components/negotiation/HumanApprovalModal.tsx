@@ -44,9 +44,21 @@ export const HumanApprovalModal: React.FC<HumanApprovalModalProps> = ({
         {/* Commercial Terms Summary Box */}
         <div className="p-4 rounded-[6px] bg-vyro-card border border-vyro-border space-y-3">
           <div className="flex items-center justify-between pb-2.5 border-b border-vyro-border/60">
-            <div>
-              <span className="text-[10px] font-mono uppercase text-vyro-subtle block">Contracted Partner</span>
-              <span className="text-sm font-bold text-vyro-text">{agreement.sellerBusinessName}</span>
+            <div className="flex items-center gap-3">
+              {sellerAgent?.operatorAvatar && (
+                <img
+                  src={sellerAgent.operatorAvatar}
+                  alt={sellerAgent.operatorName || agreement.sellerBusinessName}
+                  className="w-10 h-10 rounded-full object-cover ring-2 ring-vyro-border"
+                />
+              )}
+              <div>
+                <span className="text-[10px] font-mono uppercase text-vyro-subtle block">Contracted Partner</span>
+                <span className="text-sm font-bold text-vyro-text">{agreement.sellerBusinessName}</span>
+                {sellerAgent?.operatorName && (
+                  <span className="text-[11px] text-vyro-accent font-mono block">Principal: {sellerAgent.operatorName} ({sellerAgent.operatorLocation})</span>
+                )}
+              </div>
             </div>
             <div className="text-right">
               <span className="text-[10px] font-mono uppercase text-vyro-subtle block">Agreed Settlement</span>

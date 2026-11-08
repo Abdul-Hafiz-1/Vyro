@@ -160,6 +160,44 @@ export const NegotiationDetailPage: React.FC = () => {
         </div>
       </div>
 
+      {/* Human Principals Covenant Banner */}
+      <div className="p-3.5 rounded-[8px] bg-vyro-surface border border-vyro-border flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          {/* Buyer Principal */}
+          <div className="flex items-center gap-2.5">
+            <img
+              src={buyerAgent.operatorAvatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80'}
+              alt={buyerAgent.operatorName || 'Alex Mercer'}
+              className="w-8 h-8 rounded-full object-cover ring-1 ring-vyro-accent/60"
+            />
+            <div>
+              <span className="text-xs font-semibold text-vyro-text block">{buyerAgent.operatorName || 'Alex Mercer'}</span>
+              <span className="text-[10px] text-vyro-muted font-mono">{buyerAgent.operatorLocation || 'San Francisco, CA'} • Buyer Principal</span>
+            </div>
+          </div>
+
+          <span className="text-vyro-subtle font-mono text-xs hidden sm:inline">⟷</span>
+
+          {/* Seller Principal */}
+          <div className="flex items-center gap-2.5">
+            <img
+              src={sellerAgent.operatorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
+              alt={sellerAgent.operatorName || 'Elena Vance'}
+              className="w-8 h-8 rounded-full object-cover ring-1 ring-vyro-border"
+            />
+            <div>
+              <span className="text-xs font-semibold text-vyro-text block">{sellerAgent.operatorName || sellerAgent.businessName}</span>
+              <span className="text-[10px] text-vyro-muted font-mono">{sellerAgent.operatorLocation || 'Verified'} • {sellerAgent.operatorRole || 'Seller Lead'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 text-[11px] font-mono text-vyro-muted">
+          <ShieldCheck className="w-3.5 h-3.5 text-vyro-success" />
+          <span>Autonomous protocol bound by Human Covenant</span>
+        </div>
+      </div>
+
       {/* Competing Seller Candidate Switcher Tabs */}
       {siblingNegs.length > 1 && (
         <div className="p-2.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex items-center justify-between overflow-x-auto gap-2">
