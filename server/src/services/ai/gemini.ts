@@ -50,6 +50,7 @@ export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private currentApiKey: string = '';
   private currentModel: string = 'gemini-1.5-flash';
+  private currentApiVersion: string = 'v1';
   private lastStatus: AIStatusReport = {
     status: 'not_configured',
     model: 'gemini-1.5-flash',
@@ -80,12 +81,12 @@ export class GeminiService {
     try {
       this.genAI = new GoogleGenerativeAI(this.currentApiKey);
       this.lastStatus = {
-        status: 'not_configured', // Will update to 'connected' once testConnection() succeeds
+        status: 'not_configured',
         model: this.currentModel,
         isLive: false,
         lastTestedAt: new Date().toISOString()
       };
-      console.log(`[GeminiService] Initialized client with model ${this.currentModel}.`);
+      console.log(`[GeminiService] Initialized client with key (len ${this.currentApiKey.length}).`);
     } catch (err: any) {
       console.error('[GeminiService] Initialization error:', err.message);
       this.lastStatus = {
@@ -97,8 +98,75 @@ export class GeminiService {
     }
   }
 
+  private getGenerativeModel(options?: { responseMimeType?: string; model?: string; apiVersion?: string }) {
+    if (!this.genAI) return null;
+    const modelToUse = options?.model || this.currentModel;
+    const versionToUse = options?.apiVersion || this.currentApiVersion;
+
+    return this.genAI.getGenerativeModel(
+      {
+        model: modelToUse,
+        generationConfig: options?.responseMimeType 
+          ? { responseMimeType: options.responseMimeType } 
+          : undefined
+      },
+      { apiVersion: versionToUse }
+    );
+  }
+
+  /**
+   * Queries Google's ModelService ListModels to find the exact models available for this API key.
+   */
+  public async discoverOptimalModel(apiKey: string): Promise<{ model: string; apiVersion: string } | null> {
+    const endpoints = [
+      { url: `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`, apiVersion: 'v1' },
+      { url: `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`, apiVersion: 'v1beta' }
+    ];
+
+    for (const ep of endpoints) {
+      try {
+        const res = await fetch(ep.url);
+        if (res.ok) {
+          const data: any = await res.json();
+          if (Array.isArray(data.models) && data.models.length > 0) {
+            const supported = data.models
+              .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+              .map((m: any) => m.name.replace(/^models\//, ''));
+
+            console.log(`[GeminiService] Found ${supported.length} models supporting generateContent on ${ep.apiVersion}:`, supported.slice(0, 6));
+
+            const priorityList = [
+              'gemini-2.5-flash',
+              'gemini-2.0-flash',
+              'gemini-1.5-flash',
+              'gemini-1.5-flash-latest',
+              'gemini-1.5-pro',
+              'gemini-1.5-pro-latest',
+              'gemini-pro'
+            ];
+
+            for (const preferred of priorityList) {
+              if (supported.includes(preferred)) {
+                return { model: preferred, apiVersion: ep.apiVersion };
+              }
+            }
+
+            if (supported.length > 0) {
+              return { model: supported[0], apiVersion: ep.apiVersion };
+            }
+          }
+        }
+      } catch (err: any) {
+        console.warn(`[GeminiService] ListModels check on ${ep.apiVersion} skipped:`, err.message);
+      }
+    }
+
+    return null;
+  }
+
   /**
    * Performs an actual live request to Gemini API and measures latency.
+   * Tests discovered model or systematically tries candidate models across v1 and v1beta.
    */
   public async testConnection(apiKeyOverride?: string): Promise<AIStatusReport> {
     const keyToUse = apiKeyOverride ? apiKeyOverride.trim() : this.currentApiKey;
@@ -117,31 +185,95 @@ export class GeminiService {
     }
 
     const startTime = Date.now();
+
     try {
       if (!this.genAI) {
         this.genAI = new GoogleGenerativeAI(keyToUse);
       }
 
-      const model = this.genAI.getGenerativeModel({ model: this.currentModel });
-      const prompt = 'Health check: return JSON {"status":"ok","network":"VYRO"}';
-      
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Gemini API request timed out (10s limit).')), 10000)
-      );
+      // 1. Attempt dynamic model discovery via ListModels
+      const discovered = await this.discoverOptimalModel(keyToUse);
+      if (discovered) {
+        this.currentModel = discovered.model;
+        this.currentApiVersion = discovered.apiVersion;
+        console.log(`[GeminiService] Discovered optimal active model: ${this.currentModel} (apiVersion: ${this.currentApiVersion})`);
+      }
 
-      const requestPromise = model.generateContent(prompt);
-      const result: any = await Promise.race([requestPromise, timeoutPromise]);
-      const responseText = result.response.text();
+      // 2. Candidate matrix for verification (discovered model first, then standard alternatives)
+      const candidates = [
+        { model: this.currentModel, apiVersion: this.currentApiVersion },
+        { model: 'gemini-1.5-flash', apiVersion: 'v1' },
+        { model: 'gemini-1.5-flash', apiVersion: 'v1beta' },
+        { model: 'gemini-2.0-flash', apiVersion: 'v1beta' },
+        { model: 'gemini-2.0-flash', apiVersion: 'v1' },
+        { model: 'gemini-1.5-flash-latest', apiVersion: 'v1beta' },
+        { model: 'gemini-1.5-pro', apiVersion: 'v1' },
+        { model: 'gemini-pro', apiVersion: 'v1' }
+      ];
+
+      let lastError: Error | null = null;
+      let matchedModel = this.currentModel;
+      let matchedVersion = this.currentApiVersion;
+      let succeeded = false;
+
+      // Deduplicate candidates
+      const seen = new Set<string>();
+      const uniqueCandidates = candidates.filter(c => {
+        const key = `${c.model}:${c.apiVersion}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      for (const candidate of uniqueCandidates) {
+        try {
+          const modelInstance = this.genAI.getGenerativeModel(
+            { model: candidate.model },
+            { apiVersion: candidate.apiVersion }
+          );
+
+          const prompt = 'Health check: return JSON {"status":"ok","network":"VYRO"}';
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Request timed out')), 8000)
+          );
+
+          const requestPromise = modelInstance.generateContent(prompt);
+          const result: any = await Promise.race([requestPromise, timeoutPromise]);
+          const responseText = result.response.text();
+
+          if (responseText) {
+            matchedModel = candidate.model;
+            matchedVersion = candidate.apiVersion;
+            succeeded = true;
+            break;
+          }
+        } catch (err: any) {
+          lastError = err;
+          // If auth failed completely, no need to cycle through other models
+          const errMsg = err.message || '';
+          if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('401') || errMsg.includes('API key not valid')) {
+            throw err;
+          }
+        }
+      }
+
+      if (!succeeded && lastError) {
+        throw lastError;
+      }
+
+      this.currentModel = matchedModel;
+      this.currentApiVersion = matchedVersion;
       const latencyMs = Date.now() - startTime;
 
       this.lastStatus = {
         status: 'connected',
-        model: this.currentModel,
+        model: `${this.currentModel} (${this.currentApiVersion})`,
         isLive: true,
         latencyMs,
         lastTestedAt: new Date().toISOString()
       };
-      console.log(`[GeminiService] Live API test succeeded in ${latencyMs}ms.`);
+
+      console.log(`[GeminiService] Live API test verified on ${this.currentModel} [${this.currentApiVersion}] in ${latencyMs}ms.`);
       return this.lastStatus;
     } catch (err: any) {
       const latencyMs = Date.now() - startTime;
@@ -149,7 +281,7 @@ export class GeminiService {
       console.warn(`[GeminiService] API test failed (${latencyMs}ms):`, msg);
 
       let status: AIConnectionStatus = 'provider_unavailable';
-      if (msg.includes('API_KEY_INVALID') || msg.includes('401') || msg.includes('403') || msg.includes('auth')) {
+      if (msg.includes('API_KEY_INVALID') || msg.includes('401') || msg.includes('403') || msg.includes('auth') || msg.includes('API key not valid')) {
         status = 'auth_failed';
       } else if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('rate limit')) {
         status = 'rate_limited';
@@ -157,7 +289,7 @@ export class GeminiService {
 
       this.lastStatus = {
         status,
-        model: this.currentModel,
+        model: `${this.currentModel} (${this.currentApiVersion})`,
         isLive: false,
         latencyMs,
         lastTestedAt: new Date().toISOString(),
@@ -177,10 +309,8 @@ export class GeminiService {
   public async parsePurchasingPrompt(rawPrompt: string): Promise<ParsedCommerceRequest> {
     if (this.genAI && this.currentApiKey) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: this.currentModel,
-          generationConfig: { responseMimeType: 'application/json' }
-        });
+        const model = this.getGenerativeModel({ responseMimeType: 'application/json' });
+        if (!model) throw new Error('Model unavailable');
 
         const systemPrompt = `You are the VYRO Procurement Intelligence Engine.
 Analyze the user's purchasing request and extract structured requirements into a strictly valid JSON object.
@@ -260,10 +390,8 @@ Do not hallucinate. Faithfully extract the user's intent.`;
     // Real Gemini Model Generation
     if (this.genAI && this.currentApiKey) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: this.currentModel,
-          generationConfig: { responseMimeType: 'application/json' }
-        });
+        const model = this.getGenerativeModel({ responseMimeType: 'application/json' });
+        if (!model) throw new Error('Model unavailable');
 
         const sellerPrompt = `You are ${seller.name}, an autonomous commercial representative for ${seller.businessName}.
 Your objective is to sell your service ("${catalogItem.name}") while strictly defending your minimum price floor of $${minAcceptable} USD and turnaround of ${deliveryDays} days.
@@ -364,10 +492,8 @@ Return strictly a JSON object:
     // Real Gemini Model Generation
     if (this.genAI && this.currentApiKey) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: this.currentModel,
-          generationConfig: { responseMimeType: 'application/json' }
-        });
+        const model = this.getGenerativeModel({ responseMimeType: 'application/json' });
+        if (!model) throw new Error('Model unavailable');
 
         const buyerPrompt = `You are ${buyer.name}, an autonomous procurement agent acting for ${buyer.businessName}.
 Your objective is to procure "${request.title}" while strictly enforcing the buyer's maximum budget ceiling of $${maxBudget} USD and deadline of ${deadlineDays} days.
@@ -463,10 +589,8 @@ Return strictly a JSON object:
     // Real Gemini Model Generation
     if (this.genAI && this.currentApiKey) {
       try {
-        const model = this.genAI.getGenerativeModel({
-          model: this.currentModel,
-          generationConfig: { responseMimeType: 'application/json' }
-        });
+        const model = this.getGenerativeModel({ responseMimeType: 'application/json' });
+        if (!model) throw new Error('Model unavailable');
 
         const candidateSummaries = negotiationsWithProposals.map(item => ({
           negotiationId: item.negotiationId,
