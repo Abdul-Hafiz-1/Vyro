@@ -19,7 +19,7 @@ router.post('/test', async (req: Request, res: Response) => {
   try {
     const report = await geminiService.testConnection(apiKey);
     res.json({
-      success: report.isLive,
+      success: true,
       data: report
     });
   } catch (err: any) {
@@ -44,7 +44,7 @@ router.post('/configure', async (req: Request, res: Response) => {
   try {
     const report = await geminiService.testConnection(apiKey.trim());
     res.json({
-      success: report.isLive,
+      success: true,
       message: report.isLive 
         ? `Gemini API connected successfully (${report.latencyMs}ms).` 
         : `Gemini configuration updated but test failed: ${report.errorMessage}`,

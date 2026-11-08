@@ -20,11 +20,42 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     ...options
   });
 
-  const json = await res.json();
-  if (!res.ok || !json.success) {
-    throw new Error(json.error || `Request failed with status ${res.status}`);
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (err) {
+    if (!res.ok) {
+      throw new Error(`Request failed with HTTP status ${res.status}: ${res.statusText}`);
+    }
+    throw new Error('Server returned an invalid JSON response');
   }
-  return json.data;
+
+  // Format error if present
+  const extractErrorMessage = (data: any): string => {
+    if (!data) return '';
+    if (typeof data.error === 'string') return data.error;
+    if (data.error && typeof data.error === 'object') {
+      if (data.error._errors && Array.isArray(data.error._errors) && data.error._errors.length > 0) {
+        return data.error._errors.join(', ');
+      }
+      return JSON.stringify(data.error);
+    }
+    if (typeof data.message === 'string') return data.message;
+    if (data.data?.errorMessage) return data.data.errorMessage;
+    return '';
+  };
+
+  if (!res.ok) {
+    const errorMsg = extractErrorMessage(json) || `Request failed with HTTP status ${res.status}`;
+    throw new Error(errorMsg);
+  }
+
+  if (json.success === false) {
+    const errorMsg = extractErrorMessage(json) || 'Operation was not successful';
+    throw new Error(errorMsg);
+  }
+
+  return json.data !== undefined ? json.data : json;
 }
 
 export const api = {
