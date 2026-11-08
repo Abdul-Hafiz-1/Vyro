@@ -688,42 +688,140 @@ Return strictly a JSON object:
   // =========================================================================
   // Deterministic Fallback Logic (Clear & Unambiguous)
   // =========================================================================
+  // Intelligent Fallback Parsing & Responses (when Gemini key is not configured)
+  // =========================================================================
   private fallbackParse(rawPrompt: string): Omit<ParsedCommerceRequest, 'isAiGenerated'> {
-    const lower = rawPrompt.toLowerCase();
+    const trimmed = rawPrompt.trim();
+    const lower = trimmed.toLowerCase();
     
+    // 1. Budget extraction
     let budget = 150;
-    const budgetMatch = rawPrompt.match(/\$?\s*(\d+(\.\d{2})?)\s*(dollars|usd|\$)?/i);
-    if (budgetMatch && budgetMatch[1]) {
-      const parsed = parseFloat(budgetMatch[1]);
-      if (parsed > 0) budget = parsed;
+    const budgetPatterns = [
+      /\$\s*(\d+(?:\.\d{1,2})?)/i,
+      /(\d+(?:\.\d{1,2})?)\s*(?:dollars|usd|bucks)/i,
+      /(?:budget|ceiling|cap|max|for|up\s*to)\s*(?:is|of|:)?\s*\$?\s*(\d+(?:\.\d{1,2})?)/i
+    ];
+    for (const pat of budgetPatterns) {
+      const match = trimmed.match(pat);
+      if (match && match[1]) {
+        const val = parseFloat(match[1]);
+        if (val > 0) {
+          budget = val;
+          break;
+        }
+      }
     }
 
+    // 2. Deadline extraction
     let deadline = 5;
-    if (lower.includes('three days') || lower.includes('3 days') || lower.includes('3-day')) deadline = 3;
-    else if (lower.includes('four days') || lower.includes('4 days') || lower.includes('4-day')) deadline = 4;
-    else if (lower.includes('five days') || lower.includes('5 days') || lower.includes('5-day')) deadline = 5;
-    else if (lower.includes('eight days') || lower.includes('8 days')) deadline = 8;
-    else if (lower.includes('week') || lower.includes('7 days')) deadline = 7;
+    const deadlinePatterns = [
+      /(\d+)\s*(?:business\s*)?days?/i,
+      /within\s*(\d+)\s*days?/i,
+      /in\s*(\d+)\s*days?/i,
+      /(\d+)\s*weeks?/i
+    ];
+    let matchedDeadline = false;
+    for (const pat of deadlinePatterns) {
+      const match = trimmed.match(pat);
+      if (match && match[1]) {
+        const val = parseInt(match[1], 10);
+        if (val > 0) {
+          deadline = pat.source.includes('week') ? val * 7 : val;
+          matchedDeadline = true;
+          break;
+        }
+      }
+    }
+    if (!matchedDeadline) {
+      if (lower.includes('two days') || lower.includes('2 days') || lower.includes('48 hours')) deadline = 2;
+      else if (lower.includes('three days') || lower.includes('3 days') || lower.includes('72 hours')) deadline = 3;
+      else if (lower.includes('four days') || lower.includes('4 days')) deadline = 4;
+      else if (lower.includes('five days') || lower.includes('5 days')) deadline = 5;
+      else if (lower.includes('one week') || lower.includes('1 week') || lower.includes('seven days') || lower.includes('7 days')) deadline = 7;
+      else if (lower.includes('two weeks') || lower.includes('2 weeks') || lower.includes('14 days')) deadline = 14;
+    }
 
+    // 3. Category detection
     let category = 'Design';
-    if (lower.includes('security') || lower.includes('audit')) category = 'Security';
-    else if (lower.includes('backend') || lower.includes('api') || lower.includes('microservice')) category = 'Development';
+    if (lower.includes('security') || lower.includes('audit') || lower.includes('pentest') || lower.includes('vulnerability') || lower.includes('owasp') || lower.includes('compliance')) {
+      category = 'Security';
+    } else if (lower.includes('app') || lower.includes('code') || lower.includes('api') || lower.includes('backend') || lower.includes('frontend') || lower.includes('fullstack') || lower.includes('react') || lower.includes('python') || lower.includes('database') || lower.includes('bug') || lower.includes('feature')) {
+      category = 'Development';
+    } else if (lower.includes('seo') || lower.includes('marketing') || lower.includes('campaign') || lower.includes('ad') || lower.includes('traffic')) {
+      category = 'Marketing';
+    } else if (lower.includes('copy') || lower.includes('article') || lower.includes('blog') || lower.includes('writing') || lower.includes('content') || lower.includes('translation')) {
+      category = 'Content';
+    } else if (lower.includes('design') || lower.includes('ui') || lower.includes('ux') || lower.includes('logo') || lower.includes('brand') || lower.includes('figma') || lower.includes('landing page')) {
+      category = 'Design';
+    }
+
+    // 4. Clean Title extraction directly reflecting the user's specific request
+    let cleanPrompt = trimmed
+      .replace(/^(i need a|i need an|i need|i want a|i want|looking for a|looking for|please build a|please build|please make a|please make|create a|create|build a|build|we need a|we need)\s+/i, '')
+      .replace(/\s*(?:my\s*)?budget\s*(?:is|of|:)?\s*\$?\d+.*$/i, '')
+      .replace(/\s*(?:within|in|by|deadline)\s*\d+\s*(?:days|weeks|hours).*$/i, '')
+      .trim();
+
+    const firstSentence = cleanPrompt.split(/[.?!]/)[0].trim();
+    if (firstSentence.length > 5) {
+      cleanPrompt = firstSentence;
+    }
+
+    let title = cleanPrompt.length > 3 
+      ? cleanPrompt.charAt(0).toUpperCase() + cleanPrompt.slice(1)
+      : `${category} Commercial Procurement`;
+
+    if (title.length > 70) {
+      title = title.substring(0, 67) + '...';
+    }
+
+    // 5. Intelligent Deliverables extraction (directly capturing user clauses)
+    const deliverables: string[] = [];
+    const clauseMatches = trimmed.match(/(?:with|including|features?:?|delivering)\s+([^.!?]+)/i);
+    if (clauseMatches && clauseMatches[1]) {
+      const parts = clauseMatches[1].split(/,|\band\b|\bplus\b/i).map(p => p.trim()).filter(p => p.length > 3);
+      for (const p of parts) {
+        if (!p.toLowerCase().includes('budget') && !p.toLowerCase().includes('day') && !p.toLowerCase().includes('dollar') && !p.toLowerCase().includes('usd')) {
+          deliverables.push(p.charAt(0).toUpperCase() + p.slice(1));
+        }
+      }
+    }
+
+    if (deliverables.length === 0) {
+      deliverables.push(`${title} Core Specification`);
+      if (category === 'Design') {
+        deliverables.push('Framer Motion / Tailwind Micro-interactions');
+        deliverables.push('Responsive Mobile & Desktop Breakpoints');
+        deliverables.push('Figma Tokens & Design System Assets');
+      } else if (category === 'Development') {
+        deliverables.push('Full TypeScript / React Architecture');
+        deliverables.push('API Integration & Data Validation');
+        deliverables.push('Production Deployment & Setup Verification');
+      } else if (category === 'Security') {
+        deliverables.push('Automated & Manual Vulnerability Assessment');
+        deliverables.push('OWASP Top 10 Security Triage Report');
+        deliverables.push('Actionable Remediation Code Patches');
+      } else {
+        deliverables.push('High-Fidelity Project Deliverable Package');
+        deliverables.push('Quality Assurance Verification');
+      }
+    }
 
     return {
-      title: 'High-Impact SaaS Landing Page with Form Integration',
+      title,
       category,
-      requiredCapabilities: ['Landing Page Design', 'Tailwind CSS', 'Responsive UI', 'Contact Forms'],
-      deliverables: [
-        'Responsive Landing Page Layout',
-        'Interactive Pricing Matrix',
-        'Integrated Lead / Contact Form',
-        'Mobile Layout Optimization'
+      requiredCapabilities: [
+        `${category} Architecture`,
+        'Quality Assurance QA',
+        category === 'Design' ? 'Figma to Code' : 'Full-Stack Delivery',
+        'Responsive Delivery'
       ],
+      deliverables: deliverables.slice(0, 5),
       maxBudget: budget,
       currency: 'USD',
       deadlineDays: deadline,
-      qualityRequirements: 'Clean modern styling, responsive mobile layout, zero console errors.',
-      additionalConditions: 'Source code and assets delivered upon completion.'
+      qualityRequirements: 'Production-ready execution with verified testing, zero console warnings, and responsive layout.',
+      additionalConditions: 'Full source files, documentation, and IP rights transferred upon human settlement.'
     };
   }
 
@@ -741,6 +839,10 @@ Return strictly a JSON object:
     let action: 'proposal' | 'counteroffer' | 'acceptance' | 'rejection' = 'proposal';
     let message = '';
     let rationale = '';
+
+    const effectiveDeliverables = request.deliverables && request.deliverables.length > 0 
+      ? request.deliverables 
+      : (catalogItem.includedDeliverables || []);
 
     if (currentRound === 1) {
       // Opening quote
@@ -774,7 +876,7 @@ Return strictly a JSON object:
       message,
       proposedPrice,
       deliveryDays,
-      deliverables: catalogItem.includedDeliverables || request.deliverables,
+      deliverables: effectiveDeliverables,
       action,
       rationale,
       isAiGenerated: false,
