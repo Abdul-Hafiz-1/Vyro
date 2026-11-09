@@ -11,6 +11,7 @@ import { SecurityPage } from './pages/public/SecurityPage';
 import { LoginPage, SignupPage } from './pages/public/AuthPages';
 import { OnboardingPage } from './pages/public/OnboardingPage';
 import { TermsPage, PrivacyPage, DisputePolicyPage } from './pages/public/LegalPages';
+import { StyleguidePage } from './pages/StyleguidePage';
 
 // App Layout & Pages
 import { AppLayout } from './components/common/AppLayout';
@@ -47,15 +48,17 @@ export const App: React.FC = () => {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <Toaster
-          theme="dark"
           position="bottom-right"
           toastOptions={{
             style: {
-              background: 'var(--vyro-surface)',
-              border: '1px solid var(--vyro-line)',
-              color: 'var(--vyro-text)',
-              fontSize: '13px',
-              borderRadius: '6px'
+              background: '#FFFFFF',
+              border: '2px solid #1C1A17',
+              boxShadow: '0 4px 0 #1C1A17',
+              color: '#1C1A17',
+              fontSize: '15px',
+              fontWeight: '600',
+              borderRadius: '14px',
+              fontFamily: 'Figtree, sans-serif'
             }
           }}
         />
@@ -63,6 +66,7 @@ export const App: React.FC = () => {
           <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
+            <Route path="/styleguide" element={<StyleguidePage />} />
             <Route path="/how-it-works" element={<HowItWorksPage />} />
             <Route path="/security" element={<SecurityPage />} />
             <Route path="/login" element={<LoginPage />} />
