@@ -970,4 +970,10 @@ export function seedDatabase(force: boolean = false): void {
   );
 
   console.log('[DB] Canonical SQLite database seeded successfully.');
+  try {
+    const { seedDemoAccounts } = require('./seedDemo.js');
+    seedDemoAccounts();
+  } catch (e) {
+    // optional in bundle
+  }
 }

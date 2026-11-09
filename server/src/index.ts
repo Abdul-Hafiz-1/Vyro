@@ -1,4 +1,8 @@
+import dns from 'dns';
 import express, { Request, Response, NextFunction } from 'express';
+
+// Ensure IPv4 first to prevent Windows EAI_AGAIN DNS lookup timeout on PayPal sandbox
+dns.setDefaultResultOrder('ipv4first');
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config } from './config/index.js';

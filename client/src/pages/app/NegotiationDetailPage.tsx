@@ -41,7 +41,7 @@ export const NegotiationDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, isBuyerWorkspace } = useAuth();
 
   const [conversationDrawerOpen, setConversationDrawerOpen] = useState(false);
   const [detailsDrawerOpen, setDetailsDrawerOpen] = useState(false);
@@ -178,8 +178,10 @@ export const NegotiationDetailPage: React.FC = () => {
   const agreedOrLatestPrice = agreement?.finalPrice || currentProposal?.price || 150;
   const agreedOrLatestDays = agreement?.deliveryDays || currentProposal?.deliveryDays || request?.deadlineDays || 5;
 
-  const counterpartName = sellerAgent?.businessName ? formatName(sellerAgent.businessName) : 'Verified Seller';
-  const isBuyer = true;
+  const isBuyer = negData.buyerUserId ? (user?.id === negData.buyerUserId) : isBuyerWorkspace;
+  const counterpartName = isBuyer 
+    ? (sellerAgent?.businessName ? formatName(sellerAgent.businessName) : 'Verified Seller')
+    : (buyerAgent?.name ? formatName(buyerAgent.name) : 'Verified Buyer');
 
   // Determine current step for SummaryPanel (1 to 5)
   let currentStep = 3; // default: Negotiating
@@ -448,8 +450,8 @@ export const NegotiationDetailPage: React.FC = () => {
             />
           )}
 
-          {/* PayPal Checkout Card (When Approved and Ready to Pay) */}
-          {agreement && isApproved && !isCompleted && (
+          {/* PayPal Checkout Card (When Approved and Ready to Pay - BUYER ONLY) */}
+          {agreement && isApproved && !isCompleted && isBuyer && (
             <div className="flex flex-col gap-3">
               <PayPalCheckoutButton
                 agreement={agreement}
@@ -473,6 +475,18 @@ export const NegotiationDetailPage: React.FC = () => {
                 </button>
               </div>
             </div>
+          )}
+
+          {/* Seller State: Awaiting Buyer Payment */}
+          {agreement && isApproved && !isCompleted && !isBuyer && (
+            <Card className="p-6 flex flex-col gap-2 bg-surface text-center">
+              <span className="font-semibold text-body text-text-primary">
+                Awaiting Buyer Payment
+              </span>
+              <p className="text-secondary text-text-muted">
+                The agreement has been confirmed. The buyer is authorizing escrow payment. Work begins once escrow is locked.
+              </p>
+            </Card>
           )}
 
           {/* Declined State with Appeal Option */}

@@ -300,13 +300,27 @@ export class PayPalService {
           {
             reference_id: agreement.negotiationId, // reference_id = deal id per spec
             custom_id: decision?.id || agreement.id, // custom_id = decision id per spec
-            description: `VYRO Commercial Agreement ${agreement.id}`,
+            description: 'Digital freelance services - Milestone 1',
             amount: {
               currency_code: currency,
               value: amountFormatted
             }
           }
-        ]
+        ],
+        payment_source: {
+          paypal: {
+            experience_context: {
+              payment_method_preference: 'IMMEDIATE_PAYMENT_REQUIRED',
+              brand_name: 'VYRO Autonomous Commerce',
+              locale: 'en-US',
+              landing_page: 'LOGIN',
+              shipping_preference: 'NO_SHIPPING',
+              user_action: 'PAY_NOW',
+              return_url: 'http://localhost:5173/app/deals',
+              cancel_url: 'http://localhost:5173/app/deals'
+            }
+          }
+        }
       };
 
       let response = await fetch(`${this.baseUrl}/v2/checkout/orders`, {
