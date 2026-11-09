@@ -14,7 +14,8 @@ import {
   HelpCircle,
   LogOut,
   Check,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Receipt
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
@@ -46,20 +47,22 @@ export const AppLayout: React.FC = () => {
 
   const unreadCount = notifications.filter(n => !n.read && !n.isRead).length;
 
-  // Buyer navigation: Today · Deals · Marketplace · Rules
+  // Buyer navigation: Today · Deals · Marketplace · Rules · Receipts
   const buyerNavigation = [
     { name: 'Today', href: '/app', icon: Inbox },
     { name: 'Deals', href: '/app/deals', icon: Scale },
     { name: 'Marketplace', href: '/app/marketplace', icon: Globe2 },
     { name: 'Rules', href: '/app/rules', icon: Sliders },
+    { name: 'Receipts', href: '/app/transactions', icon: Receipt },
   ];
 
-  // Seller navigation: Today · Listings · Deals · Rules
+  // Seller navigation: Today · Listings · Deals · Rules · Receipts
   const sellerNavigation = [
     { name: 'Today', href: '/app', icon: Inbox },
     { name: 'Listings', href: '/app/listings', icon: Store },
     { name: 'Deals', href: '/app/deals', icon: Scale },
     { name: 'Rules', href: '/app/rules', icon: Sliders },
+    { name: 'Receipts', href: '/app/transactions', icon: Receipt },
   ];
 
   const currentNavItems = isBuyerWorkspace ? buyerNavigation : sellerNavigation;

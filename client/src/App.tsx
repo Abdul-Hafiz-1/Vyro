@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './context/AuthContext';
@@ -14,9 +14,6 @@ import { OnboardingPage } from './pages/public/OnboardingPage';
 // App Layout & Pages
 import { AppLayout } from './components/common/AppLayout';
 import { OverviewPage } from './pages/app/OverviewPage';
-import { NetworkPage } from './pages/app/NetworkPage';
-import { AgentsPage } from './pages/app/AgentsPage';
-import { AgentCreatePage } from './pages/app/AgentCreatePage';
 import { RequestCreatePage } from './pages/app/RequestCreatePage';
 import { ListingsPage } from './pages/app/ListingsPage';
 import { ListingEditorPage } from './pages/app/ListingEditorPage';
@@ -26,7 +23,6 @@ import { NegotiationsListPage } from './pages/app/NegotiationsListPage';
 import { NegotiationDetailPage } from './pages/app/NegotiationDetailPage';
 import { TransactionsPage } from './pages/app/TransactionsPage';
 import { TransactionDetailPage } from './pages/app/TransactionDetailPage';
-import { AnalyticsPage } from './pages/app/AnalyticsPage';
 import { SettingsPage } from './pages/app/SettingsPage';
 
 const queryClient = new QueryClient({
@@ -38,6 +34,12 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+// Helper component to redirect legacy /negotiations/:id to /deals/:id
+const RedirectDealParam: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/deals/${id}`} replace />;
+};
 
 export const App: React.FC = () => {
   return (
@@ -70,30 +72,38 @@ export const App: React.FC = () => {
             <Route path="/app" element={<AppLayout />}>
               <Route index element={<OverviewPage />} />
               
-              {/* Buyer & Seller Nav Items */}
+              {/* Deals / Negotiations */}
               <Route path="deals" element={<NegotiationsListPage />} />
               <Route path="deals/:id" element={<NegotiationDetailPage />} />
-              <Route path="marketplace" element={<ListingsPage />} />
-              <Route path="rules" element={<MemoryPage />} />
+              
+              {/* Buyer Procurement */}
               <Route path="requests/new" element={<RequestCreatePage />} />
+              <Route path="marketplace" element={<ListingsPage />} />
 
-              {/* Listings & Fulfillment */}
+              {/* Seller Listings */}
               <Route path="listings" element={<ListingsPage />} />
               <Route path="listings/new" element={<ListingEditorPage />} />
               <Route path="listings/:id" element={<ListingEditorPage />} />
+
+              {/* Rules & Governance */}
+              <Route path="rules" element={<MemoryPage />} />
+
+              {/* Transactions & Invoices */}
               <Route path="transactions" element={<TransactionsPage />} />
               <Route path="transactions/:id" element={<TransactionDetailPage />} />
 
-              {/* Legacy Aliases & Secondary Views */}
-              <Route path="negotiations" element={<NegotiationsListPage />} />
-              <Route path="negotiations/:id" element={<NegotiationDetailPage />} />
-              <Route path="memory" element={<MemoryPage />} />
+              {/* Account, Notifications & Settings */}
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="settings" element={<SettingsPage />} />
-              <Route path="network" element={<NetworkPage />} />
-              <Route path="agents" element={<AgentsPage />} />
-              <Route path="agents/new" element={<AgentCreatePage />} />
-              <Route path="analytics" element={<AnalyticsPage />} />
+
+              {/* Clean Canonical Redirects for Legacy / Merged Aliases */}
+              <Route path="negotiations" element={<Navigate to="/app/deals" replace />} />
+              <Route path="negotiations/:id" element={<RedirectDealParam />} />
+              <Route path="memory" element={<Navigate to="/app/rules" replace />} />
+              <Route path="network" element={<Navigate to="/app/marketplace" replace />} />
+              <Route path="agents" element={<Navigate to="/app/rules" replace />} />
+              <Route path="agents/new" element={<Navigate to="/app/rules" replace />} />
+              <Route path="analytics" element={<Navigate to="/app" replace />} />
             </Route>
 
             {/* Fallback */}

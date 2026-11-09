@@ -119,6 +119,8 @@ export const api = {
     fetchJson<User>(`${API_BASE}/auth/capabilities`, { method: 'PATCH', body: JSON.stringify(capabilities) }),
   updateWorkspace: (workspace: WorkspaceType) =>
     fetchJson<User>(`${API_BASE}/auth/workspace`, { method: 'PATCH', body: JSON.stringify({ workspace }) }),
+  updateProfile: (payload: { displayName?: string; bio?: string; avatarUrl?: string; activeWorkspace?: WorkspaceType }) =>
+    fetchJson<User>(`${API_BASE}/auth/profile`, { method: 'PATCH', body: JSON.stringify(payload) }),
   updateOnboarding: (payload: any) =>
     fetchJson<User>(`${API_BASE}/auth/onboarding`, { method: 'POST', body: JSON.stringify(payload) }),
 
