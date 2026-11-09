@@ -37,6 +37,8 @@ export const NegotiationDetailPage: React.FC = () => {
   const [counterPrice, setCounterPrice] = useState('');
   const [showCounterInput, setShowCounterInput] = useState(false);
   const [actionNote, setActionNote] = useState('');
+  const [appealReason, setAppealReason] = useState('');
+  const [showAppealModal, setShowAppealModal] = useState(false);
 
   // Fetch current negotiation details
   const { 
@@ -79,9 +81,12 @@ export const NegotiationDetailPage: React.FC = () => {
     }
   });
 
-  // Review Queue actions (when item needs human decision)
+  // Human approval & decline actions (works via queue item or direct negotiation approval)
   const approveMutation = useMutation({
-    mutationFn: (queueItemId: string) => api.approveReviewItem(queueItemId, actionNote || undefined),
+    mutationFn: () => {
+      const qId = negData?.queueItem?.id;
+      return qId ? api.approveReviewItem(qId, actionNote || undefined) : api.approveDealDirect(id!, actionNote || undefined);
+    },
     onSuccess: () => {
       toast.success('Deal approved.');
       queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
@@ -91,7 +96,10 @@ export const NegotiationDetailPage: React.FC = () => {
   });
 
   const declineMutation = useMutation({
-    mutationFn: (queueItemId: string) => api.declineReviewItem(queueItemId, actionNote || undefined),
+    mutationFn: () => {
+      const qId = negData?.queueItem?.id;
+      return qId ? api.declineReviewItem(qId, actionNote || undefined) : api.declineDealDirect(id!, actionNote || undefined);
+    },
     onSuccess: () => {
       toast.info('Deal declined.');
       queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
@@ -101,8 +109,18 @@ export const NegotiationDetailPage: React.FC = () => {
   });
 
   const counterMutation = useMutation({
-    mutationFn: ({ queueItemId, price }: { queueItemId: string; price: number }) =>
-      api.counterReviewItem(queueItemId, price, actionNote || undefined),
+    mutationFn: async (price: number) => {
+      const qId = negData?.queueItem?.id;
+      if (qId) {
+        return await api.counterReviewItem(qId, price, actionNote || undefined);
+      }
+      const res = await api.sendMessage(id!, {
+        content: `Counteroffer proposed: $${price}. Please re-evaluate scope.`,
+        senderRole: 'buyer',
+        senderType: 'human'
+      });
+      return { success: true, data: res.negotiation };
+    },
     onSuccess: () => {
       toast.success('Counteroffer submitted to agent.');
       setShowCounterInput(false);
@@ -111,6 +129,18 @@ export const NegotiationDetailPage: React.FC = () => {
       refetch();
     },
     onError: (err: any) => toast.error(err.message || 'Counter failed')
+  });
+
+  const appealMutation = useMutation({
+    mutationFn: (reason: string) => api.appealDeal(id!, reason),
+    onSuccess: () => {
+      toast.success('Appeal submitted. Deal has been reopened for human review.');
+      setShowAppealModal(false);
+      setAppealReason('');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Appeal submission failed')
   });
 
   if (isLoading || !negData) {
@@ -413,6 +443,27 @@ export const NegotiationDetailPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Declined by Policy Card with Appeal Action */}
+          {(isDeclined || negData.status === 'declined') && (
+            <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 text-rose-400 font-semibold text-xs">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Deal Declined by Policy</span>
+              </div>
+              <p className="text-xs text-vyro-muted leading-relaxed">
+                {decision?.reasons?.[0] || agreement?.rejectionReason || 'The terms exceeded safety constraints or policy limits.'}
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAppealModal(true)}
+                className="w-full justify-center text-xs text-rose-400 border-rose-500/40 hover:bg-rose-500/10"
+              >
+                Appeal Decision & Reopen
+              </Button>
+            </div>
+          )}
+
           {/* Sandbox Payment Card (when approved) */}
           {agreement && isApproved && !isCompleted && (
             <PayPalCheckoutButton
@@ -434,12 +485,12 @@ export const NegotiationDetailPage: React.FC = () => {
               <div>
                 <h4 className="text-sm font-semibold text-vyro-text">Contract Settled</h4>
                 <p className="text-xs text-vyro-muted mt-0.5">
-                  Sandbox funds captured and credited to {sellerAgent?.businessName}.
+                  Funds verified and held in escrow for {sellerAgent?.businessName}.
                 </p>
               </div>
               <Link to="/app/transactions">
                 <Button variant="primary" size="sm" className="w-full justify-center text-xs">
-                  View Receipt
+                  View Receipt & Invoices →
                 </Button>
               </Link>
             </div>
@@ -448,21 +499,23 @@ export const NegotiationDetailPage: React.FC = () => {
       </div>
 
       {/* Persistent Bottom Decision Action Bar (When Needs Human Decision) */}
-      {needsHuman && queueItem && (
+      {needsHuman && (
         <div className="fixed bottom-16 sm:bottom-0 inset-x-0 z-40 bg-vyro-surface/95 border-t border-vyro-border backdrop-blur-md px-4 py-3 sm:px-6 shadow-xl">
           <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="space-y-0.5">
               <div className="flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="text-xs font-semibold text-vyro-text">
-                  Action Required: {queueItem.reasons?.[0] || 'AI Paused for Human Decision'}
+                  Action Required: {queueItem?.reasons?.[0] || decision?.reasons?.[0] || 'AI Paused for Human Decision'}
                 </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  {Math.round((queueItem.confidence || 0) * 100)}% Confidence
-                </span>
+                {queueItem?.confidence && (
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                    {Math.round(queueItem.confidence * 100)}% Confidence
+                  </span>
+                )}
               </div>
               <p className="text-xs text-vyro-muted">
-                AI Recommendation: <span className="text-vyro-text font-medium">{queueItem.aiRecommendation}</span>
+                Proposed Terms: <span className="text-vyro-text font-medium">${agreedOrLatestPrice} USD</span>
               </p>
             </div>
 
@@ -481,7 +534,7 @@ export const NegotiationDetailPage: React.FC = () => {
                     variant="ghost"
                     size="sm"
                     isLoading={declineMutation.isPending}
-                    onClick={() => declineMutation.mutate(queueItem.id)}
+                    onClick={() => declineMutation.mutate()}
                     className="text-xs text-vyro-error hover:bg-vyro-error/10"
                   >
                     Decline
@@ -490,10 +543,10 @@ export const NegotiationDetailPage: React.FC = () => {
                     variant="primary"
                     size="sm"
                     isLoading={approveMutation.isPending}
-                    onClick={() => approveMutation.mutate(queueItem.id)}
+                    onClick={() => approveMutation.mutate()}
                     className="text-xs px-4"
                   >
-                    Approve (${queueItem.proposedPrice})
+                    Approve (${agreedOrLatestPrice})
                   </Button>
                 </>
               ) : (
@@ -515,7 +568,7 @@ export const NegotiationDetailPage: React.FC = () => {
                     disabled={!counterPrice}
                     onClick={() => {
                       const num = parseFloat(counterPrice);
-                      if (num > 0) counterMutation.mutate({ queueItemId: queueItem.id, price: num });
+                      if (num > 0) counterMutation.mutate(num);
                     }}
                     className="text-xs"
                   >
@@ -531,6 +584,39 @@ export const NegotiationDetailPage: React.FC = () => {
                   </Button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Appeal Modal */}
+      {showAppealModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-vyro-surface border border-vyro-border rounded-xl max-w-md w-full p-5 space-y-4 shadow-2xl">
+            <h3 className="text-sm font-semibold text-vyro-text">Appeal Auto-Declined Deal</h3>
+            <p className="text-xs text-vyro-muted leading-relaxed">
+              Explain why this transaction should be granted an exception (e.g. client pre-approval, scope waiver, special dispensation).
+            </p>
+            <textarea
+              rows={3}
+              value={appealReason}
+              onChange={(e) => setAppealReason(e.target.value)}
+              placeholder="Provide a detailed justification for reopening this deal..."
+              className="w-full px-3 py-2 text-xs bg-vyro-card border border-vyro-border rounded-lg text-vyro-text focus:outline-none focus:border-vyro-accent"
+            />
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowAppealModal(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                isLoading={appealMutation.isPending}
+                disabled={appealReason.trim().length < 5}
+                onClick={() => appealMutation.mutate(appealReason.trim())}
+              >
+                Submit Appeal
+              </Button>
             </div>
           </div>
         </div>

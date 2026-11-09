@@ -137,6 +137,7 @@ export const api = {
     const query = new URLSearchParams(cleanParams).toString();
     return fetchJson<Listing[]>(`${API_BASE}/listings${query ? `?${query}` : ''}`);
   },
+  getMyListings: () => fetchJson<Listing[]>(`${API_BASE}/listings/my`),
   getListing: (id: string) => fetchJson<Listing & { seller?: User; sellerAgent?: Agent }>(`${API_BASE}/listings/${id}`),
   createListing: (data: Partial<Listing>) => fetchJson<Listing>(`${API_BASE}/listings`, { method: 'POST', body: JSON.stringify(data) }),
   updateListing: (id: string, data: Partial<Listing>) => fetchJson<Listing>(`${API_BASE}/listings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
@@ -215,8 +216,11 @@ export const api = {
       body: JSON.stringify(body)
     });
   },
-  runMultiAgentNegotiation: (requestId: string, sellerIds: string[]) => fetchJson<{ negotiations: Negotiation[]; evaluation: MultiProposalComparison }>(`${API_BASE}/negotiations/multi-agent`, { method: 'POST', body: JSON.stringify({ requestId, sellerIds }) }),
+  runMultiAgentNegotiation: (requestId: string, sellerIds?: string[]) => fetchJson<{ negotiations: Negotiation[]; evaluation: MultiProposalComparison }>(`${API_BASE}/negotiations/multi-agent`, { method: 'POST', body: JSON.stringify({ requestId, sellerIds: sellerIds && sellerIds.length > 0 ? sellerIds : undefined }) }),
   getEvaluation: (requestId: string) => fetchJson<MultiProposalComparison>(`${API_BASE}/negotiations/evaluation/${requestId}`),
+  approveDealDirect: (id: string, note?: string) => fetchJson<{ success: boolean; message: string; data: Negotiation }>(`${API_BASE}/negotiations/${id}/approve`, { method: 'POST', body: JSON.stringify({ note }) }),
+  declineDealDirect: (id: string, reason?: string) => fetchJson<{ success: boolean; message: string; data: Negotiation }>(`${API_BASE}/negotiations/${id}/decline`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  appealDeal: (id: string, reason: string) => fetchJson<{ success: boolean; message: string; data: Negotiation }>(`${API_BASE}/negotiations/${id}/appeal`, { method: 'POST', body: JSON.stringify({ reason }) }),
 
   // Agreements
   getAgreements: () => fetchJson<Agreement[]>(`${API_BASE}/agreements`),
@@ -229,6 +233,7 @@ export const api = {
   getPaymentsHealth: () => fetchJson<{ ok: boolean; connected: boolean; env: string; appId?: string; debugId?: string; reason?: string }>(`${API_BASE}/payments/health`),
   createPayPalOrder: (agreementId: string, idempotencyKey?: string) => fetchJson<{ orderId: string; approvalUrl?: string; amount: number; currency: string; status: string; isSimulated: boolean }>(`${API_BASE}/payments/create-order`, { method: 'POST', body: JSON.stringify({ agreementId, idempotencyKey }) }),
   capturePayPalOrder: (orderId: string, idempotencyKey?: string) => fetchJson<Transaction>(`${API_BASE}/payments/capture-order`, { method: 'POST', body: JSON.stringify({ orderId, idempotencyKey }) }),
+  settlePaymentMock: (agreementId: string) => fetchJson<Transaction>(`${API_BASE}/payments/mock-settle`, { method: 'POST', body: JSON.stringify({ agreementId }) }),
 
   // Transactions
   getTransactions: () => fetchJson<Transaction[]>(`${API_BASE}/transactions`),

@@ -43,10 +43,22 @@ router.get('/', optionalAuthenticateUser, (req: AuthenticatedRequest, res: Respo
   });
 });
 
+// GET /api/v1/listings/my - Authenticated seller's owned listings
+router.get('/my', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const rawListings = store.getListings({ sellerId: user.id });
+  const listings = rawListings.map(l => serializeListing(l, user.id));
+  return res.json({
+    success: true,
+    count: listings.length,
+    data: listings
+  });
+});
+
 // GET /api/v1/listings/:id
 router.get('/:id', optionalAuthenticateUser, (req: AuthenticatedRequest, res: Response) => {
   const listing = store.getListing(req.params.id);
-  if (!listing) {
+  if (!listing || listing.status === 'archived') {
     return res.status(404).json({
       success: false,
       error: 'Listing not found'

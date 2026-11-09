@@ -359,6 +359,9 @@ export type NegotiationStatus =
   | 'initiated'
   | 'in_negotiation'
   | 'agreement_reached'
+  | 'escalated'
+  | 'accepted'
+  | 'declined'
   | 'completed';
 
 export interface Negotiation {

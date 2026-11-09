@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { store } from '../db/store.js';
 import { negotiationOrchestrator } from '../services/negotiation/orchestrator.js';
 import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
+import { broadcastEvent } from './events.js';
 
 const router = Router();
 
@@ -156,15 +157,42 @@ router.post('/multi-agent', async (req: AuthenticatedRequest, res: Response) => 
     return res.status(400).json({ success: false, error: parsed.error.format() });
   }
 
-  const sellerIds = parsed.data.sellerIds || parsed.data.sellerAgentIds;
-  if (!sellerIds || sellerIds.length === 0) {
-    return res.status(400).json({ success: false, error: 'sellerIds is required' });
-  }
-
   const user = req.user!;
   const request = store.getRequest(parsed.data.requestId);
   if (!request || (request.userId !== user.id && request.buyerUserId !== user.id)) {
     return res.status(404).json({ success: false, error: 'Commerce request not found' });
+  }
+
+  let sellerIds = parsed.data.sellerIds || parsed.data.sellerAgentIds;
+  if (!sellerIds || sellerIds.length === 0) {
+    // Autonomous Matchmaking: Resolve sellers from marketplace listings matching category/specs
+    const userAgents = store.getAgents({ ownerId: user.id });
+    const userAgentIds = userAgents.map(a => a.id);
+
+    const candidateListings = store.getListings({
+      category: request.category,
+      status: 'active'
+    });
+
+    const matchedSellerAgentIds = candidateListings
+      .map(l => l.sellerAgentId)
+      .filter((id): id is string => Boolean(id) && !userAgentIds.includes(id));
+
+    sellerIds = Array.from(new Set(matchedSellerAgentIds));
+
+    // Fallback: If no direct category match, search all verified third-party seller agents
+    if (sellerIds.length === 0) {
+      const allSellerAgents = store.getAgents({ type: 'seller' })
+        .filter(a => a.ownerId !== user.id && !userAgentIds.includes(a.id));
+      sellerIds = allSellerAgents.slice(0, 3).map(a => a.id);
+    }
+  }
+
+  if (!sellerIds || sellerIds.length === 0) {
+    return res.status(404).json({
+      success: false,
+      error: 'No available seller agents found in the marketplace. Create a seller listing or wait for suppliers to join.'
+    });
   }
 
   try {
@@ -176,6 +204,157 @@ router.post('/multi-agent', async (req: AuthenticatedRequest, res: Response) => 
   } catch (err: any) {
     return res.status(400).json({ success: false, error: err.message });
   }
+});
+
+// POST /api/v1/negotiations/:id/approve - Direct Human Approval from Deal Cockpit
+router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const neg = store.getNegotiation(req.params.id);
+  if (!neg || (neg.buyerUserId !== user.id && neg.sellerUserId !== user.id)) {
+    return res.status(404).json({ success: false, error: 'Negotiation not found' });
+  }
+
+  const now = new Date().toISOString();
+  const note = req.body?.note || 'Manually approved by human buyer.';
+
+  // 1. Update Decision status if present
+  const decision = store.getDecisionByEntity('negotiation', neg.id) || (neg.agreementId ? store.getDecisionByEntity('agreement', neg.agreementId) : undefined);
+  if (decision) {
+    store.updateDecisionStatus(decision.id, 'human_approved', 'user', note);
+  }
+
+  // 2. Update Agreement status
+  if (neg.agreementId) {
+    const agreement = store.getAgreement(neg.agreementId);
+    if (agreement) {
+      agreement.humanApprovalStatus = 'approved';
+      agreement.humanApprovedAt = now;
+      agreement.rejectionReason = null;
+      store.saveAgreement(agreement);
+    }
+  }
+
+  // 3. Update Negotiation status
+  neg.status = 'completed';
+  neg.updatedAt = now;
+  neg.messages.push({
+    id: `msg_app_${Date.now().toString(36)}`,
+    negotiationId: neg.id,
+    senderAgentId: neg.buyerAgentId,
+    recipientAgentId: neg.sellerAgentId,
+    senderRole: 'buyer',
+    round: neg.currentRound,
+    messageType: 'agreement_accepted',
+    content: `[Human Approval Confirmed] ${note}`,
+    timestamp: now
+  });
+  store.saveNegotiation(neg);
+
+  broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'approved' });
+  return res.json({ success: true, message: 'Deal approved successfully.', data: neg });
+});
+
+// POST /api/v1/negotiations/:id/decline - Direct Human Decline
+router.post('/:id/decline', async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const neg = store.getNegotiation(req.params.id);
+  if (!neg || (neg.buyerUserId !== user.id && neg.sellerUserId !== user.id)) {
+    return res.status(404).json({ success: false, error: 'Negotiation not found' });
+  }
+
+  const now = new Date().toISOString();
+  const reason = req.body?.reason || 'Manually declined by user.';
+
+  const decision = store.getDecisionByEntity('negotiation', neg.id) || (neg.agreementId ? store.getDecisionByEntity('agreement', neg.agreementId) : undefined);
+  if (decision) {
+    store.updateDecisionStatus(decision.id, 'human_declined', 'user', reason);
+  }
+
+  if (neg.agreementId) {
+    const agreement = store.getAgreement(neg.agreementId);
+    if (agreement) {
+      agreement.humanApprovalStatus = 'declined';
+      agreement.rejectionReason = reason;
+      store.saveAgreement(agreement);
+    }
+  }
+
+  neg.status = 'declined';
+  neg.updatedAt = now;
+  neg.messages.push({
+    id: `msg_dec_${Date.now().toString(36)}`,
+    negotiationId: neg.id,
+    senderAgentId: neg.buyerAgentId,
+    recipientAgentId: neg.sellerAgentId,
+    senderRole: 'buyer',
+    round: neg.currentRound,
+    messageType: 'proposal_rejected',
+    content: `[Human Declined] ${reason}`,
+    timestamp: now
+  });
+  store.saveNegotiation(neg);
+
+  broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'declined' });
+  return res.json({ success: true, message: 'Deal declined.', data: neg });
+});
+
+// POST /api/v1/negotiations/:id/appeal - Human Appeal for Auto-Declined Deals
+router.post('/:id/appeal', async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const neg = store.getNegotiation(req.params.id);
+  if (!neg || (neg.buyerUserId !== user.id && neg.sellerUserId !== user.id)) {
+    return res.status(404).json({ success: false, error: 'Negotiation not found' });
+  }
+
+  const { reason } = req.body;
+  if (!reason || typeof reason !== 'string' || reason.trim().length < 5) {
+    return res.status(400).json({
+      success: false,
+      error: 'A detailed appeal justification (at least 5 characters) is required.'
+    });
+  }
+
+  const now = new Date().toISOString();
+  const appealNote = reason.trim();
+
+  // 1. Reopen Decision
+  const decision = store.getDecisionByEntity('negotiation', neg.id) || (neg.agreementId ? store.getDecisionByEntity('agreement', neg.agreementId) : undefined);
+  if (decision) {
+    store.updateDecisionStatus(decision.id, 'needs_review', 'user', `[Appealed by user]: ${appealNote}`);
+  }
+
+  // 2. Reopen Agreement
+  if (neg.agreementId) {
+    const agreement = store.getAgreement(neg.agreementId);
+    if (agreement) {
+      agreement.humanApprovalStatus = 'pending_review';
+      agreement.rejectionReason = null;
+      store.saveAgreement(agreement);
+    }
+  }
+
+  // 3. Transition Negotiation to Escalated for Human Review
+  neg.status = 'escalated';
+  neg.updatedAt = now;
+  neg.messages.push({
+    id: `msg_app_${Date.now().toString(36)}`,
+    negotiationId: neg.id,
+    senderAgentId: neg.buyerAgentId,
+    recipientAgentId: neg.sellerAgentId,
+    senderRole: 'buyer',
+    round: neg.currentRound,
+    messageType: 'appeal',
+    content: `[Human Appeal Submitted] ${appealNote}`,
+    timestamp: now
+  });
+  store.saveNegotiation(neg);
+
+  broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'appealed' });
+  return res.json({
+    success: true,
+    message: 'Appeal submitted successfully. Deal reopened and escalated for human review.',
+    data: neg
+  });
 });
 
 // GET /api/v1/negotiations/evaluation/:requestId
