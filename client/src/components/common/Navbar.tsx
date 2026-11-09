@@ -2,13 +2,13 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { ArrowRight, Cpu } from 'lucide-react';
 import { Button } from './Button';
+import { ThemeToggle } from './ThemeToggle';
 
 export const Navbar: React.FC = () => {
   const location = useLocation();
 
   const navLinks = [
-    { label: 'Product', href: '/#product' },
-    { label: 'Network', href: '/app/network' },
+    { label: 'Marketplace', href: '/app/marketplace' },
     { label: 'How it works', href: '/how-it-works' },
     { label: 'Security', href: '/security' },
   ];
@@ -42,6 +42,7 @@ export const Navbar: React.FC = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           <Link to="/login">
             <Button variant="ghost" size="sm">
               Sign in

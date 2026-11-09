@@ -1,404 +1,547 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from 'sonner';
-import {
-  ArrowLeft,
-  Bot,
-  Scale,
-  ShieldCheck,
-  CheckCircle2,
-  Clock,
-  Play,
-  CreditCard,
+import { 
+  ArrowLeft, 
+  Send, 
+  CheckCircle2, 
   AlertTriangle,
   Award,
-  Layers
+  ShieldCheck,
+  ShieldAlert,
+  Clock,
+  Terminal,
+  FileCheck,
+  DollarSign
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { api } from '../../api/client';
+import { PriceLadder } from '../../components/negotiation/PriceLadder';
+import { ConversationalTurns } from '../../components/negotiation/ConversationalTurns';
+import { InspectDetailsDrawer } from '../../components/negotiation/InspectDetailsDrawer';
+import { PayPalCheckoutButton } from '../../components/negotiation/PayPalCheckoutButton';
+import { EvaluatorBreakdown } from '../../components/negotiation/EvaluatorBreakdown';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
-import { NegotiationTimeline } from '../../components/negotiation/NegotiationTimeline';
-import { ProposalCard } from '../../components/negotiation/ProposalCard';
-import { EvaluatorBreakdown } from '../../components/negotiation/EvaluatorBreakdown';
-import { HumanApprovalModal } from '../../components/negotiation/HumanApprovalModal';
-import { PayPalCheckoutButton } from '../../components/negotiation/PayPalCheckoutButton';
-import { Transaction } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 export const NegotiationDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  const [approvalModalOpen, setApprovalModalOpen] = useState(false);
+  const [inspectOpen, setInspectOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'dialogue' | 'evaluation'>('dialogue');
+  const [chatMessage, setChatMessage] = useState('');
+  const [counterPrice, setCounterPrice] = useState('');
+  const [showCounterInput, setShowCounterInput] = useState(false);
+  const [actionNote, setActionNote] = useState('');
 
-  // Fetch current Negotiation details
-  const { data: negData, isLoading, refetch } = useQuery({
+  // Fetch current negotiation details
+  const { 
+    data: negData, 
+    isLoading, 
+    refetch 
+  } = useQuery({
     queryKey: ['negotiationDetail', id],
     queryFn: () => api.getNegotiationDetail(id!),
-    enabled: Boolean(id),
-    refetchInterval: 5000
+    enabled: !!id,
+    refetchInterval: 4000
   });
 
-  // Fetch all sibling negotiations for the same request (e.g. Seller A, B, C)
+  // Fetch sibling negotiations if part of multi-bid request
   const { data: siblingNegs = [] } = useQuery({
     queryKey: ['siblingNegotiations', negData?.requestId],
-    queryFn: () => api.getNegotiations({ requestId: negData!.requestId }),
-    enabled: Boolean(negData?.requestId),
+    queryFn: () => api.getNegotiations({ requestId: negData?.requestId }),
+    enabled: !!negData?.requestId
   });
 
-  // Fetch Evaluation for this request
+  // Fetch evaluation if multiple candidates
   const { data: evaluation } = useQuery({
     queryKey: ['evaluationDetail', negData?.requestId],
-    queryFn: () => api.getEvaluation(negData!.requestId),
-    enabled: Boolean(negData?.requestId),
+    queryFn: () => api.getEvaluation(negData?.requestId!),
+    enabled: !!negData?.requestId && siblingNegs.length > 1
   });
 
-  // Advance step mutation
-  const stepMutation = useMutation({
-    mutationFn: () => api.stepNegotiation(id!),
-    onSuccess: (updated) => {
-      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
-      refetch();
-      if (updated.status === 'agreement_reached') {
-        toast.success(`Consensus reached at $${updated.currentProposal?.price}! Awaiting human authorization.`);
-      } else {
-        toast.info(`Turn advanced: Round ${updated.currentRound} counteroffer recorded.`);
-      }
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to step negotiation');
-    }
-  });
-
-  // Authorize agreement mutation
-  const authorizeMutation = useMutation({
-    mutationFn: (agreementId: string) => api.authorizeAgreement(agreementId),
+  // Direct message mutation (human clarification)
+  const directMessageMutation = useMutation({
+    mutationFn: (payload: { senderRole: 'buyer' | 'seller'; senderType: 'human'; content: string }) =>
+      api.sendMessage(id!, payload),
     onSuccess: () => {
-      setApprovalModalOpen(false);
+      setChatMessage('');
       queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
       refetch();
-      toast.success('Human authorization granted. Agreement unlocked for PayPal checkout!');
+      toast.success('Message sent to negotiation channel.');
     },
     onError: (err: any) => {
-      toast.error(err.message || 'Authorization failed');
+      toast.error(err.message || 'Failed to send message');
     }
+  });
+
+  // Review Queue actions (when item needs human decision)
+  const approveMutation = useMutation({
+    mutationFn: (queueItemId: string) => api.approveReviewItem(queueItemId, actionNote || undefined),
+    onSuccess: () => {
+      toast.success('Deal approved.');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Approval failed')
+  });
+
+  const declineMutation = useMutation({
+    mutationFn: (queueItemId: string) => api.declineReviewItem(queueItemId, actionNote || undefined),
+    onSuccess: () => {
+      toast.info('Deal declined.');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Decline failed')
+  });
+
+  const counterMutation = useMutation({
+    mutationFn: ({ queueItemId, price }: { queueItemId: string; price: number }) =>
+      api.counterReviewItem(queueItemId, price, actionNote || undefined),
+    onSuccess: () => {
+      toast.success('Counteroffer submitted to agent.');
+      setShowCounterInput(false);
+      setCounterPrice('');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Counter failed')
   });
 
   if (isLoading || !negData) {
     return (
-      <div className="py-20 text-center text-xs font-mono text-vyro-muted animate-pulse">
-        Retrieving autonomous negotiation telemetry...
+      <div className="py-24 text-center text-xs font-mono text-vyro-muted animate-pulse">
+        Retrieving deal telemetry and convergence state...
       </div>
     );
   }
 
-  const { buyerAgent, sellerAgent, request, agreement, currentProposal } = negData;
-  const isAgreed = negData.status === 'agreement_reached' || negData.status === 'completed';
-  const isHumanAuthorized = agreement?.humanApprovalStatus === 'approved';
-  const isCompleted = negData.status === 'completed';
-  const isRecommended = evaluation?.recommendedNegotiationId === negData.id;
+  const { buyerAgent, sellerAgent, request, agreement, currentProposal, decision, queueItem } = negData;
+  const isCompleted = negData.status === 'completed' || (negData.status as string) === 'COMPLETED';
+  const isAgreed = negData.status === 'agreement_reached' || isCompleted;
+
+  // Decision outcome check
+  const decisionStatus = decision?.status || (queueItem ? 'needs_review' : isAgreed ? 'auto_approved' : 'in_negotiation');
+  const needsHuman = decisionStatus === 'needs_review' || (queueItem && queueItem.status === 'pending');
+  const isApproved = decisionStatus === 'auto_approved' || decisionStatus === 'human_approved' || (agreement && agreement.humanApprovalStatus === 'approved');
+  const isDeclined = decisionStatus === 'auto_declined' || decisionStatus === 'human_declined';
+
+  const agreedOrLatestPrice = agreement?.finalPrice || currentProposal?.price;
+  const currency = agreement?.currency || currentProposal?.currency || 'USD';
+
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatMessage.trim()) return;
+    directMessageMutation.mutate({
+      senderRole: 'buyer',
+      senderType: 'human',
+      content: chatMessage.trim()
+    });
+  };
 
   return (
-    <div className="space-y-6">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-border gap-4">
+    <div className="space-y-6 max-w-6xl mx-auto pb-24">
+      {/* Breadcrumb & Top Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-vyro-border/60">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/app/negotiations')} className="text-xs h-8">
-            <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Channels
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => navigate('/app/deals')} 
+            className="text-xs h-8 px-2.5 rounded-lg text-vyro-muted hover:text-vyro-text"
+          >
+            <ArrowLeft className="w-3.5 h-3.5 mr-1" /> Deals
           </Button>
+
+          <div className="h-4 w-px bg-vyro-border/60" />
+
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base font-bold font-mono text-vyro-text">{negData.id}</h1>
+              <h1 className="text-sm font-semibold font-mono text-vyro-text">
+                {request?.title || 'Commercial Deal'}
+              </h1>
               <Badge
-                variant={
-                  isCompleted ? 'success' :
-                  isAgreed ? 'warning' : 'accent'
-                }
+                variant={isCompleted ? 'success' : isAgreed ? 'warning' : 'accent'}
                 size="sm"
                 dot
               >
-                {negData.status.replace('_', ' ').toUpperCase()}
+                {negData.status.replace(/_/g, ' ').toUpperCase()}
               </Badge>
-              {isRecommended && (
-                <Badge variant="success" size="sm">
-                  <Award className="w-3 h-3 mr-1" /> Evaluator Pick
-                </Badge>
-              )}
             </div>
             <p className="text-xs text-vyro-muted mt-0.5">
-              {buyerAgent.name} (Buyer) ↔ {sellerAgent.businessName} ({sellerAgent.category})
+              Seller: <span className="text-vyro-text font-medium">{sellerAgent?.businessName}</span>
+              {sellerAgent?.verificationStatus === 'verified' && (
+                <span className="ml-1.5 text-[10px] text-emerald-400 font-mono">✓ Verified</span>
+              )}
             </p>
           </div>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2">
-          {negData.status === 'in_negotiation' && (
-            <Button
-              variant="accent"
-              size="sm"
-              isLoading={stepMutation.isPending}
-              onClick={() => stepMutation.mutate()}
-              leftIcon={<Play className="w-3.5 h-3.5" />}
-            >
-              Advance Turn ({negData.currentRound}/{negData.maxRounds})
-            </Button>
+        {/* Top Right: Current Price & Inspect details */}
+        <div className="flex items-center gap-3">
+          {agreedOrLatestPrice !== undefined && (
+            <div className="text-right">
+              <span className="text-[10px] font-mono uppercase text-vyro-subtle block">
+                {isAgreed ? 'Agreed Price' : 'Current Offer'}
+              </span>
+              <span className="text-base font-bold font-mono text-vyro-text tabular-nums">
+                ${agreedOrLatestPrice} {currency}
+              </span>
+            </div>
           )}
 
-          {isAgreed && agreement && !isHumanAuthorized && (
-            <Button
-              variant="accent"
-              size="sm"
-              onClick={() => setApprovalModalOpen(true)}
-              leftIcon={<ShieldCheck className="w-3.5 h-3.5" />}
-            >
-              Authorize Agreement (${agreement.finalPrice})
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setInspectOpen(true)}
+            leftIcon={<Terminal className="w-3.5 h-3.5 text-vyro-accent" />}
+            className="text-xs h-8 px-3 rounded-lg font-mono"
+          >
+            Inspect details
+          </Button>
         </div>
       </div>
 
-      {/* Human Principals Covenant Banner */}
-      <div className="p-3.5 rounded-[8px] bg-vyro-surface border border-vyro-border flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-6">
-          {/* Buyer Principal */}
-          <div className="flex items-center gap-2.5">
-            <img
-              src={buyerAgent.operatorAvatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80'}
-              alt={buyerAgent.operatorName || 'Alex Mercer'}
-              className="w-8 h-8 rounded-full object-cover ring-1 ring-vyro-accent/60"
-            />
-            <div>
-              <span className="text-xs font-semibold text-vyro-text block">{buyerAgent.operatorName || 'Alex Mercer'}</span>
-              <span className="text-[10px] text-vyro-muted font-mono">{buyerAgent.operatorLocation || 'San Francisco, CA'} • Buyer Principal</span>
-            </div>
-          </div>
-
-          <span className="text-vyro-subtle font-mono text-xs hidden sm:inline">⟷</span>
-
-          {/* Seller Principal */}
-          <div className="flex items-center gap-2.5">
-            <img
-              src={sellerAgent.operatorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80'}
-              alt={sellerAgent.operatorName || 'Elena Vance'}
-              className="w-8 h-8 rounded-full object-cover ring-1 ring-vyro-border"
-            />
-            <div>
-              <span className="text-xs font-semibold text-vyro-text block">{sellerAgent.operatorName || sellerAgent.businessName}</span>
-              <span className="text-[10px] text-vyro-muted font-mono">{sellerAgent.operatorLocation || 'Verified'} • {sellerAgent.operatorRole || 'Seller Lead'}</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px] font-mono text-vyro-muted">
-          <ShieldCheck className="w-3.5 h-3.5 text-vyro-success" />
-          <span>Autonomous protocol bound by Human Covenant</span>
-        </div>
-      </div>
-
-      {/* Competing Seller Candidate Switcher Tabs */}
+      {/* Parallel Bids Tabs (Only when 2+ bids exist) */}
       {siblingNegs.length > 1 && (
-        <div className="p-2.5 rounded-[6px] bg-vyro-surface border border-vyro-border flex items-center justify-between overflow-x-auto gap-2">
+        <div className="flex items-center justify-between gap-3 overflow-x-auto pb-1">
           <div className="flex items-center gap-2 text-xs font-mono">
-            <span className="text-vyro-subtle text-[11px] uppercase shrink-0">Competing Sellers:</span>
-            {siblingNegs.map((sNeg, idx) => {
+            <span className="text-vyro-subtle text-[11px] uppercase shrink-0">Bids for Request:</span>
+            {siblingNegs.map((sNeg: any, idx: number) => {
               const isCurrent = sNeg.id === negData.id;
               const isBest = evaluation?.recommendedNegotiationId === sNeg.id;
+              const bidPrice = sNeg.currentProposal?.price;
 
               return (
                 <button
                   key={sNeg.id}
                   onClick={() => navigate(`/app/negotiations/${sNeg.id}`)}
-                  className={`px-2.5 py-1 rounded text-xs font-mono flex items-center gap-1.5 transition-colors shrink-0 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-mono flex items-center gap-1.5 transition-all shrink-0 ${
                     isCurrent
-                      ? 'bg-vyro-hover border border-vyro-accent text-vyro-text font-bold'
-                      : 'bg-vyro-card/80 border border-vyro-border text-vyro-muted hover:text-vyro-text'
+                      ? 'bg-vyro-surface border border-vyro-accent text-vyro-text font-semibold shadow-xs'
+                      : 'text-vyro-muted hover:text-vyro-text bg-vyro-card/60 border border-vyro-border/40'
                   }`}
                 >
-                  <span>Seller {String.fromCharCode(65 + idx)}:</span>
-                  <span>${sNeg.currentProposal?.price || 150}</span>
-                  {isBest && <span className="text-[10px] text-vyro-success">★ Best</span>}
+                  <span>Seller {idx + 1}</span>
+                  {bidPrice !== undefined && (
+                    <span className="text-vyro-accent font-semibold">${bidPrice}</span>
+                  )}
+                  {isBest && <span className="text-[10px] text-emerald-400">★ Best</span>}
                 </button>
               );
             })}
           </div>
 
-          <div className="flex items-center gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1.5 text-xs font-mono shrink-0">
             <button
               onClick={() => setActiveTab('dialogue')}
-              className={`px-2.5 py-1 rounded text-xs font-mono ${
-                activeTab === 'dialogue' ? 'bg-vyro-hover text-vyro-text border border-vyro-border font-bold' : 'text-vyro-muted'
+              className={`px-3 py-1 rounded-lg transition-all ${
+                activeTab === 'dialogue' ? 'bg-vyro-surface text-vyro-text font-semibold' : 'text-vyro-muted'
               }`}
             >
-              Dialogue View
+              Dialogue
             </button>
             <button
               onClick={() => setActiveTab('evaluation')}
-              className={`px-2.5 py-1 rounded text-xs font-mono ${
-                activeTab === 'evaluation' ? 'bg-vyro-hover text-vyro-text border border-vyro-border font-bold' : 'text-vyro-muted'
+              className={`px-3 py-1 rounded-lg transition-all ${
+                activeTab === 'evaluation' ? 'bg-vyro-surface text-vyro-text font-semibold' : 'text-vyro-muted'
               }`}
             >
-              Evaluator Model
+              Compare Offers
             </button>
           </div>
         </div>
       )}
 
-      {/* Main Workspace Layout */}
+      {/* Horizontal Converging Price Ladder */}
+      <PriceLadder
+        proposals={negData.proposals || []}
+        messages={negData.messages || []}
+        currentRound={negData.currentRound}
+        maxRounds={negData.maxRounds}
+        agreedPrice={agreement?.finalPrice}
+        currency={currency}
+      />
+
+      {/* Main Grid: Stream & Details */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column: Timeline or Evaluator Model */}
-        <div className="lg:col-span-2 space-y-6">
+        {/* Left Column (2 Cols): Dialogue or Evaluator Comparison */}
+        <div className="lg:col-span-2 space-y-4">
           {activeTab === 'dialogue' ? (
-            <div className="bg-vyro-surface border border-vyro-border rounded-[8px] p-5">
-              <div className="flex items-center justify-between pb-3 mb-4 border-b border-vyro-border">
-                <div className="flex items-center gap-2">
-                  <Scale className="w-4 h-4 text-vyro-accent" />
-                  <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-vyro-text">
-                    Autonomous Multi-Turn Stream
-                  </h3>
-                </div>
-                <span className="text-[11px] font-mono text-vyro-muted">
-                  Round {negData.currentRound} of {negData.maxRounds} • {negData.messages.length} Events
+            <div className="bg-vyro-surface border border-vyro-border rounded-xl p-5 sm:p-6 space-y-6">
+              <div className="flex items-center justify-between pb-3 border-b border-vyro-border/50">
+                <span className="text-xs font-mono font-semibold uppercase tracking-wider text-vyro-text">
+                  Autonomous Negotiation Dialogue
+                </span>
+                <span className="text-xs font-mono text-vyro-muted">
+                  Round {negData.currentRound} of {negData.maxRounds} · {negData.messages?.length || 0} Events
                 </span>
               </div>
 
-              <NegotiationTimeline
-                messages={negData.messages}
+              <ConversationalTurns
+                messages={negData.messages || []}
                 buyerAgent={buyerAgent}
                 sellerAgent={sellerAgent}
               />
+
+              {/* Direct Human Input Composer */}
+              <div className="pt-4 border-t border-vyro-border/50">
+                <form onSubmit={handleSendMessage} className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono text-vyro-muted">
+                    <span>Direct Clarification to Counterparty:</span>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={chatMessage}
+                      onChange={(e) => setChatMessage(e.target.value)}
+                      placeholder="Add an instruction or ask seller for scope clarification..."
+                      className="flex-1 bg-vyro-card border border-vyro-border rounded-lg px-3.5 py-2 text-xs text-vyro-text placeholder-vyro-subtle focus:outline-none focus:border-vyro-accent font-sans transition-colors"
+                    />
+                    <Button
+                      type="submit"
+                      variant="primary"
+                      size="sm"
+                      isLoading={directMessageMutation.isPending}
+                      rightIcon={<Send className="w-3.5 h-3.5" />}
+                      className="px-4 text-xs font-medium"
+                    >
+                      Send
+                    </Button>
+                  </div>
+                </form>
+              </div>
             </div>
           ) : (
             evaluation && <EvaluatorBreakdown evaluation={evaluation} />
           )}
-
-          {/* If Dialogue view is active and evaluation is present, show compact Evaluator banner */}
-          {activeTab === 'dialogue' && evaluation && (
-            <div className="p-4 rounded-[6px] bg-vyro-card border border-vyro-border flex items-start justify-between gap-3 text-xs">
-              <div>
-                <div className="flex items-center gap-2 font-semibold text-vyro-text">
-                  <Award className="w-4 h-4 text-vyro-accent" />
-                  <span>Evaluator Analysis Verdict</span>
-                </div>
-                <p className="text-vyro-muted mt-1 leading-relaxed">{evaluation.summaryVerdict}</p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setActiveTab('evaluation')}
-                className="shrink-0 text-xs h-7"
-              >
-                Inspect All Scores
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Right Column: Active Agreement Terms & PayPal Checkout */}
-        <div className="space-y-6">
-          {/* Active Proposal Card */}
-          {currentProposal && (
-            <div>
-              <span className="text-xs font-mono uppercase text-vyro-muted block mb-2 tracking-wider">
-                Current Commercial Scope
+        {/* Right Column: Commercial Terms Summary & Decision Card */}
+        <div className="space-y-4">
+          {/* Agreement / Current Proposal Summary */}
+          <div className="bg-vyro-surface border border-vyro-border rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-vyro-border/50">
+              <span className="text-xs font-mono uppercase text-vyro-subtle font-semibold tracking-wider">
+                Multi-Issue Agreement Summary
               </span>
-              <ProposalCard
-                proposal={currentProposal}
-                isAgreed={isAgreed}
-              />
-            </div>
-          )}
-
-          {/* Settlement / Human Approval Panel */}
-          {agreement && (
-            <div className="space-y-3">
-              <span className="text-xs font-mono uppercase text-vyro-muted block tracking-wider">
-                Settlement & Captures
-              </span>
-
-              {!isHumanAuthorized ? (
-                <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-warning/40 space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-vyro-warning">
-                    <ShieldCheck className="w-4 h-4" />
-                    <span>Human Approval Required</span>
-                  </div>
-                  <p className="text-xs text-vyro-muted leading-relaxed">
-                    Autonomous consensus reached at ${agreement.finalPrice} {agreement.currency}. Review the deliverables and authorize agreement to unlock PayPal payment.
-                  </p>
-                  <Button
-                    variant="accent"
-                    size="md"
-                    className="w-full justify-center"
-                    onClick={() => setApprovalModalOpen(true)}
-                  >
-                    Authorize Commercial Terms
-                  </Button>
-                </div>
-              ) : !isCompleted ? (
-                <div>
-                  <div className="p-3 mb-3 rounded bg-vyro-success-bg border border-vyro-success/40 text-xs font-mono text-vyro-success flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Human Signature Verified. Cleared for PayPal.</span>
-                  </div>
-
-                  <PayPalCheckoutButton
-                    agreement={agreement}
-                    onPaymentSuccess={(tx) => {
-                      toast.success(`PayPal Sandbox payment captured! Transaction ID: ${tx.id}`);
-                      refetch();
-                    }}
-                    onPaymentError={(err) => {
-                      toast.error(`PayPal payment capture error: ${err}`);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="p-4 rounded-[8px] bg-vyro-success-bg/20 border border-vyro-success space-y-3 text-center">
-                  <CheckCircle2 className="w-7 h-7 text-vyro-success mx-auto" />
-                  <div>
-                    <h4 className="text-sm font-bold text-vyro-text">Payment Settled</h4>
-                    <p className="text-xs text-vyro-muted mt-0.5">
-                      PayPal Sandbox transaction completed. Funds verified server-side.
-                    </p>
-                  </div>
-                  <Link to="/app/transactions">
-                    <Button variant="primary" size="sm" className="w-full justify-center mt-1 text-xs">
-                      View Settlement Receipt
-                    </Button>
-                  </Link>
-                </div>
+              {isAgreed && (
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 font-semibold">
+                  Consensus Package
+                </span>
               )}
             </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <span className="text-vyro-muted block text-[11px] mb-0.5">Agreed Scope:</span>
+                <p className="text-vyro-text font-medium">{request?.title || 'Custom Commercial Scope'}</p>
+              </div>
+
+              {/* Scope Deliverables */}
+              {(agreement?.finalDeliverables || request?.deliverables) && (
+                <div>
+                  <span className="text-vyro-muted block text-[11px] mb-1">Deliverables Package:</span>
+                  <ul className="space-y-1">
+                    {(agreement?.finalDeliverables || request?.deliverables || []).map((item: string, i: number) => (
+                      <li key={i} className="text-vyro-text flex items-start gap-1.5 text-[11px]">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Package Specs */}
+              <div className="pt-2 border-t border-vyro-border/40 grid grid-cols-2 gap-3 text-xs font-mono">
+                <div>
+                  <span className="text-vyro-muted block text-[10px] uppercase">Turnaround</span>
+                  <span className="text-vyro-text font-semibold">
+                    {agreement?.deliveryDays || currentProposal?.deliveryDays || request?.deadlineDays || 5} Days
+                  </span>
+                </div>
+                <div>
+                  <span className="text-vyro-muted block text-[10px] uppercase">Payment Terms</span>
+                  <span className="text-vyro-text font-semibold">
+                    {agreement?.paymentTerms === 'upfront' ? 'Upfront' : 'Milestone Escrow'}
+                  </span>
+                </div>
+              </div>
+
+              {/* What Each Side Gave and Got */}
+              <div className="p-3 rounded-lg bg-vyro-bg border border-vyro-border/80 space-y-2 font-mono text-[11px]">
+                <span className="text-vyro-accent font-semibold block text-[10px] uppercase tracking-wider">
+                  What Each Side Gave & Got
+                </span>
+
+                <div className="space-y-1 text-vyro-muted">
+                  <div className="text-vyro-text font-medium">Buyer:</div>
+                  <div className="pl-2 border-l border-blue-500/40 text-[10px] space-y-0.5">
+                    <div>• Gave: Flexible turnaround ({agreement?.deliveryDays || currentProposal?.deliveryDays || 5}d timeline)</div>
+                    <div>• Got: Completed deliverables within authorized budget</div>
+                  </div>
+                </div>
+
+                <div className="space-y-1 text-vyro-muted pt-1">
+                  <div className="text-vyro-text font-medium">Seller:</div>
+                  <div className="pl-2 border-l border-emerald-500/40 text-[10px] space-y-0.5">
+                    <div>• Gave: Price concession to ${agreement?.finalPrice || currentProposal?.price || 150}</div>
+                    <div>• Got: Production buffer with verified settlement</div>
+                  </div>
+                </div>
+
+                {agreement?.tradesSummary && agreement.tradesSummary.length > 0 && (
+                  <div className="pt-1.5 border-t border-vyro-border/50">
+                    <span className="text-[10px] text-vyro-subtle block mb-1">Key Concessions:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {agreement.tradesSummary.map((ts, i) => (
+                        <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-vyro-card border border-vyro-border text-vyro-muted">
+                          {ts}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Sandbox Payment Card (when approved) */}
+          {agreement && isApproved && !isCompleted && (
+            <PayPalCheckoutButton
+              agreement={agreement}
+              onPaymentSuccess={(tx) => {
+                toast.success(`Payment verified and captured! Tx: ${tx.id}`);
+                refetch();
+              }}
+              onPaymentError={(err) => {
+                toast.error(`Payment failed: ${err}`);
+              }}
+            />
           )}
 
-          {/* Request Reference */}
-          {request && (
-            <div className="p-3.5 rounded-[6px] bg-vyro-card border border-vyro-border space-y-2 text-xs font-mono">
-              <span className="text-[10px] uppercase text-vyro-subtle block">
-                Source Request Specs
-              </span>
-              <div className="font-sans font-semibold text-vyro-text text-xs">{request.title}</div>
-              <div className="flex items-center justify-between text-vyro-muted pt-2 border-t border-vyro-border/50 text-[11px]">
-                <span>Budget: ${request.maxBudget}</span>
-                <span>Deadline: {request.deadlineDays}d</span>
+          {/* Completed Settlement Card */}
+          {isCompleted && (
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5 text-center space-y-3">
+              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
+              <div>
+                <h4 className="text-sm font-semibold text-vyro-text">Contract Settled</h4>
+                <p className="text-xs text-vyro-muted mt-0.5">
+                  Sandbox funds captured and credited to {sellerAgent?.businessName}.
+                </p>
               </div>
+              <Link to="/app/transactions">
+                <Button variant="primary" size="sm" className="w-full justify-center text-xs">
+                  View Receipt
+                </Button>
+              </Link>
             </div>
           )}
         </div>
       </div>
 
-      {/* Human Approval Modal */}
-      <HumanApprovalModal
-        isOpen={approvalModalOpen}
-        onClose={() => setApprovalModalOpen(false)}
-        agreement={agreement || null}
-        sellerAgent={sellerAgent}
-        isAuthorizing={authorizeMutation.isPending}
-        onConfirmAuthorization={() => {
-          if (agreement) authorizeMutation.mutate(agreement.id);
-        }}
+      {/* Persistent Bottom Decision Action Bar (When Needs Human Decision) */}
+      {needsHuman && queueItem && (
+        <div className="fixed bottom-16 sm:bottom-0 inset-x-0 z-40 bg-vyro-surface/95 border-t border-vyro-border backdrop-blur-md px-4 py-3 sm:px-6 shadow-xl">
+          <div className="max-w-6xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="text-xs font-semibold text-vyro-text">
+                  Action Required: {queueItem.reasons?.[0] || 'AI Paused for Human Decision'}
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  {Math.round((queueItem.confidence || 0) * 100)}% Confidence
+                </span>
+              </div>
+              <p className="text-xs text-vyro-muted">
+                AI Recommendation: <span className="text-vyro-text font-medium">{queueItem.aiRecommendation}</span>
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              {!showCounterInput ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCounterInput(true)}
+                    className="text-xs"
+                  >
+                    Counter
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    isLoading={declineMutation.isPending}
+                    onClick={() => declineMutation.mutate(queueItem.id)}
+                    className="text-xs text-vyro-error hover:bg-vyro-error/10"
+                  >
+                    Decline
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    isLoading={approveMutation.isPending}
+                    onClick={() => approveMutation.mutate(queueItem.id)}
+                    className="text-xs px-4"
+                  >
+                    Approve (${queueItem.proposedPrice})
+                  </Button>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <div className="relative">
+                    <DollarSign className="w-3.5 h-3.5 text-vyro-muted absolute left-2 top-2.5" />
+                    <input
+                      type="number"
+                      placeholder="Amount"
+                      value={counterPrice}
+                      onChange={(e) => setCounterPrice(e.target.value)}
+                      className="w-24 pl-6 pr-2 py-1.5 text-xs bg-vyro-card border border-vyro-border rounded-lg text-vyro-text font-mono focus:outline-none focus:border-vyro-accent"
+                    />
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    isLoading={counterMutation.isPending}
+                    disabled={!counterPrice}
+                    onClick={() => {
+                      const num = parseFloat(counterPrice);
+                      if (num > 0) counterMutation.mutate({ queueItemId: queueItem.id, price: num });
+                    }}
+                    className="text-xs"
+                  >
+                    Submit Counter
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowCounterInput(false)}
+                    className="text-xs text-vyro-muted"
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inspect Details Drawer */}
+      <InspectDetailsDrawer
+        isOpen={inspectOpen}
+        onClose={() => setInspectOpen(false)}
+        negotiation={negData}
+        decision={decision}
       />
     </div>
   );

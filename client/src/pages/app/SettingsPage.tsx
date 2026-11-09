@@ -12,7 +12,11 @@ import {
   Cpu,
   Zap,
   Play,
-  Clock
+  Clock,
+  Lock,
+  ChevronDown,
+  ChevronRight,
+  CreditCard
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
@@ -20,8 +24,7 @@ import { Badge } from '../../components/common/Badge';
 
 export const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
-  const [apiKeyInput, setApiKeyInput] = useState('');
-  const [isConfiguring, setIsConfiguring] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const { data: aiStatus, refetch: refetchAI } = useQuery({
     queryKey: ['aiStatusSettings'],
@@ -29,9 +32,10 @@ export const SettingsPage: React.FC = () => {
     refetchInterval: 6000
   });
 
-  const { data: statusData, refetch: refetchSystem } = useQuery({
-    queryKey: ['systemStatus'],
-    queryFn: api.getSystemStatus,
+  const { data: paymentsHealth, refetch: refetchPaymentsHealth, isFetching: isCheckingPayments } = useQuery({
+    queryKey: ['paymentsHealth'],
+    queryFn: api.getPaymentsHealth,
+    staleTime: 30000
   });
 
   // Test current AI key
@@ -41,48 +45,15 @@ export const SettingsPage: React.FC = () => {
       refetchAI();
       queryClient.invalidateQueries({ queryKey: ['aiStatus'] });
       if (data.isLive) {
-        toast.success(`Gemini API connection verified (${data.latencyMs}ms)!`);
+        toast.success(`Gemini API connection verified (${data.latencyMs}ms)! Model: ${data.model}`);
+      } else if (data.status === 'rate_limited') {
+        toast.warning('Gemini Free Tier daily quota limit reached for this key. Autonomous fallback engine is active.');
       } else {
         toast.error(`Gemini API test failed: ${data.errorMessage || data.status}`);
       }
     },
     onError: (err: any) => {
       toast.error(err.message || 'API test request failed');
-    }
-  });
-
-  // Save & test new key
-  const handleSaveKey = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!apiKeyInput.trim()) {
-      toast.error('Please enter a valid Gemini API key.');
-      return;
-    }
-
-    setIsConfiguring(true);
-    try {
-      const res = await api.configureAI(apiKeyInput.trim());
-      refetchAI();
-      queryClient.invalidateQueries({ queryKey: ['aiStatus'] });
-      if (res.isLive) {
-        toast.success(`Key configured & verified! Latency: ${res.latencyMs}ms`);
-        setApiKeyInput('');
-      } else {
-        toast.error(`Key saved but API verification failed: ${res.errorMessage || res.status}`);
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to configure API key');
-    } finally {
-      setIsConfiguring(false);
-    }
-  };
-
-  const resetMutation = useMutation({
-    mutationFn: api.resetDemoData,
-    onSuccess: () => {
-      toast.success('Store reset to initial benchmark state.');
-      refetchSystem();
-      queryClient.invalidateQueries();
     }
   });
 
@@ -153,71 +124,92 @@ export const SettingsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Runtime Key Configuration Form */}
-        <form onSubmit={handleSaveKey} className="space-y-3 pt-2">
-          <label className="text-xs font-mono uppercase text-vyro-muted block">
-            Update or Test Gemini API Key
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="password"
-              placeholder="AIzaSy... (Paste Google AI Studio Key)"
-              value={apiKeyInput}
-              onChange={(e) => setApiKeyInput(e.target.value)}
-              className="flex-1 bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs font-mono text-vyro-text focus:outline-none focus:border-vyro-accent"
-            />
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isConfiguring}
-            >
-              Save & Test Key
-            </Button>
+        {/* Server-Side Only Notice */}
+        <div className="pt-2 p-3.5 rounded-lg bg-vyro-card border border-vyro-border space-y-2 text-xs font-mono">
+          <div className="flex items-center gap-2 text-vyro-text font-semibold">
+            <Lock className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Server-Side Only Environment Security</span>
           </div>
-          <p className="text-[10px] text-vyro-subtle font-mono">
-            Key is sent strictly to the backend and never exposed in client code.
+          <p className="text-[11px] text-vyro-muted leading-relaxed font-sans">
+            API keys are strictly managed on the backend and never accepted through the browser. To update or configure credentials, edit <code className="text-vyro-accent bg-vyro-surface px-1.5 py-0.5 rounded font-mono">.env</code> in your server directory.
           </p>
-        </form>
+        </div>
       </div>
 
-      {/* PayPal Sandbox Gateway */}
-      <div className="p-5 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-        <div className="flex items-center justify-between">
+      {/* Advanced Settings & Diagnostics */}
+      <div className="p-5 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-4">
+        <button
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="w-full flex items-center justify-between text-left focus:outline-none"
+        >
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-[6px] bg-vyro-card border border-vyro-border flex items-center justify-center text-[#0070BA]">
-              <ShieldCheck className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-[6px] bg-vyro-card border border-vyro-border flex items-center justify-center text-vyro-accent">
+              <Settings className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-vyro-text">PayPal Sandbox Orders API</h3>
-              <p className="text-[11px] text-vyro-muted font-mono">Gateway: https://api-m.sandbox.paypal.com</p>
+              <h3 className="text-sm font-semibold text-vyro-text">Advanced Settings</h3>
+              <p className="text-[11px] text-vyro-muted font-mono">Developer gateways, connection probes, and sandbox status</p>
             </div>
           </div>
+          <div className="flex items-center gap-2 text-vyro-muted text-xs">
+            <span>{showAdvanced ? 'Hide' : 'Show'}</span>
+            {showAdvanced ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </div>
+        </button>
 
-          <Badge variant="success" size="sm">SANDBOX READY</Badge>
-        </div>
-        <p className="text-xs text-vyro-muted leading-relaxed">
-          The backend enforces server-side amount calculation directly from the accepted commercial agreement and uses cryptographic idempotency keys to prevent duplicate captures.
-        </p>
-      </div>
+        {showAdvanced && (
+          <div className="pt-4 border-t border-vyro-border space-y-4">
+            {/* PayPal Sandbox Gateway Diagnostic */}
+            <div className="p-4 rounded-[6px] bg-vyro-card border border-vyro-border space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <CreditCard className="w-4 h-4 text-[#0070BA]" />
+                  <span className="text-xs font-mono font-semibold text-vyro-text">Payments Sandbox Connectivity</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {paymentsHealth?.connected ? (
+                    <Badge variant="success" size="sm" dot>Payments: sandbox connected</Badge>
+                  ) : (
+                    <Badge variant="error" size="sm" dot>Payments: sandbox not connected</Badge>
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    isLoading={isCheckingPayments}
+                    onClick={async () => {
+                      const res = await refetchPaymentsHealth();
+                      if (res.data?.connected) {
+                        toast.success(`PayPal Sandbox OAuth verified! App: ${res.data.appId || 'Connected'}`);
+                      } else {
+                        toast.error(`PayPal Sandbox probe failed: ${res.data?.reason || 'Unknown error'}`);
+                      }
+                    }}
+                    leftIcon={<RefreshCw className={`w-3 h-3 ${isCheckingPayments ? 'animate-spin' : ''}`} />}
+                  >
+                    Check
+                  </Button>
+                </div>
+              </div>
 
-      {/* Store Reset */}
-      <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border flex items-center justify-between gap-4">
-        <div>
-          <h4 className="text-xs font-semibold text-vyro-text">Reset Benchmark Seed Data</h4>
-          <p className="text-[11px] text-vyro-muted mt-0.5">
-            Restores the 3 benchmark seller agents (Pixel Studio $180/145/5d, LaunchCraft $130/120/8d, Northstar $160/150/4d).
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          isLoading={resetMutation.isPending}
-          onClick={() => resetMutation.mutate()}
-          leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-        >
-          Reset Store
-        </Button>
+              <div className="text-[11px] font-mono text-vyro-muted space-y-1">
+                <div>Environment: <span className="text-vyro-text">{paymentsHealth?.env || 'sandbox'} (https://api-m.sandbox.paypal.com)</span></div>
+                {paymentsHealth?.appId && (
+                  <div>Application ID: <span className="text-vyro-accent">{paymentsHealth.appId}</span></div>
+                )}
+                {paymentsHealth?.debugId && (
+                  <div>Last PayPal-Debug-Id: <span className="text-vyro-subtle">{paymentsHealth.debugId}</span></div>
+                )}
+                {paymentsHealth?.reason && !paymentsHealth.connected && (
+                  <div className="text-vyro-error">Diagnostic Note: {paymentsHealth.reason}</div>
+                )}
+              </div>
+
+              <p className="text-[10px] text-vyro-subtle leading-relaxed">
+                Order creation requires intent CAPTURE, valid buyer session, authorized decision status, and respects user daily budget caps. All payments route to the platform's sandbox business account with held seller shares.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

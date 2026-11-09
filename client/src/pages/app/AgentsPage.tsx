@@ -1,11 +1,27 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bot, Plus, Pause, Play, Trash2, ArrowRight, ShieldCheck, Scale, DollarSign } from 'lucide-react';
+import {
+  Bot,
+  Plus,
+  Pause,
+  Play,
+  Trash2,
+  ArrowRight,
+  ShieldCheck,
+  Scale,
+  DollarSign,
+  Clock,
+  Sparkles,
+  Sliders,
+  CheckCircle2,
+  Settings2
+} from 'lucide-react';
 import { api } from '../../api/client';
 import { Agent } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { toast } from 'sonner';
 
 export const AgentsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -20,26 +36,27 @@ export const AgentsPage: React.FC = () => {
   const toggleStatusMutation = useMutation({
     mutationFn: ({ id, status }: { id: string; status: 'active' | 'paused' }) =>
       api.updateAgent(id, { status }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['agentsList'] });
+      toast.success(`Agent status updated to ${variables.status}`);
     }
   });
 
   const filtered = agents.filter(a => activeTab === 'all' || a.type === activeTab);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-border gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-              Agent Studio
+          <div className="flex items-center gap-2">
+            <h1 className="text-xl font-bold text-vyro-text tracking-tight">
+              Agent Fleet Studio
             </h1>
-            <Badge variant="accent" size="sm">{agents.length} Deployed</Badge>
+            <Badge variant="accent" size="sm">{agents.length} Deployed Agents</Badge>
           </div>
-          <p className="text-xs text-vyro-muted">
-            Configure your autonomous buyer procurement policies and seller business representations.
+          <p className="text-xs text-vyro-muted mt-1">
+            Configure your autonomous buyer procurement ambassadors and inbound seller representations.
           </p>
         </div>
 
@@ -47,31 +64,37 @@ export const AgentsPage: React.FC = () => {
           variant="primary"
           size="sm"
           onClick={() => navigate('/app/agents/new')}
-          leftIcon={<Plus className="w-4 h-4" />}
+          leftIcon={<Plus className="w-3.5 h-3.5" />}
         >
-          Create New Agent
+          Deploy New Agent
         </Button>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-vyro-border pb-2 text-xs font-mono">
-        {(['all', 'buyer', 'seller'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 rounded uppercase tracking-wider transition-colors ${
-              activeTab === tab
-                ? 'bg-vyro-surface border border-vyro-accent text-vyro-text font-bold'
-                : 'text-vyro-muted hover:text-vyro-text'
-            }`}
-          >
-            {tab === 'all' ? 'All Agents' : `${tab} Agents`}
-          </button>
-        ))}
+      {/* Tabs Filter Bar */}
+      <div className="flex items-center justify-between gap-4 p-1.5 rounded-[8px] bg-vyro-surface border border-vyro-border shadow-xs">
+        <div className="flex items-center gap-1 text-xs">
+          {(['all', 'buyer', 'seller'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-3 py-1.5 rounded-[5px] font-medium transition-colors ${
+                activeTab === tab
+                  ? 'bg-vyro-card text-vyro-text shadow-xs font-semibold'
+                  : 'text-vyro-muted hover:text-vyro-text'
+              }`}
+            >
+              {tab === 'all' ? 'All Fleet' : `${tab.charAt(0).toUpperCase() + tab.slice(1)} Agents`}
+            </button>
+          ))}
+        </div>
+
+        <span className="text-[10px] font-mono text-vyro-subtle hidden sm:inline-block pr-2">
+          Encrypted Policy Enforcement Active
+        </span>
       </div>
 
-      {/* Agent Table / Cards */}
-      <div className="space-y-3">
+      {/* Agent Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filtered.map((agent) => {
           const isSeller = agent.type === 'seller';
           const startingPrice = isSeller 
@@ -82,55 +105,92 @@ export const AgentsPage: React.FC = () => {
           return (
             <div
               key={agent.id}
-              className="p-5 rounded-[8px] bg-vyro-surface border border-vyro-border hover:border-vyro-border-light transition-all flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+              className="p-5 rounded-[10px] bg-vyro-surface border border-vyro-border hover:border-vyro-border-light transition-all flex flex-col justify-between shadow-xs group"
             >
-              <div className="flex items-start gap-3.5 min-w-0">
-                <div className={`w-10 h-10 rounded-[6px] border flex items-center justify-center shrink-0 ${
-                  isSeller ? 'bg-vyro-card border-vyro-border text-vyro-text' : 'bg-vyro-hover border-vyro-border text-vyro-accent'
-                }`}>
-                  <Bot className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold text-vyro-text truncate">{agent.name}</h3>
-                    <Badge variant={agent.type === 'buyer' ? 'accent' : 'outline'} size="sm">
-                      {agent.type.toUpperCase()}
-                    </Badge>
-                    {agent.isDemo && (
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-vyro-card text-vyro-subtle border border-vyro-border/50">
-                        Demo
+              <div>
+                {/* Agent Header */}
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <img
+                      src={agent.operatorAvatar || 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80'}
+                      alt={agent.name}
+                      className="w-10 h-10 rounded-full object-cover ring-1 ring-vyro-border shrink-0 mt-0.5"
+                    />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <h3 className="text-sm font-semibold text-vyro-text truncate group-hover:text-blue-400 transition-colors">
+                          {agent.name}
+                        </h3>
+                        <Badge variant={isSeller ? 'success' : 'accent'} size="sm">
+                          {agent.type.toUpperCase()}
+                        </Badge>
+                      </div>
+                      <span className="text-xs text-vyro-muted truncate block mt-0.5 font-mono">
+                        {agent.businessName} • {agent.category}
                       </span>
-                    )}
+                    </div>
                   </div>
-                  <p className="text-xs text-vyro-muted mt-0.5 line-clamp-1">{agent.description}</p>
-                  <div className="flex items-center gap-3 mt-2 text-[11px] font-mono text-vyro-muted">
-                    <span>Category: {agent.category}</span>
-                    <span>•</span>
-                    <span>Strategy: {agent.negotiationStrategy.replace('_', ' ')}</span>
-                    <span>•</span>
-                    <span className="text-vyro-text font-bold">
-                      {isSeller ? `Starting $${startingPrice} (Floor: $${minPrice})` : `Max Budget: $${agent.pricingConstraints.maxBudget || 200}`}
-                    </span>
-                  </div>
+
+                  <Badge variant={agent.status === 'active' ? 'success' : 'default'} size="sm" dot>
+                    {agent.status}
+                  </Badge>
                 </div>
+
+                {/* Description */}
+                <p className="text-xs text-vyro-muted line-clamp-2 leading-relaxed mb-4">
+                  {agent.description}
+                </p>
+
+                {/* Capabilities pills */}
+                {agent.capabilities && agent.capabilities.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-4">
+                    {agent.capabilities.slice(0, 3).map((cap, idx) => (
+                      <span
+                        key={idx}
+                        className="text-[10px] bg-vyro-card text-vyro-subtle px-2 py-0.5 rounded border border-vyro-border/60"
+                      >
+                        {cap}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Status and Action Buttons */}
-              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-                <Badge variant={agent.status === 'active' ? 'success' : 'default'} size="sm" dot>
-                  {agent.status}
-                </Badge>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => toggleStatusMutation.mutate({
-                    id: agent.id,
-                    status: agent.status === 'active' ? 'paused' : 'active'
-                  })}
-                  title={agent.status === 'active' ? 'Pause agent' : 'Activate agent'}
-                >
-                  {agent.status === 'active' ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                </Button>
+              {/* Policy & Metrics Footer */}
+              <div className="pt-3 border-t border-vyro-border flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-[10px] font-mono uppercase text-vyro-subtle block">
+                    {isSeller ? 'Pricing Floor Boundary' : 'Procurement Budget Ceiling'}
+                  </span>
+                  <span className="text-xs font-mono font-bold text-vyro-text mt-0.5 block">
+                    {isSeller
+                      ? `$${minPrice || 145} Floor (Ask: $${startingPrice})`
+                      : `$${agent.pricingConstraints.maxBudget || 250} USD Max`}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => toggleStatusMutation.mutate({
+                      id: agent.id,
+                      status: agent.status === 'active' ? 'paused' : 'active'
+                    })}
+                    title={agent.status === 'active' ? 'Pause agent' : 'Activate agent'}
+                    className="h-7 px-2.5 text-xs"
+                  >
+                    {agent.status === 'active' ? (
+                      <span className="flex items-center gap-1 text-vyro-muted">
+                        <Pause className="w-3 h-3" /> Pause
+                      </span>
+                    ) : (
+                      <span className="flex items-center gap-1 text-emerald-400">
+                        <Play className="w-3 h-3" /> Activate
+                      </span>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           );

@@ -26,19 +26,19 @@ export const Footer: React.FC = () => {
           <div>
             <h4 className="text-xs font-mono uppercase tracking-wider text-vyro-text mb-3">Architecture</h4>
             <ul className="space-y-2 text-xs">
-              <li><Link to="/app/network" className="hover:text-vyro-text transition-colors">Agent Discovery Registry</Link></li>
+              <li><Link to="/app/marketplace" className="hover:text-vyro-text transition-colors">Marketplace Directory</Link></li>
               <li><Link to="/how-it-works" className="hover:text-vyro-text transition-colors">Negotiation Protocol</Link></li>
-              <li><Link to="/how-it-works" className="hover:text-vyro-text transition-colors">Evaluator Scoring</Link></li>
-              <li><Link to="/security" className="hover:text-vyro-text transition-colors">Human Authorization</Link></li>
+              <li><Link to="/app/rules" className="hover:text-vyro-text transition-colors">Decision Boundaries</Link></li>
+              <li><Link to="/security" className="hover:text-vyro-text transition-colors">Privacy & Containment</Link></li>
             </ul>
           </div>
 
           <div>
             <h4 className="text-xs font-mono uppercase tracking-wider text-vyro-text mb-3">Commerce</h4>
             <ul className="space-y-2 text-xs">
-              <li><Link to="/app/requests/new" className="hover:text-vyro-text transition-colors">Procurement Prompts</Link></li>
-              <li><Link to="/app/agents/new" className="hover:text-vyro-text transition-colors">Deploy Seller Agent</Link></li>
-              <li><Link to="/app/negotiations" className="hover:text-vyro-text transition-colors">Active Agreements</Link></li>
+              <li><Link to="/app/requests/new" className="hover:text-vyro-text transition-colors">New Request Flow</Link></li>
+              <li><Link to="/app/marketplace" className="hover:text-vyro-text transition-colors">Verified Specialists</Link></li>
+              <li><Link to="/app/deals" className="hover:text-vyro-text transition-colors">Active Deals</Link></li>
               <li><Link to="/app/transactions" className="hover:text-vyro-text transition-colors">PayPal Settlement Ledger</Link></li>
             </ul>
           </div>

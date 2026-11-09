@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Users Collection
+    match /users/{userId} {
+      // Anyone authenticated can read basic public profile info
+      allow read: if isAuthenticated();
+      // Only the user themselves can write or update their profile, capabilities, or private memory
+      allow create, update: if isOwner(userId);
+      allow delete: if isOwner(userId);
+
+      // Sub-collection: User-owned Agents
+      match /agents/{agentId} {
+        allow read: if isAuthenticated();
+        allow write: if isOwner(userId);
+      }
+
+      // Sub-collection: Private Memory (Buyer & Seller private constraints)
+      match /memory/{memoryId} {
+        // STRICT PRIVACY: Only the owning user can read or write their private AI memory
+        allow read, write: if isOwner(userId);
+      }
+
+      // Sub-collection: User Notifications
+      match /notifications/{notificationId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      // Sub-collection: Activity Events
+      match /activity/{activityId} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId);
+      }
+    }
+
+    // Public Marketplace Listings
+    match /listings/{listingId} {
+      // Anyone can read active published listings
+      allow read: if true;
+      // Only the authenticated seller can create, update, or pause their own listings
+      allow create: if isAuthenticated() && request.resource.data.sellerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.sellerId == request.auth.uid;
+    }
+
+    // Agents Registry
+    match /agents/{agentId} {
+      // Anyone can read public capabilities and metadata
+      allow read: if true;
+      // Only the owner can create or update their agent
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+    }
+
+    // Commercial Requests
+    match /requests/{requestId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+    }
+
+    // Negotiations Collection
+    match /negotiations/{negotiationId} {
+      // Only the buyer or seller participants can read the negotiation details
+      allow read: if isAuthenticated() && (
+        resource.data.buyerUserId == request.auth.uid || 
+        resource.data.sellerUserId == request.auth.uid ||
+        request.auth.uid in resource.data.participants
+      );
+      // Updates must be performed by authorized participant or backend AI service
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        resource.data.buyerUserId == request.auth.uid || 
+        resource.data.sellerUserId == request.auth.uid
+      );
+
+      // Messages sub-collection
+      match /messages/{messageId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+
+      // Offers sub-collection
+      match /offers/{offerId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+      }
+    }
+
+    // Commercial Agreements
+    match /agreements/{agreementId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyerUserId == request.auth.uid || 
+        resource.data.sellerUserId == request.auth.uid
+      );
+      // Both parties must authorize their respective fields
+      allow update: if isAuthenticated() && (
+        resource.data.buyerUserId == request.auth.uid || 
+        resource.data.sellerUserId == request.auth.uid
+      );
+    }
+
+    // Financial Transactions
+    match /transactions/{transactionId} {
+      allow read: if isAuthenticated() && (
+        resource.data.buyerUserId == request.auth.uid || 
+        resource.data.sellerUserId == request.auth.uid
+      );
+      // Creation and updates are strictly mediated by backend payment service
+      allow write: if false; 
+    }
+
+    // Reviews Collection
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && request.resource.data.buyerId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && resource.data.buyerId == request.auth.uid;
+    }
+  }
+}

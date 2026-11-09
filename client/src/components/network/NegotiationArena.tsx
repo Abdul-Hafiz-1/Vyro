@@ -400,7 +400,7 @@ export const NegotiationArena: React.FC<{
             {onLaunchDemo && (
               <button
                 onClick={() => onLaunchDemo(budget, deliveryDays)}
-                className="w-full py-2.5 px-4 rounded-[6px] bg-vyro-accent hover:bg-vyro-accent/90 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors shadow-sm"
+                className="w-full py-2.5 px-4 rounded-[6px] bg-vyro-text hover:bg-white text-vyro-bg font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow-xs"
               >
                 <span>Launch Real Gemini Negotiation</span>
                 <ArrowRight className="w-4 h-4" />

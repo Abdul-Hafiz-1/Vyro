@@ -1,185 +1,220 @@
-# VYRO — Autonomous AI Commerce Network
+# VYRO — The AI-Operated Marketplace
 
-> **Commerce, without the conversation gap.**  
-> The network where independently configured AI agents discover, negotiate, and transact on behalf of people and businesses.
+> **AI handles everything automatically. Humans handle ONLY exceptions and rejections.**  
+> The Needs-you queue is the product. Everything else supports it.
 
-![VYRO Network](https://img.shields.io/badge/VYRO-Autonomous%20Commerce-8B7CFF?style=flat-square)
-![PayPal Sandbox](https://img.shields.io/badge/Payments-PayPal%20Sandbox%20Orders%20API-0070BA?style=flat-square)
-![Google Gemini](https://img.shields.io/badge/AI%20Engine-Gemini%20Structured%20Tools-4285F4?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-63D6A0?style=flat-square)
-
----
-
-## 1. Executive Summary
-
-VYRO is a production-grade autonomous commerce network that replaces tedious human back-and-forth in B2B procurement with independently configured AI agents. 
-
-Unlike simple chatbot interfaces or speculative mockups, VYRO implements a full multi-agent procurement protocol:
-1. **Unstructured Prompt to Specification**: A human buyer submits a plain English requirement (e.g. *"I need a landing page for my new business. Maximum budget $150. Within five days."*).
-2. **Schema-Validated Parsing**: The AI engine converts the prompt into strict JSON requirements (budget ceiling, delivery SLA, verified deliverables).
-3. **Agent Discovery**: Matches suitable, active seller agents across the network registry.
-4. **Structured Multi-Turn Negotiation**: Buyer and seller agents exchange bounded counteroffers (`request`, `proposal`, `counteroffer`, `acceptance`) with real backend tool execution traces.
-5. **Independent Evaluator Scoring**: A dedicated Evaluator Agent scores all competing proposals across 4 weighted vectors (Price, Capabilities, Delivery, Risk).
-6. **Mandatory Human Authorization**: Agents are technically barred from moving funds without an explicit human signature.
-7. **PayPal Sandbox Settlement**: The backend invokes the official PayPal Orders API (`/v2/checkout/orders` and capture) with server-side amount verification and cryptographic idempotency.
+![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen?style=flat-square)
+![Tests](https://img.shields.io/badge/Tests-8%2F8%20Passing-brightgreen?style=flat-square)
+![Database](https://img.shields.io/badge/Database-SQLite%20(Single%20Source)-003B57?style=flat-square)
+![Design System](https://img.shields.io/badge/Tokens-WCAG%20AA%20Compliant-4C7DF0?style=flat-square)
+![Payments](https://img.shields.io/badge/Payments-PayPal%20Sandbox%20API-0070BA?style=flat-square)
 
 ---
 
-## 2. Technology Stack
+## 1. Product Truth & Core Model
 
-- **Frontend**: React 19, TypeScript, Vite, Tailwind CSS, Lucide React, Framer Motion, TanStack Query, React Router v7.
-- **Backend**: Node.js, Express, TypeScript, Zod request/response schema validation, UUID.
-- **AI Engine**: Google Gemini API with function/tool execution traces and deterministic fallback simulator.
-- **Payments**: PayPal Sandbox REST Orders API v2 (Order Creation, Capture, Server Verification, Idempotency).
-- **Persistence**: Persisted disk store (`server/data/store.json`) with live Firestore-compatible schema.
+Traditional marketplaces burden users with endless directory browsing, proposal haggling, and manual sign-offs.
 
----
+VYRO is an autonomous commercial network where:
+1. **AI handles 90% of commerce**: Autonomous buyer and seller agents discover requirements, negotiate multi-round concessions on price and deliverables, evaluate competing bids, and settle payment automatically when conditions hold.
+2. **Humans handle the 10% exceptions**: A human is pulled in **ONLY** for:
+   - (a) Exceptions the AI cannot safely decide (e.g. price ceiling exceeded, daily spend cap reached, or seller floor impasse).
+   - (b) Rejections they may want to overturn or appeal.
 
-## 3. Brand Identity & Visual System
-
-Designed with the restraint and precision of Stripe, Linear, and Vercel:
-
-| Token | Hex | Role |
-|---|---|---|
-| Main Background | `#0B0C0F` | Deep dark slate canvas |
-| Secondary Background | `#111319` | Structured panel framing |
-| Elevated Surfaces | `#171A21` | Elevated cards and drawers |
-| Structural Borders | `#292D36` | Hairline boundaries |
-| Primary Text | `#F2F2F0` | High-contrast readable typography |
-| Secondary Text | `#9398A4` | Technical metadata |
-| Accent Signal | `#8B7CFF` | Strategic focus |
-| Success / Settled | `#63D6A0` | Consensus & verified settlements |
-| Warning / Review | `#F0B66C` | Human approval required |
-| Error / Alert | `#F07878` | Constraint breaches |
+The best session in VYRO is one where the user opens the application, reads **"Everything is handled"**, and leaves.
 
 ---
 
-## 4. Architectural Overview
+## 2. System Architecture & Decisions
 
 ```
-                                ┌────────────────────────────────────────┐
-                                │             HUMAN BUYER                │
-                                └───────────────────┬────────────────────┘
-                                                    │ Natural Language Request
-                                                    ▼
-                                ┌────────────────────────────────────────┐
-                                │         VYRO PROCUREMENT PARSER        │
-                                │   (Gemini Structured JSON Schema)      │
-                                └───────────────────┬────────────────────┘
-                                                    │ Validated Specs
-                                                    ▼
-                                ┌────────────────────────────────────────┐
-                                │              BUYER AGENT               │
-                                │           ("Studio Buyer")             │
-                                └───────┬────────────────────────┬───────┘
-                                        │ Discovery              │ Discovery
-                                        ▼                        ▼
-┌───────────────────────────────────────────────┐        ┌───────────────────────────────────────────────┐
-│                 SELLER AGENT                  │        │                 SELLER AGENT                  │
-│              ("Pixel Studio")                 │        │            ("Northstar Design")               │
-│ Starting: $180 | Floor: $140 | Delivery: 5d   │        │ Starting: $195 | Floor: $155 | Delivery: 4d   │
-└───────────────────────┬───────────────────────┘        └───────────────────────┬───────────────────────┘
-                        │ Multi-turn Proposals                   │ Multi-turn Proposals
-                        └───────────────────────┬────────────────┘
-                                                ▼
-                                ┌────────────────────────────────────────┐
-                                │        INDEPENDENT EVALUATOR           │
-                                │  Composite Scoring (Price, SLA, Risk)  │
-                                └───────────────────┬────────────────────┘
-                                                    │ Recommended Agreement
-                                                    ▼
-                                ┌────────────────────────────────────────┐
-                                │       HUMAN AUTHORIZATION GATE         │
-                                │    (Explicit Signature Required)       │
-                                └───────────────────┬────────────────────┘
-                                                    │ Verified Approval
-                                                    ▼
-                                ┌────────────────────────────────────────┐
-                                │       PAYPAL SANDBOX ORDERS API        │
-                                │  Order Create -> Capture -> Ledger     │
-                                └────────────────────────────────────────┘
+           [ Human Principal ]
+                   │ (natural brief / exceptions only)
+                   ▼
+       [ Autonomous Buyer Agent ]  <─── PRIVATE: Max Budget ($350)
+                   │
+                   ▼  (schema-validated counteroffers)
+       [ Autonomous Seller Agent ] <─── PRIVATE: Floor Price ($150)
+                   │
+                   ▼
+        [ Decision Engine ]
+          ├── AUTO-APPROVE   ──> [ PayPal Sandbox Capture ] (Idempotent)
+          ├── AUTO-DECLINE   ──> [ Plain Reason + Appeal ]
+          └── ESCALATE       ──> [ Needs-You Review Queue ] (One-click)
 ```
+
+### 2.1 The Decision Engine
+Server-enforced decision policy (`server/src/services/decision/engine.ts`):
+- **AUTO-APPROVE**: Price $\le$ buyer ceiling, $\ge$ seller floor, seller verified, deterministic confidence $\ge 0.85$, amount $\le$ auto-approval limit ($200 default), and daily spend cap ($500 default) not exceeded.
+- **AUTO-DECLINE**: Clear rule or prohibited category violation with plain-language explanation and an appeal button.
+- **ESCALATE**: Everything else routes to the **Needs-you queue** sorted by urgency.
+- **Global Pause Switch**: When enabled, immediately routes all transactions to the human review queue.
+
+### 2.2 Privacy Canary & Injection Defense
+- **Zero Budget Leaks**: Counterparties receive only their own principal's private constraints. Buyer max budgets and seller price floors are technically barred from prompts, counterparty messages, and API responses.
+- **Automated Canary Tests**: Suite fails if any private canary value or number-format variant leaks in counterparty-visible output.
+- **Untrusted Message Containment**: Counterparty inputs are quarantined within strict boundary tags (`<<<UNTRUSTED_COUNTERPARTY_MESSAGE>>>`) to neutralize prompt injection attacks.
+- **Deterministic Confidence**: Scores are computed mathematically from verified seller badges, ratings, and price variance—never self-reported by the model.
+
+### 2.3 Server-Enforced Idempotent Payments
+- Client code has zero financial authority.
+- The PayPal capture endpoint independently verifies that `Decision.status ∈ {'auto_approved', 'human_approved'}` and checks spend limits on the server before invoking the PayPal Sandbox API.
+- Re-executing an existing transaction is fully idempotent.
 
 ---
 
-## 5. Getting Started (Local Development)
+## 3. Workspaces & Information Architecture
+
+VYRO separates responsibilities into two distinct workspaces (switched via the account menu):
+- **Buying Workspace**: `Today · Deals · Marketplace · Rules`
+- **Selling Workspace**: `Today · Listings · Deals · Rules`
+
+### Key Screens
+- **Today (`/app`)**: Shows current status in one sentence (*"Everything is handled"* or *"2 things need your decision"*), followed by the **Needs-you queue**, in-progress deals, and a 7-day handled ledger.
+- **Deal Detail (`/app/deals/:id`)**: Renders the horizontal converging price ladder, autonomous dialogue stream, commercial terms, and bottom persistent decision action bar.
+- **New Request (`/app/requests/new`)**: Single purchasing entry point with natural language brief input, AI structuring, and multi-agent parallel dispatch.
+- **Marketplace (`/app/marketplace`)**: Directory of verified autonomous specialist agents and active service catalog.
+- **Rules (`/app/rules`)**: Centralized management of auto-approval ceilings, daily spend caps, global pause switch, and override policy suggestions.
+- **Onboarding (`/onboarding`)**: Focused 3-step skippable onboarding flow (Workspace $\to$ Decision Limits $\to$ Agent Stance).
+
+---
+
+## 4. Local Setup & Quickstart
 
 ### Prerequisites
-- Node.js (v18+)
-- npm
+- Node.js 18+ (tested on Node.js 20 & 24)
+- npm 9+
 
-### 1. Clone & Install
+### Installation
 ```bash
+# Clone the repository
 git clone https://github.com/your-username/vyro.git
 cd vyro
 
-# Install server and client dependencies
-npm run install:all
+# Install dependencies
+npm install
+npm --prefix client install
+npm --prefix server install
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env`:
+### Environment Configuration
+Copy the template configuration:
 ```bash
 cp .env.example .env
 ```
+Key variables:
+```ini
+PORT=4000
+NODE_ENV=development
+SQLITE_DB_PATH=vyro.db
+AUTO_APPROVE_LIMIT_DEFAULT=200
+DAILY_BUDGET_CAP_DEFAULT=500
+GEMINI_API_KEY=your_key_here
+GEMINI_MODEL=gemini-2.5-flash
 
-To connect live external credentials:
-- **Google Gemini API**: Set `GEMINI_API_KEY=your_key` (get a key from [Google AI Studio](https://aistudio.google.com/)).
-- **PayPal Sandbox**: Set `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` (get credentials from [PayPal Developer Dashboard](https://developer.paypal.com/)).
-
-*Note: If external keys are not provided, VYRO operates seamlessly in high-fidelity sandbox simulation mode so you can evaluate the entire pipeline immediately without setup blockers.*
-
-### 3. Run Development Servers
-```bash
-# Terminal 1: Backend API Engine (Port 4000)
-npm run dev:server
-
-# Terminal 2: Frontend Client (Port 5173)
-npm run dev:client
+# PayPal Developer Sandbox (Orders v2 API)
+PAYPAL_ENV=sandbox
+PAYPAL_CLIENT_ID=your_paypal_sandbox_client_id
+PAYPAL_CLIENT_SECRET=your_paypal_sandbox_client_secret
+VITE_PAYPAL_CLIENT_ID=your_paypal_sandbox_client_id
 ```
 
-Open your browser at **`http://localhost:5173`**.
+---
+
+## 5. PayPal Sandbox Setup & Manual Dashboard Steps
+
+To test real PayPal checkouts end to end in the sandbox environment:
+
+### Step 1: Create a Sandbox REST App in PayPal Developer Dashboard
+1. Log in to the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/).
+2. Navigate to **Apps & Credentials** and ensure the toggle is set to **Sandbox**.
+3. Click **Create App**:
+   - **App Name**: `VYRO Marketplace Sandbox`
+   - **App Type**: `Merchant`
+4. Copy the generated **Client ID** and **Secret**:
+   - In `.env` (server root):
+     ```ini
+     PAYPAL_ENV=sandbox
+     PAYPAL_CLIENT_ID=<your_sandbox_client_id>
+     PAYPAL_CLIENT_SECRET=<your_sandbox_client_secret>
+     VITE_PAYPAL_CLIENT_ID=<your_sandbox_client_id>
+     ```
+   - In `client/.env` (client root):
+     ```ini
+     VITE_PAYPAL_CLIENT_ID=<your_sandbox_client_id>
+     ```
+
+### Step 2: Set Up Sandbox Test Accounts
+1. In the PayPal Developer Dashboard sidebar, click **Testing Tools** > **Sandbox Accounts**.
+2. PayPal automatically provides:
+   - **Platform Business Account**: Merchant account where all captured funds are deposited (receives buyer payments).
+3. Create or inspect a **Personal (Buyer) Sandbox Account**:
+   - Click **Create Account** > select **Personal (Buyer Account)**.
+   - Note the auto-generated **Email ID** (e.g. `sb-buyer123@personal.example.com`) and **System Generated Password** (viewable under `...` > *View/Edit account*).
+
+### Step 3: Which Account to Use at Checkout
+- When a deal is approved and you click the gold **PayPal** checkout button in VYRO, the secure PayPal popup window opens.
+- **Log in strictly using the Sandbox Personal Account** (`sb-buyer...@personal.example.com` + sandbox password).
+- Review the transaction terms ($ amount formatted to 2 decimals) and click **Complete Purchase**.
+- The popup closes automatically, and VYRO's server securely captures the authorized order, records the seller's share in the internal ledger, and updates the deal to completed.
 
 ---
 
-## 6. Guided Hackathon Demonstration Flow
+## 6. Payment Troubleshooting
 
-A judge or evaluator can test the entire autonomous pipeline in 60 seconds:
+| Issue / Error Code | Root Cause | Solution / Next Step |
+| :--- | :--- | :--- |
+| `ORDER_NOT_APPROVED` (422) | The buyer closed the popup before clicking "Complete Purchase", or the frontend attempted capture before `onApprove`. | Keep the PayPal popup open until authorization finishes. VYRO's integration now strictly gates server capture on the `onApprove` event. |
+| `INSTRUMENT_DECLINED` (400) | The sandbox buyer wallet funding source or test credit card was declined. | Open [Developer Dashboard > Sandbox Accounts](https://developer.paypal.com/dashboard/accounts), edit your Personal account, and top up the sandbox balance or add a fresh test credit card. |
+| `AUTHENTICATION_FAILURE` (401) | Mismatched `PAYPAL_CLIENT_ID` or `PAYPAL_CLIENT_SECRET`, or live credentials configured in sandbox mode. | Verify that credentials belong to a Sandbox REST app. Test connectivity via **Settings > Advanced > Payments Sandbox Connectivity** in the app. |
+| `PAYER_ACTION_REQUIRED` (400) | PayPal sandbox triggered an additional fraud check or phone verification challenge. | Follow the verification prompt presented inside the PayPal popup window. |
+| `UNPROCESSABLE_ENTITY` (422) | Malformed amount, invalid currency code, or mismatched currency. | Ensure amount has strictly two decimals (e.g. `150.00`) and currency is `USD`. VYRO automatically formats all commercial figures server-side. |
+| `DAILY_CAP_EXCEEDED` (400) | Buyer's cumulative daily spending exceeded their configured limit (default: $500). | Go to **Settings > Rules** and increase the daily budget cap. |
 
-1. **Launch**: Navigate to `http://localhost:5173`.
-2. **One-Click Demo**: Click **"Run Guided Hackathon Demo"** in the hero section or top navigation.
-3. **Observation**:
-   - Request created: *"I need a professionally designed landing page for my new business. My maximum budget is $150. I need it within five days."*
-   - Three seller agents discovered: *Pixel Studio*, *Northstar Design*, and *LaunchCraft*.
-   - Three independent negotiation dialogues executed with tactical price counteroffers.
-   - Evaluator Agent analyzes all proposals and recommends *Pixel Studio* at **$143** (92/100 composite score).
-4. **Human Control**: The app navigates to the **Negotiation Center** showing the agreement in `PENDING HUMAN AUTHORIZATION` state.
-5. **Authorization**: Click **"Authorize Agreement ($143)"** to review deliverables and sign off.
-6. **PayPal Capture**: Click **"Pay $143 with PayPal Sandbox"**. The backend captures the order, triggers celebratory visual feedback, and enters the transaction into the **Settlement Ledger** (`/app/transactions`).
+### Health Check Diagnostic Tool
+Admins and developers can test PayPal sandbox connectivity at any time:
+- In the UI: Navigate to **Settings > Advanced** and click **Check** next to `Payments Sandbox Connectivity`.
+- Via API: Run `curl http://localhost:4000/api/v1/payments/health` to verify token issuance and retrieve your PayPal Application ID.
 
----
+### Running the Application
+```bash
+# Start backend server (Express + SQLite migrations on port 4000)
+npm run dev:server
 
-## 7. API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `GET` | `/api/v1/system/status` | Health check & external provider connectivity |
-| `POST` | `/api/v1/system/seed-demo-flow` | Runs the canonical 12-step guided multi-agent flow |
-| `POST` | `/api/v1/system/reset-demo` | Resets store to initial seeded agents |
-| `GET` | `/api/v1/agents` | List buyer and seller agents with category/status filters |
-| `POST` | `/api/v1/agents` | Deploy a new agent with strict pricing floors |
-| `POST` | `/api/v1/requests/parse` | Gemini NL purchasing prompt parser |
-| `POST` | `/api/v1/requests` | Persist structured procurement request |
-| `POST` | `/api/v1/negotiations/multi-agent` | Execute competitive negotiations across candidate sellers |
-| `POST` | `/api/v1/negotiations/:id/step` | Advance an individual negotiation turn |
-| `POST` | `/api/v1/agreements/:id/authorize` | Explicit human authorization for payment |
-| `POST` | `/api/v1/payments/create-order` | Server creates PayPal order from authorized agreement |
-| `POST` | `/api/v1/payments/capture-order` | Server captures and verifies PayPal payment |
-| `GET` | `/api/v1/transactions` | Full immutable transaction settlement ledger |
-| `GET` | `/api/v1/analytics` | Real-time computed network volume and performance metrics |
+# In a separate terminal, start client (Vite on port 5173)
+npm run dev:client
+```
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ---
 
-## 8. License
+## 5. Automated Verification & Tests
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+Run the privacy canary and decision engine test suite:
+```bash
+npx tsx --test server/test/privacy_and_decision.test.ts
+```
+
+All 8 tests execute against SQLite and verify:
+1. `Privacy: Buyer private budget ceiling never leaks to counterparty`
+2. `Privacy: Seller operational floor price never leaks in counterparty messages`
+3. `Decision Policy: AUTO-APPROVE when all strict conditions hold`
+4. `Decision Policy: AUTO-DECLINE on prohibited category or extreme price deviation`
+5. `Early Exit: Escalates when seller floor > buyer max budget`
+6. `Global Pause Switch: Routes all transactions to Review Queue when paused`
+7. `Seller-Side Exception Rules: Auto-accept vs Escalation`
+8. `Server-Enforced Payment: Rejects unapproved decisions & enforces idempotency`
+
+Build typecheck:
+```bash
+# Client build
+npm --prefix client run build
+
+# Server build
+npm --prefix server run build
+```
+
+---
+
+## 6. License
+MIT License. Built for autonomous commerce.

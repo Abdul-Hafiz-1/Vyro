@@ -1,6 +1,11 @@
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { config } from './config/index.js';
+import authRoutes from './routes/auth.js';
+import listingRoutes from './routes/listings.js';
+import memoryRoutes from './routes/memory.js';
+import notificationRoutes from './routes/notifications.js';
 import agentRoutes from './routes/agents.js';
 import requestRoutes from './routes/requests.js';
 import negotiationRoutes from './routes/negotiations.js';
@@ -11,16 +16,24 @@ import analyticsRoutes from './routes/analytics.js';
 import activityRoutes from './routes/activity.js';
 import systemRoutes from './routes/system.js';
 import aiRoutes from './routes/ai.js';
+import homeRoutes from './routes/home.js';
+import eventsRoutes from './routes/events.js';
 
 const app = express();
 
 // Middlewares
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
+  origin: (origin, callback) => callback(null, true),
+  credentials: true,
+  methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'PayPal-Request-Id']
 }));
+app.options('*', cors({
+  origin: (origin, callback) => callback(null, true),
+  credentials: true
+}));
 app.use(express.json());
+app.use(cookieParser());
 
 // Request logging in development
 app.use((req: Request, res: Response, next: NextFunction) => {
@@ -36,6 +49,10 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Mount versioned API routes
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/listings', listingRoutes);
+app.use('/api/v1/memory', memoryRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 app.use('/api/v1/agents', agentRoutes);
 app.use('/api/v1/network', agentRoutes); // Alias for network explorer
 app.use('/api/v1/requests', requestRoutes);
@@ -47,6 +64,8 @@ app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/home', homeRoutes);
+app.use('/api/v1/events', eventsRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

@@ -1,16 +1,40 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
-import { paypalService } from '../services/paypal/paypalClient.js';
+import { paypalService, PayPalApiException } from '../services/paypal/paypalClient.js';
 import { config } from '../config/index.js';
+import { store } from '../db/store.js';
+import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
 
 const router = Router();
 
-// GET /api/v1/payments/config
-router.get('/config', (req: Request, res: Response) => {
-  res.json({
+// GET /api/v1/payments/health (sandbox connection verification)
+router.get('/health', async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const health = await paypalService.checkHealth();
+    return res.json({
+      success: true,
+      data: health
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      data: {
+        ok: false,
+        connected: false,
+        env: config.paypal.env,
+        reason: err.message
+      }
+    });
+  }
+});
+
+// GET /api/v1/payments/config (public configuration for PayPal SDK)
+router.get('/config', (req: AuthenticatedRequest, res: Response) => {
+  return res.json({
     success: true,
     data: {
-      clientId: config.paypal.clientId || 'sb', // 'sb' is standard PayPal sandbox test ID
+      clientId: config.paypal.clientId || 'sb',
+      env: config.paypal.env,
       mode: config.paypal.mode,
       isConfigured: paypalService.isConfigured()
     }
@@ -18,40 +42,82 @@ router.get('/config', (req: Request, res: Response) => {
 });
 
 // POST /api/v1/payments/create-order
-router.post('/create-order', async (req: Request, res: Response) => {
+// Strictly validates buyer identity and server-side decision record
+router.post('/create-order', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
   const { agreementId, idempotencyKey } = req.body;
   if (!agreementId) {
-    return res.status(400).json({ success: false, error: 'agreementId is required' });
+    return res.status(400).json({
+      success: false,
+      error: 'agreementId is required',
+      code: 'VALIDATION_ERROR',
+      nextStep: 'Please provide a valid agreement ID.'
+    });
   }
 
   const key = idempotencyKey || `idem_${uuidv4().substring(0, 12)}`;
 
   try {
-    const order = await paypalService.createOrder(agreementId, key);
-    res.json({ success: true, data: order });
+    const order = await paypalService.createOrder(agreementId, key, user.id);
+    return res.json({ success: true, data: order });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+    if (err instanceof PayPalApiException) {
+      return res.status(err.details.status).json({
+        success: false,
+        error: err.details.message,
+        code: err.details.code,
+        nextStep: err.details.nextStep,
+        debugId: err.details.debugId
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'Failed to create PayPal order',
+      code: 'CREATE_ORDER_FAILED',
+      nextStep: 'Please retry or verify connection settings.'
+    });
   }
 });
 
 // POST /api/v1/payments/capture-order
-router.post('/capture-order', async (req: Request, res: Response) => {
+// Strictly validates buyer identity and idempotent execution
+router.post('/capture-order', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
   const { orderId, idempotencyKey } = req.body;
   if (!orderId) {
-    return res.status(400).json({ success: false, error: 'orderId is required' });
+    return res.status(400).json({
+      success: false,
+      error: 'orderId is required',
+      code: 'VALIDATION_ERROR',
+      nextStep: 'Ensure orderId from PayPal popup approval is provided.'
+    });
   }
 
   const key = idempotencyKey || `cap_idem_${uuidv4().substring(0, 12)}`;
 
   try {
-    const transaction = await paypalService.captureOrder(orderId, key);
-    res.json({
+    const transaction = await paypalService.captureOrder(orderId, key, user.id);
+    return res.json({
       success: true,
       message: 'PayPal Sandbox order captured and verified successfully.',
       data: transaction
     });
   } catch (err: any) {
-    res.status(400).json({ success: false, error: err.message });
+    if (err instanceof PayPalApiException) {
+      return res.status(err.details.status).json({
+        success: false,
+        error: err.details.message,
+        code: err.details.code,
+        nextStep: err.details.nextStep,
+        debugId: err.details.debugId
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'Payment capture failed',
+      code: 'CAPTURE_FAILED',
+      nextStep: 'Please retry or check system logs.'
+    });
   }
 });
 

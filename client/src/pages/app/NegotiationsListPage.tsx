@@ -6,9 +6,11 @@ import { api } from '../../api/client';
 import { Negotiation } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { useAuth } from '../../context/AuthContext';
 
 export const NegotiationsListPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user, isBuyerWorkspace: isBuyer } = useAuth();
   const [filter, setFilter] = useState<string>('all');
 
   const { data: negotiations = [], isLoading } = useQuery({
@@ -21,7 +23,7 @@ export const NegotiationsListPage: React.FC = () => {
     if (filter === 'all') return true;
     if (filter === 'active') return n.status === 'in_negotiation' || n.status === 'initiated';
     if (filter === 'agreed') return n.status === 'agreement_reached';
-    if (filter === 'completed') return n.status === 'completed';
+    if (filter === 'completed') return (n.status as string) === 'completed' || (n.status as string) === 'COMPLETED';
     return true;
   });
 
@@ -32,23 +34,37 @@ export const NegotiationsListPage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-              Negotiation Center
+              {isBuyer ? 'Procurement Channels' : 'Client Negotiation Desks'}
             </h1>
-            <Badge variant="accent" size="sm">{negotiations.length} Total</Badge>
+            <Badge variant={isBuyer ? 'accent' : 'success'} size="sm">{filtered.length} Channels</Badge>
           </div>
           <p className="text-xs text-vyro-muted">
-            Inspect autonomous commercial dialogues, proposal revisions, and evaluator recommendations.
+            {isBuyer 
+              ? 'Autonomous dialogues with third-party sellers across the network. Inspect price floors, delivery SLAs, and evaluator picks.'
+              : `Incoming client project briefs received by ${user?.sellerProfile?.businessName || user?.displayName || 'your studio'}. Autonomous counteroffers, capacity checks, and client terms.`
+            }
           </p>
         </div>
 
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => navigate('/app/requests/new')}
-          leftIcon={<Plus className="w-4 h-4" />}
-        >
-          New Procurement
-        </Button>
+        {isBuyer ? (
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => navigate('/app/requests/new')}
+            leftIcon={<Plus className="w-4 h-4" />}
+          >
+            New Procurement
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate('/app/network')}
+            leftIcon={<Bot className="w-4 h-4 text-vyro-success" />}
+          >
+            Marketplace Registry
+          </Button>
+        )}
       </div>
 
       {/* Filter Tabs */}
@@ -83,7 +99,7 @@ export const NegotiationsListPage: React.FC = () => {
       ) : filtered.length > 0 ? (
         <div className="space-y-3">
           {filtered.map((neg) => {
-            const isAgreed = neg.status === 'agreement_reached' || neg.status === 'completed';
+            const isAgreed = neg.status === 'agreement_reached' || (neg.status as string) === 'completed' || (neg.status as string) === 'COMPLETED';
 
             return (
               <div
@@ -107,7 +123,7 @@ export const NegotiationsListPage: React.FC = () => {
                       <h3 className="text-sm font-bold font-mono text-vyro-text">{neg.id}</h3>
                       <Badge
                         variant={
-                          neg.status === 'completed' ? 'success' :
+                          ((neg.status as string) === 'completed' || (neg.status as string) === 'COMPLETED') ? 'success' :
                           neg.status === 'agreement_reached' ? 'warning' :
                           neg.status === 'in_negotiation' ? 'accent' : 'default'
                         }

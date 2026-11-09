@@ -4,7 +4,7 @@ import { twMerge } from 'tailwind-merge';
 
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'accent' | 'outline';
+  variant?: 'default' | 'neutral' | 'success' | 'warning' | 'error' | 'accent' | 'outline';
   size?: 'sm' | 'md';
   dot?: boolean;
   className?: string;
@@ -17,34 +17,36 @@ export const Badge: React.FC<BadgeProps> = ({
   dot = false,
   className
 }) => {
-  const baseStyles = 'inline-flex items-center font-mono font-medium rounded-full tracking-wide';
+  const baseStyles = 'inline-flex items-center font-medium rounded-control tracking-tight leading-none';
   
   const sizeStyles = {
-    sm: 'text-[10px] px-2 py-0.5 gap-1',
-    md: 'text-xs px-2.5 py-0.5 gap-1.5'
+    sm: 'text-[11px] px-2 py-0.5 gap-1.5',
+    md: 'text-xs px-2.5 py-1 gap-1.5'
   };
 
   const variantStyles = {
-    default: 'bg-vyro-surface text-vyro-muted border border-vyro-border',
-    success: 'bg-vyro-success/10 text-vyro-success border border-vyro-success/20',
-    warning: 'bg-vyro-warning/10 text-vyro-warning border border-vyro-warning/20',
-    error: 'bg-vyro-error/10 text-vyro-error border border-vyro-error/20',
+    default: 'bg-vyro-surface text-vyro-muted border border-vyro-line',
+    neutral: 'bg-vyro-bg text-vyro-muted border border-vyro-line',
+    success: 'bg-status-handled-bg text-status-handled border border-status-handled/30',
+    warning: 'bg-status-needs-bg text-status-needs border border-status-needs/30',
+    error: 'bg-status-declined-bg text-status-declined border border-status-declined/30',
     accent: 'bg-vyro-accent/15 text-vyro-accent border border-vyro-accent/30',
-    outline: 'bg-transparent text-vyro-text border border-vyro-border'
+    outline: 'bg-transparent text-vyro-text border border-vyro-line'
   };
 
   const dotColors = {
     default: 'bg-vyro-muted',
-    success: 'bg-vyro-success',
-    warning: 'bg-vyro-warning',
-    error: 'bg-vyro-error',
+    neutral: 'bg-vyro-muted',
+    success: 'bg-status-handled',
+    warning: 'bg-status-needs',
+    error: 'bg-status-declined',
     accent: 'bg-vyro-accent',
     outline: 'bg-vyro-text'
   };
 
   return (
     <span className={twMerge(clsx(baseStyles, sizeStyles[size], variantStyles[variant], className))}>
-      {dot && <span className={clsx('w-1.5 h-1.5 rounded-full animate-pulse-subtle', dotColors[variant])} />}
+      {dot && <span className={clsx('w-1.5 h-1.5 rounded-full', dotColors[variant])} />}
       {children}
     </span>
   );

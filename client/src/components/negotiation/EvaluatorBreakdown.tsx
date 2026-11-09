@@ -1,6 +1,6 @@
 import React from 'react';
 import { MultiProposalComparison } from '../../types';
-import { Cpu, CheckCircle2, AlertTriangle, ShieldCheck, Award, TrendingUp } from 'lucide-react';
+import { Cpu, CheckCircle2, AlertTriangle, ShieldCheck, Award, TrendingUp, Zap, MessageSquare, Clock } from 'lucide-react';
 import { Badge } from '../common/Badge';
 
 interface EvaluatorBreakdownProps {
@@ -18,7 +18,9 @@ export const EvaluatorBreakdown: React.FC<EvaluatorBreakdownProps> = ({ evaluati
           </div>
           <div>
             <h4 className="text-sm font-semibold text-vyro-text tracking-tight">Evaluator Agent Analysis</h4>
-            <p className="text-[11px] text-vyro-muted font-mono">Independent Multi-Factor Scoring Model</p>
+            <p className="text-[11px] text-vyro-muted font-mono">
+              Autonomous Dynamic Urgency & Multi-Factor Scoring
+            </p>
           </div>
         </div>
         <Badge variant="accent" size="sm">
@@ -57,6 +59,11 @@ export const EvaluatorBreakdown: React.FC<EvaluatorBreakdownProps> = ({ evaluati
                       Recommended Deal
                     </Badge>
                   )}
+                  {evalItem.urgencyWeightApplied && (
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-vyro-accent/15 text-vyro-accent">
+                      {evalItem.urgencyWeightApplied}
+                    </span>
+                  )}
                 </div>
                 <div className="text-right font-mono">
                   <span className="text-sm font-bold text-vyro-text">${evalItem.proposalPrice}</span>
@@ -64,10 +71,10 @@ export const EvaluatorBreakdown: React.FC<EvaluatorBreakdownProps> = ({ evaluati
                 </div>
               </div>
 
-              {/* Score Metric Bars */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3 text-[10px] font-mono">
+              {/* 6-Vector Score Metric Bars */}
+              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-3 text-[10px] font-mono">
                 <div className="p-2 rounded bg-vyro-surface border border-vyro-border/50">
-                  <span className="text-vyro-subtle block">Price Score</span>
+                  <span className="text-vyro-subtle block">Price Match</span>
                   <span className="text-vyro-text font-bold">{evalItem.score.priceScore}%</span>
                 </div>
                 <div className="p-2 rounded bg-vyro-surface border border-vyro-border/50">
@@ -79,14 +86,22 @@ export const EvaluatorBreakdown: React.FC<EvaluatorBreakdownProps> = ({ evaluati
                   <span className="text-vyro-text font-bold">{evalItem.score.deliveryScore}%</span>
                 </div>
                 <div className="p-2 rounded bg-vyro-surface border border-vyro-border/50">
-                  <span className="text-vyro-subtle block">Risk Rating</span>
+                  <span className="text-vyro-subtle block">Workload Slots</span>
+                  <span className="text-vyro-text font-bold">{evalItem.score.capacityScore ?? 90}%</span>
+                </div>
+                <div className="p-2 rounded bg-vyro-surface border border-vyro-border/50">
+                  <span className="text-vyro-subtle block">Reply Points</span>
+                  <span className="text-vyro-text font-bold">{evalItem.score.responsivenessScore ?? 95}%</span>
+                </div>
+                <div className="p-2 rounded bg-vyro-surface border border-vyro-border/50">
+                  <span className="text-vyro-subtle block">Trust & Risk</span>
                   <span className="text-vyro-text font-bold">{evalItem.score.riskScore}%</span>
                 </div>
               </div>
 
               {/* Strengths & Weaknesses */}
               <div className="space-y-1 text-[11px]">
-                {evalItem.strengths.slice(0, 2).map((s, idx) => (
+                {evalItem.strengths.slice(0, 3).map((s, idx) => (
                   <div key={idx} className="flex items-center gap-1.5 text-vyro-success">
                     <CheckCircle2 className="w-3 h-3 shrink-0" />
                     <span className="truncate">{s}</span>

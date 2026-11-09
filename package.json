@@ -10,6 +10,8 @@
     "build:server": "cd server && npm run build",
     "build:client": "cd client && npm run build",
     "build": "npm run build:server && npm run build:client",
+    "db:reset": "npm --prefix server run db:reset",
+    "db:seed:demo": "npm --prefix server run db:seed:demo",
     "start": "cd server && npm start"
   },
   "keywords": ["ai", "commerce", "autonomous-agents", "paypal", "negotiation"],

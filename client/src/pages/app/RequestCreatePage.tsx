@@ -1,63 +1,86 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation, Link } from 'react-router-dom';
+import React, { useState, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Sparkles,
   ArrowRight,
   Bot,
-  ShieldCheck,
   CheckCircle2,
-  AlertTriangle,
+  Trash2,
+  Plus,
+  ShieldCheck,
   Clock,
   DollarSign,
-  Layers,
-  Edit2,
-  Plus,
-  Trash2
+  Lock,
+  ChevronRight
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
+import { useAuth } from '../../context/AuthContext';
 
 export const RequestCreatePage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const targetSellerId = location.state?.targetSellerId;
-  const initialPrompt = location.state?.initialPrompt;
+  const initialPrompt = location.state?.initialPrompt || location.state?.prefilledPrompt;
 
-  const [prompt, setPrompt] = useState(initialPrompt || '');
+  const [prompt, setPrompt] = useState(
+    initialPrompt || ''
+  );
   const [isParsing, setIsParsing] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
-  const [parsedData, setParsedData] = useState<any>(null);
+  const [hasParsed, setHasParsed] = useState(false);
 
-  // Editable parsed fields
-  const [title, setTitle] = useState('');
-  const [maxBudget, setMaxBudget] = useState(150);
-  const [deadlineDays, setDeadlineDays] = useState(5);
-  const [category, setCategory] = useState('Design');
-  const [deliverables, setDeliverables] = useState<string[]>([]);
-  const [newDeliv, setNewDeliv] = useState('');
+  // Structured Parameters
+  const [title, setTitle] = useState('OWASP Express API Security Audit');
+  const [maxBudget, setMaxBudget] = useState<number>(350);
+  const [targetBudget, setTargetBudget] = useState<number>(300);
+  const [deadlineDays, setDeadlineDays] = useState<number>(4);
+  const [category, setCategory] = useState<string>('Security');
+  const [deliverables, setDeliverables] = useState<string[]>([
+    'Vulnerability assessment report',
+    'Remediation guide with code patches',
+    'Architecture threat model'
+  ]);
+  const [newDeliverable, setNewDeliverable] = useState('');
 
-  const { data: aiStatus } = useQuery({
-    queryKey: ['aiStatusRequest'],
-    queryFn: api.getAIStatus,
+  // Fetch available seller agents
+  const { data: allAgents = [] } = useQuery({
+    queryKey: ['sellerAgentsForProcure'],
+    queryFn: () => api.getAgents({ type: 'seller' })
   });
 
   const samplePresets = [
     {
-      label: 'SaaS Landing Page ($150, 5d)',
-      text: 'I need a landing page for my SaaS business. My budget is $150 and I need delivery within five days.'
+      label: 'Security Audit',
+      badge: '$350 • 4d',
+      text: 'I need an OWASP top-10 security audit of my Express API completed within 4 days for under $350 USD.'
     },
     {
-      label: 'Smart Contract & API Audit ($400, 7d)',
-      text: 'Need a fast-track security audit for our smart contracts and REST API auth with vulnerability report for $400 within 7 days.'
+      label: 'Brand Identity',
+      badge: '$180 • 5d',
+      text: 'I need a responsive, high-converting brand landing page with accessible Tailwind design tokens, delivery in 5 days, budget under $180 USD.'
     },
     {
-      label: 'Interactive Design System ($250, 4d)',
-      text: 'Need a dark-mode design system with Tailwind CSS tokens and accessible component states within 4 days for $250 max.'
+      label: 'Mobile Architecture',
+      badge: '$280 • 6d',
+      text: 'Cross-platform mobile app architecture with clean state management, API integration, and unit tests. Budget $280 within 6 days.'
     }
   ];
+
+  // Discovered matching sellers
+  const matchingSellers = useMemo(() => {
+    return allAgents.filter(a => {
+      if (a.ownerId === user?.id) return false; // Strict isolation: never buy from yourself
+      if (category.toLowerCase() === 'security') {
+        return a.category.toLowerCase() === 'security' || a.id.includes('rosto') || a.id.includes('aether');
+      }
+      return a.category.toLowerCase() === category.toLowerCase() || a.category === 'General';
+    }).slice(0, 3);
+  }, [allAgents, category, user?.id]);
 
   const handleParsePrompt = async (promptOverride?: string) => {
     const textToParse = (promptOverride || prompt).trim();
@@ -69,17 +92,14 @@ export const RequestCreatePage: React.FC = () => {
     setIsParsing(true);
     try {
       const result = await api.parsePurchasingPrompt(textToParse);
-      setParsedData(result);
       setTitle(result.title);
       setMaxBudget(result.maxBudget);
+      setTargetBudget(Math.round(result.maxBudget * 0.85));
       setDeadlineDays(result.deadlineDays);
       setCategory(result.category);
       setDeliverables(result.deliverables || []);
-      if (result.isAiGenerated) {
-        toast.success(`Gemini AI structured requirements: "${result.title}"`);
-      } else {
-        toast.success(`Structured requirements generated: "${result.title}"`);
-      }
+      setHasParsed(true);
+      toast.success(`Specs structured: "${result.title}"`);
     } catch (err: any) {
       toast.error(err.message || 'Failed to parse prompt');
     } finally {
@@ -87,19 +107,23 @@ export const RequestCreatePage: React.FC = () => {
     }
   };
 
-  // Automatically parse initialPrompt if passed from Landing Page or Navigation
-  useEffect(() => {
-    if (initialPrompt && initialPrompt.trim()) {
-      handleParsePrompt(initialPrompt);
-    }
-  }, [initialPrompt]);
-
-  const handleApplyPreset = (presetText: string) => {
-    setPrompt(presetText);
-    handleParsePrompt(presetText);
+  const handleApplyPreset = (preset: typeof samplePresets[0]) => {
+    setPrompt(preset.text);
+    handleParsePrompt(preset.text);
   };
 
-  const handleLaunchMultiAgent = async () => {
+  const handleAddDeliverable = () => {
+    if (newDeliverable.trim()) {
+      setDeliverables([...deliverables, newDeliverable.trim()]);
+      setNewDeliverable('');
+    }
+  };
+
+  const handleRemoveDeliverable = (idx: number) => {
+    setDeliverables(deliverables.filter((_, i) => i !== idx));
+  };
+
+  const handleLaunchAutonomousProcurement = async () => {
     const textToUse = prompt.trim();
     if (!textToUse) {
       toast.error('Please enter your purchasing requirements.');
@@ -107,285 +131,288 @@ export const RequestCreatePage: React.FC = () => {
     }
 
     setIsLaunching(true);
-    toast.info('Dispatching Buyer Agent to negotiate across network...');
+    toast.info('Dispatching buyer agent to negotiate across verified sellers...');
     try {
-      let currentTitle = title;
-      let currentCategory = category;
-      let currentBudget = maxBudget;
-      let currentDeadline = deadlineDays;
-      let currentDeliverables = deliverables;
-      let currentCapabilities = parsedData?.requiredCapabilities;
-      let currentQuality = parsedData?.qualityRequirements;
-
-      // If user hasn't explicitly clicked Analyze yet, auto-parse now so their text is honored
-      if (!parsedData || !currentTitle) {
-        const parsed = await api.parsePurchasingPrompt(textToUse);
-        currentTitle = parsed.title;
-        currentCategory = parsed.category;
-        currentBudget = parsed.maxBudget;
-        currentDeadline = parsed.deadlineDays;
-        currentDeliverables = parsed.deliverables;
-        currentCapabilities = parsed.requiredCapabilities;
-        currentQuality = parsed.qualityRequirements;
-      }
-
       // 1. Create the persistent Commerce Request
       const createdRequest = await api.createRequest({
-        buyerAgentId: 'agent_buyer_studio',
         rawInput: textToUse,
-        title: currentTitle,
-        category: currentCategory,
-        requiredCapabilities: currentCapabilities || [`${currentCategory} Architecture`, 'Quality Assurance QA'],
-        deliverables: currentDeliverables && currentDeliverables.length > 0 
-          ? currentDeliverables 
-          : [`${currentTitle} Core Implementation`, 'Quality Assurance Verification'],
-        maxBudget: currentBudget,
+        title: title || 'Autonomous Procurement Project',
+        category: category,
+        requiredCapabilities: [`${category} Architecture`, 'Quality Verification'],
+        deliverables: deliverables.length > 0 ? deliverables : [`${title} Deliverable`, 'Verification Hand-off'],
+        maxBudget: maxBudget,
         currency: 'USD',
-        deadlineDays: currentDeadline,
-        qualityRequirements: currentQuality || 'Clean verified delivery, zero console warnings.'
+        deadlineDays: deadlineDays,
+        qualityRequirements: 'Verified delivery, source tokens included, zero technical debt.'
       });
 
-      // 2. Select matching sellers based on category
+      // 2. Select matching sellers
       let sellerIds = targetSellerId ? [targetSellerId] : [];
       if (sellerIds.length === 0) {
-        if (currentCategory.toLowerCase() === 'security') {
-          sellerIds = ['agent_seller_aether', 'agent_seller_launchcraft', 'agent_seller_pixel'];
-        } else {
-          sellerIds = ['agent_seller_pixel', 'agent_seller_launchcraft', 'agent_seller_northstar'];
-        }
+        sellerIds = matchingSellers.map(s => s.id);
       }
+      if (sellerIds.length === 0 && allAgents.length > 0) {
+        sellerIds = allAgents.slice(0, 2).map(a => a.id);
+      }
+
+      // Ensure buyer doesn't negotiate with their own seller agent
+      const myAgentIds = allAgents.filter(a => a.ownerId === user?.id).map(a => a.id);
+      sellerIds = sellerIds.filter(sId => !myAgentIds.includes(sId));
 
       // 3. Launch multi-agent negotiation
       const result = await api.runMultiAgentNegotiation(createdRequest.id, sellerIds);
 
-      toast.success('Autonomous multi-agent consensus formed! Directing to workspace...');
+      toast.success('Negotiation initiated. Entering deal channel...');
       const recommendedNegId = result.evaluation?.recommendedNegotiationId || result.negotiations[0]?.id;
-      navigate(`/app/negotiations/${recommendedNegId}`);
+      navigate(`/app/deals/${recommendedNegId}`);
     } catch (err: any) {
-      toast.error(err.message || 'Failed to launch negotiation');
+      toast.error(err.message || 'Failed to dispatch procurement');
     } finally {
       setIsLaunching(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="pb-4 border-b border-vyro-border">
-        <div className="flex items-center gap-2 mb-1">
-          <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-            Procurement Request Engine
-          </h1>
-          {aiStatus?.isLive ? (
-            <Badge variant="success" size="sm" dot>Gemini Live</Badge>
-          ) : (
-            <Link to="/app/settings">
-              <Badge variant="outline" size="sm">Smart Extractor</Badge>
-            </Link>
-          )}
+    <div className="space-y-6 max-w-5xl mx-auto pb-16">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-vyro-border/60">
+        <div>
+          <div className="flex items-center gap-2">
+            <h1 className="text-sm font-semibold font-mono text-vyro-text uppercase tracking-wider">
+              New Request
+            </h1>
+            <Badge variant="accent" size="sm">
+              Autonomous Procurement
+            </Badge>
+          </div>
+          <p className="text-xs text-vyro-muted mt-0.5">
+            Describe what you need in plain language. Your buyer agent handles search, negotiations, and pricing.
+          </p>
         </div>
-        <p className="text-xs text-vyro-muted">
-          Specify what you need in plain natural language. VYRO structures the requirements and launches autonomous negotiations with seller agents.
-        </p>
       </div>
 
-      {/* Natural Language Prompt Card */}
-      <div className="p-5 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <label className="text-xs font-mono uppercase text-vyro-muted block">
-            Natural Language Commercial Requirement
-          </label>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-mono text-vyro-subtle">Presets:</span>
-            {samplePresets.map((preset) => (
+      {/* Main Grid Workspace */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Left Column: Natural Language Input & Fine-Tuning (7 cols) */}
+        <div className="lg:col-span-7 space-y-5">
+          {/* Natural Language Canvas */}
+          <div className="p-4 sm:p-5 rounded-xl bg-vyro-surface border border-vyro-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-vyro-text flex items-center gap-2 font-mono">
+                <Sparkles className="w-3.5 h-3.5 text-blue-400" />
+                <span>Procurement Brief</span>
+              </label>
               <button
-                key={preset.label}
                 type="button"
-                onClick={() => handleApplyPreset(preset.text)}
-                className="text-[11px] font-mono px-2 py-0.5 rounded bg-vyro-card hover:bg-vyro-hover text-vyro-accent border border-vyro-border/60 transition-colors"
+                onClick={() => handleParsePrompt()}
+                disabled={isParsing}
+                className="text-[11px] font-mono text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1 font-medium"
               >
-                {preset.label}
+                {isParsing ? 'Structuring Specs...' : 'Structure with AI →'}
               </button>
-            ))}
-          </div>
-        </div>
-        
-        <div className="relative">
-          <textarea
-            rows={4}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Type your requirements freely, e.g.: I need a bespoke mobile ecommerce design with Apple Pay, maximum budget $220, turnaround in 6 days..."
-            className="w-full bg-vyro-card border border-vyro-border rounded-[6px] p-3.5 text-xs text-vyro-text placeholder:text-vyro-subtle focus:outline-none focus:border-vyro-accent transition-colors leading-relaxed font-sans"
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2">
-          <span className="text-[11px] font-mono text-vyro-muted">
-            {prompt.trim().length > 0 ? `${prompt.trim().split(/\s+/).length} words entered` : 'Ready for input'}
-          </span>
-
-          <div className="flex items-center gap-2 w-full sm:w-auto">
-            <Button
-              variant="secondary"
-              size="sm"
-              isLoading={isParsing}
-              onClick={() => handleParsePrompt()}
-              leftIcon={<Sparkles className="w-3.5 h-3.5 text-vyro-accent" />}
-              className="flex-1 sm:flex-initial"
-            >
-              {parsedData ? 'Re-Structure Requirements' : 'Analyze Requirements'}
-            </Button>
-            <Button
-              variant="accent"
-              size="sm"
-              isLoading={isLaunching}
-              onClick={handleLaunchMultiAgent}
-              rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-              className="flex-1 sm:flex-initial"
-            >
-              Negotiate Now
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Structured Interpretation & Verification (Editable) */}
-      {parsedData && (
-        <div className="p-5 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-5 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between pb-3 border-b border-vyro-border">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-vyro-success" />
-              <h3 className="text-xs font-mono font-semibold uppercase tracking-wider text-vyro-text">
-                Structured Specifications
-              </h3>
             </div>
-            <span className="text-[11px] font-mono text-vyro-muted">
-              {parsedData.isAiGenerated ? 'Gemini AI Extracted' : 'Smart Parser'} • Verified & Editable
-            </span>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div className="sm:col-span-2">
-              <label className="text-[10px] font-mono uppercase text-vyro-subtle block mb-1">Contract Scope Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent font-medium"
+            <div className="relative">
+              <textarea
+                rows={4}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                placeholder="Describe the service or project, budget ceiling, delivery timeline, and key requirements..."
+                className="w-full bg-vyro-card border border-vyro-border rounded-lg p-3 text-xs text-vyro-text leading-relaxed focus:outline-none focus:border-vyro-accent resize-none transition-colors font-sans"
               />
             </div>
-            <div>
-              <label className="text-[10px] font-mono uppercase text-vyro-subtle block mb-1">Category</label>
-              <input
-                type="text"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent font-medium"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
+            {/* Quick Presets */}
             <div>
-              <label className="text-[10px] font-mono uppercase text-vyro-subtle block mb-1">Budget Ceiling ($ USD)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={maxBudget}
-                  onChange={(e) => setMaxBudget(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs font-mono font-bold text-vyro-text focus:outline-none focus:border-vyro-accent pl-6"
-                />
-                <span className="absolute left-2.5 top-1.5 text-xs font-mono text-vyro-muted">$</span>
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-mono uppercase text-vyro-subtle block mb-1">Turnaround Limit (Days)</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={deadlineDays}
-                  onChange={(e) => setDeadlineDays(parseInt(e.target.value, 10) || 1)}
-                  className="w-full bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs font-mono font-bold text-vyro-text focus:outline-none focus:border-vyro-accent pl-3"
-                />
-                <span className="absolute right-3 top-1.5 text-xs font-mono text-vyro-muted">Days</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Deliverables Checklist */}
-          <div>
-            <label className="text-[10px] font-mono uppercase text-vyro-subtle block mb-2">
-              Deliverables Required ({deliverables.length})
-            </label>
-            <div className="space-y-1.5 mb-3">
-              {deliverables.map((deliv, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between p-2 rounded bg-vyro-card border border-vyro-border text-xs"
-                >
-                  <span className="text-vyro-text">{deliv}</span>
+              <span className="text-[10px] font-mono uppercase text-vyro-subtle block mb-1.5">
+                Sample Projects:
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {samplePresets.map((preset, idx) => (
                   <button
+                    key={idx}
                     type="button"
-                    onClick={() => setDeliverables(deliverables.filter((_, i) => i !== index))}
-                    className="text-vyro-subtle hover:text-vyro-error transition-colors"
+                    onClick={() => handleApplyPreset(preset)}
+                    className="px-2.5 py-1.5 rounded-lg bg-vyro-card border border-vyro-border/60 hover:border-vyro-accent/50 text-[11px] text-vyro-muted hover:text-vyro-text transition-colors flex items-center gap-2 font-mono"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{preset.label}</span>
+                    <span className="text-[10px] text-vyro-subtle font-mono">{preset.badge}</span>
                   </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Structured Requirements Editor */}
+          <div className="p-4 sm:p-5 rounded-xl bg-vyro-surface border border-vyro-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-vyro-border/50">
+              <span className="text-xs font-mono uppercase text-vyro-subtle font-semibold tracking-wider">
+                Structured Parameters
+              </span>
+              <span className="text-[10px] font-mono text-vyro-muted">
+                {hasParsed ? '✓ AI Parsed' : 'Manual / Template'}
+              </span>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="text-[11px] font-mono text-vyro-muted block mb-1">Project Title</label>
+                <input
+                  type="text"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-1.5 text-xs text-vyro-text font-medium focus:outline-none focus:border-vyro-accent"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[11px] font-mono text-vyro-muted flex items-center justify-between mb-1">
+                    <span>Max Budget Ceiling</span>
+                    <span className="text-[10px] text-amber-400 flex items-center gap-0.5">
+                      <Lock className="w-2.5 h-2.5" /> Strictly Private
+                    </span>
+                  </label>
+                  <div className="relative">
+                    <DollarSign className="w-3.5 h-3.5 text-vyro-subtle absolute left-2.5 top-2" />
+                    <input
+                      type="number"
+                      value={maxBudget}
+                      onChange={(e) => setMaxBudget(Number(e.target.value))}
+                      className="w-full bg-vyro-card border border-vyro-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-vyro-text font-mono tabular-nums focus:outline-none focus:border-vyro-accent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[11px] font-mono text-vyro-muted block mb-1">Deadline</label>
+                  <div className="relative">
+                    <Clock className="w-3.5 h-3.5 text-vyro-subtle absolute left-2.5 top-2" />
+                    <input
+                      type="number"
+                      value={deadlineDays}
+                      onChange={(e) => setDeadlineDays(Number(e.target.value))}
+                      className="w-full bg-vyro-card border border-vyro-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-vyro-text font-mono tabular-nums focus:outline-none focus:border-vyro-accent"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Deliverables List */}
+              <div className="space-y-2 pt-2">
+                <label className="text-[11px] font-mono text-vyro-muted block">Required Deliverables</label>
+                <div className="space-y-1.5">
+                  {deliverables.map((del, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg bg-vyro-card border border-vyro-border/60 text-xs text-vyro-text"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">{del}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveDeliverable(idx)}
+                        className="text-vyro-subtle hover:text-vyro-error p-0.5 transition-colors"
+                        aria-label="Remove deliverable"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={newDeliverable}
+                    onChange={(e) => setNewDeliverable(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddDeliverable())}
+                    placeholder="Add specific delivery item..."
+                    className="flex-1 bg-vyro-card border border-vyro-border rounded-lg px-3 py-1.5 text-xs text-vyro-text placeholder-vyro-subtle focus:outline-none focus:border-vyro-accent"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAddDeliverable}
+                    leftIcon={<Plus className="w-3 h-3" />}
+                    className="text-xs h-8 px-3"
+                  >
+                    Add
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Matched Sellers & Launch Dispatch (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="p-4 sm:p-5 rounded-xl bg-vyro-surface border border-vyro-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-vyro-border/50">
+              <span className="text-xs font-mono uppercase text-vyro-subtle font-semibold tracking-wider">
+                Matching Sellers
+              </span>
+              <span className="text-[10px] font-mono text-emerald-400">
+                {matchingSellers.length} Ready
+              </span>
+            </div>
+
+            <p className="text-xs text-vyro-muted">
+              Your buyer agent will initiate parallel negotiations with these verified counterparties.
+            </p>
+
+            <div className="space-y-2">
+              {matchingSellers.map((seller) => (
+                <div
+                  key={seller.id}
+                  className="p-3 rounded-lg bg-vyro-card border border-vyro-border/60 flex items-center justify-between gap-3 text-xs"
+                >
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-vyro-text">{seller.businessName}</span>
+                      {seller.verificationStatus === 'verified' && (
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      )}
+                    </div>
+                    <span className="text-[10px] font-mono text-vyro-muted block">
+                      {seller.category} · Starts ~${seller.pricingConstraints.startingPrice || 150}
+                    </span>
+                  </div>
+                  <Badge variant="default" size="sm">
+                    {seller.negotiationStrategy.replace('_', ' ')}
+                  </Badge>
                 </div>
               ))}
             </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                placeholder="Add another deliverable..."
-                value={newDeliv}
-                onChange={(e) => setNewDeliv(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newDeliv.trim()) {
-                    e.preventDefault();
-                    setDeliverables([...deliverables, newDeliv.trim()]);
-                    setNewDeliv('');
-                  }
-                }}
-                className="flex-1 bg-vyro-card border border-vyro-border rounded-[6px] px-3 py-1.5 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                onClick={() => {
-                  if (newDeliv.trim()) {
-                    setDeliverables([...deliverables, newDeliv.trim()]);
-                    setNewDeliv('');
-                  }
-                }}
-              >
-                Add
-              </Button>
-            </div>
-          </div>
-
-          {/* Action to dispatch */}
-          <div className="pt-3 border-t border-vyro-border flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-mono text-vyro-muted">
-              <Bot className="w-3.5 h-3.5 text-vyro-accent" />
-              <span>Assigned Buyer Agent: Studio Buyer</span>
+            {/* Privacy Guarantee Note */}
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 font-mono space-y-1">
+              <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Zero Private Leaks Guarantee</span>
+              </div>
+              <p className="text-[11px] text-vyro-muted font-sans">
+                Your ceiling of ${maxBudget} is never transmitted to seller prompts or logs.
+              </p>
             </div>
 
+            {/* Primary Dispatch Action */}
             <Button
-              variant="accent"
-              size="md"
+              variant="primary"
+              size="lg"
               isLoading={isLaunching}
-              onClick={handleLaunchMultiAgent}
+              onClick={handleLaunchAutonomousProcurement}
               rightIcon={<ArrowRight className="w-4 h-4" />}
+              className="w-full justify-center text-xs font-semibold py-3 rounded-lg"
             >
-              Dispatch Multi-Agent Negotiation
+              Dispatch Autonomous Procurement
             </Button>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };
