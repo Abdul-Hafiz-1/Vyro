@@ -119,7 +119,8 @@ async function run() {
     await login(buyerPage, 'demo.buyer@example.com', 'password123');
 
     const screensToScan = [
-      { url: `${BASE_URL}/app`, name: 'Today (Home)' }
+      { url: `${BASE_URL}/app`, name: 'Today (Home)' },
+      { url: `${BASE_URL}/app/requests/new`, name: 'New Request Flow' },
     ];
 
     for (const vp of VIEWPORTS) {

@@ -4,6 +4,8 @@ import confetti from 'canvas-confetti';
 import { api } from '../../api/client';
 import { Agreement, Transaction } from '../../types';
 import { ShieldCheck, Loader2, AlertCircle, HelpCircle } from 'lucide-react';
+import { formatMoney } from '../../lib/present';
+import { StatusChip } from '../common/StatusChip';
 
 interface PayPalCheckoutButtonProps {
   agreement: Agreement;
@@ -28,44 +30,41 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
   );
 
   useEffect(() => {
-    // Dynamically retrieve client ID from server config if missing
     if (!clientId || clientId === 'sb') {
       api.getPayPalConfig().then((cfg) => {
         if (cfg.clientId && cfg.clientId !== 'sb') {
           setClientId(cfg.clientId);
         }
-      }).catch(() => {
-        // Fallback to default
-      });
+      }).catch(() => {});
     }
   }, [clientId]);
 
   return (
-    <div className="p-4 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-      <div className="flex items-center justify-between pb-2 border-b border-vyro-border/60">
-        <div className="flex items-center gap-2 text-xs font-mono text-vyro-text">
-          <ShieldCheck className="w-4 h-4 text-vyro-success" />
-          <span className="font-semibold">PayPal Sandbox Orders API</span>
+    <div className="p-5 rounded-surface bg-surface border border-border-subtle flex flex-col gap-4 text-text-primary">
+      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+        <div className="flex items-center gap-2 text-secondary text-text-primary font-medium">
+          <ShieldCheck className="w-4 h-4 text-status-handled" strokeWidth={2} />
+          <span>PayPal Escrow Checkout</span>
         </div>
-        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-vyro-warning-bg border border-vyro-warning/30 text-vyro-warning">
-          SANDBOX TESTNET
+        <StatusChip label="Sandbox testnet" role="neutral" size="sm" />
+      </div>
+
+      <div className="flex items-baseline justify-between">
+        <span className="text-secondary text-text-muted">Total to authorize</span>
+        <span className="font-display font-bold text-[24px] text-text-primary">
+          {formatMoney(agreement.finalPrice)}
         </span>
       </div>
 
-      <div className="flex items-center justify-between text-xs font-mono">
-        <span className="text-vyro-muted">Total Authorized:</span>
-        <span className="text-base font-bold text-vyro-text">${agreement.finalPrice.toFixed(2)} USD</span>
-      </div>
-
       {errorInfo && (
-        <div className="p-3 rounded bg-vyro-error/15 border border-vyro-error/30 text-xs text-vyro-error space-y-1">
+        <div className="p-3.5 rounded-control bg-status-declined/10 border border-status-declined/20 text-secondary text-status-declined flex flex-col gap-1.5">
           <div className="flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={2} />
             <span className="font-medium">{errorInfo.message}</span>
           </div>
           {errorInfo.nextStep && (
-            <div className="flex items-start gap-2 text-vyro-muted text-[11px] pl-6">
-              <HelpCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-vyro-accent" />
+            <div className="flex items-start gap-2 text-text-muted text-secondary pl-6">
+              <HelpCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-volt" strokeWidth={2} />
               <span>{errorInfo.nextStep}</span>
             </div>
           )}
@@ -73,13 +72,13 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
       )}
 
       {loading && (
-        <div className="flex items-center justify-center gap-2 py-2 text-xs text-vyro-accent font-mono">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          <span>Processing PayPal authorization...</span>
+        <div className="flex items-center justify-center gap-2 py-2 text-secondary text-volt font-medium">
+          <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
+          <span>Processing PayPal authorization…</span>
         </div>
       )}
 
-      {/* Real PayPal Buttons with createOrder & onApprove lifecycle */}
+      {/* Real PayPal Buttons */}
       <div className="pt-1">
         <PayPalScriptProvider
           options={{
@@ -95,7 +94,7 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
               color: 'gold',
               shape: 'rect',
               label: 'paypal',
-              height: 44
+              height: 48
             }}
             disabled={loading}
             createOrder={async () => {
@@ -120,18 +119,15 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
               setLoading(true);
               setErrorInfo(null);
               try {
-                // Browser asks server to capture ONLY after buyer approved in popup
                 const tx = await api.capturePayPalOrder(data.orderID);
                 try {
                   confetti({
                     particleCount: 80,
                     spread: 70,
                     origin: { y: 0.6 },
-                    colors: ['#63D6A0', '#8B7CFF', '#F2F2F0']
+                    colors: ['#D4FF3A', '#34D399', '#FFFFFF']
                   });
-                } catch {
-                  // Non-blocking
-                }
+                } catch {}
                 onPaymentSuccess(tx);
               } catch (err: any) {
                 const message = err.message || 'Failed to capture PayPal payment.';
@@ -161,8 +157,8 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
         </PayPalScriptProvider>
       </div>
 
-      <p className="text-[10px] text-vyro-subtle text-center font-mono">
-        Secured by PayPal Orders v2 Sandbox API. Funds captured directly to platform with held seller ledger.
+      <p className="text-secondary text-text-muted text-center">
+        Secured by PayPal Sandbox. Funds are held in escrow until deliverables are verified.
       </p>
     </div>
   );

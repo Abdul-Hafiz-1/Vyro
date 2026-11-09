@@ -99,6 +99,18 @@ if (require.main === module) {
       newImg: path.join(NEW_UI_DIR, 'today_390_dark.png'),
       oldImg: path.join(OLD_UI_DIR, 'buyer_overview_filled_390_dark.png'),
       paperImg: path.join(PAPER_UI_DIR, 'today_390_light.png')
+    },
+    {
+      name: 'New Request Desktop 1440 Dark',
+      newImg: path.join(path.resolve(__dirname, '..', 'audit', 'gate2'), 'buyer_request_new_1440_dark.png'),
+      oldImg: path.join(OLD_UI_DIR, 'buyer_request_new_1440_dark.png'),
+      paperImg: path.join(PAPER_UI_DIR, 'buyer_request_new_1440_dark.png')
+    },
+    {
+      name: 'Deal Cockpit Desktop 1440 Dark',
+      newImg: path.join(path.resolve(__dirname, '..', 'audit', 'gate2'), 'buyer_deal_cockpit_1440_dark.png'),
+      oldImg: path.join(OLD_UI_DIR, 'buyer_deal_escalated_cockpit_1440_dark.png'),
+      paperImg: path.join(PAPER_UI_DIR, 'buyer_deal_escalated_cockpit_1440_dark.png')
     }
   ];
 

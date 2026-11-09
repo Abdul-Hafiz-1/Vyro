@@ -98,6 +98,8 @@ function run() {
     path.join(CLIENT_SRC, 'components', 'common', 'Skeleton.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'AppLayout.tsx'),
     path.join(CLIENT_SRC, 'pages', 'app', 'OverviewPage.tsx'),
+    path.join(CLIENT_SRC, 'pages', 'app', 'RequestCreatePage.tsx'),
+    path.join(CLIENT_SRC, 'pages', 'app', 'NegotiationDetailPage.tsx'),
     path.join(CLIENT_SRC, 'pages', 'StyleguidePage.tsx'),
   ];
 
