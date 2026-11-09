@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Scale, ArrowRight, Bot, Clock, DollarSign, Plus } from 'lucide-react';
+import { Scale, ArrowRight, Clock, Plus, Store, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { api } from '../../api/client';
-import { Negotiation } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Badge } from '../../components/common/Badge';
 import { useAuth } from '../../context/AuthContext';
 
 export const NegotiationsListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, isBuyerWorkspace: isBuyer } = useAuth();
+  const { isBuyerWorkspace: isBuyer } = useAuth();
   const [filter, setFilter] = useState<string>('all');
 
   const { data: negotiations = [], isLoading } = useQuery({
@@ -21,27 +20,48 @@ export const NegotiationsListPage: React.FC = () => {
 
   const filtered = negotiations.filter((n) => {
     if (filter === 'all') return true;
+    if (filter === 'review') return n.status === 'escalated';
     if (filter === 'active') return n.status === 'in_negotiation' || n.status === 'initiated';
-    if (filter === 'agreed') return n.status === 'agreement_reached';
+    if (filter === 'agreed') return n.status === 'agreement_reached' || n.status === 'accepted';
     if (filter === 'completed') return (n.status as string) === 'completed' || (n.status as string) === 'COMPLETED';
     return true;
   });
 
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'escalated':
+        return <Badge variant="warning" size="sm" dot>Needs Your Review</Badge>;
+      case 'in_negotiation':
+      case 'initiated':
+        return <Badge variant="accent" size="sm" dot>Negotiating</Badge>;
+      case 'agreement_reached':
+      case 'accepted':
+        return <Badge variant="success" size="sm" dot>Agreement Reached</Badge>;
+      case 'completed':
+      case 'COMPLETED':
+        return <Badge variant="success" size="sm">Settled & Paid</Badge>;
+      case 'declined':
+        return <Badge variant="error" size="sm">Declined</Badge>;
+      default:
+        return <Badge variant="default" size="sm">{status.replace(/_/g, ' ')}</Badge>;
+    }
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-5xl mx-auto">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-border gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-line gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-              {isBuyer ? 'Procurement Channels' : 'Client Negotiation Desks'}
+              Deals
             </h1>
-            <Badge variant={isBuyer ? 'accent' : 'success'} size="sm">{filtered.length} Channels</Badge>
+            <Badge variant="default" size="sm">{filtered.length} Total</Badge>
           </div>
           <p className="text-xs text-vyro-muted">
             {isBuyer 
-              ? 'Autonomous dialogues with third-party sellers across the network. Inspect price floors, delivery SLAs, and evaluator picks.'
-              : `Incoming client project briefs received by ${user?.sellerProfile?.businessName || user?.displayName || 'your studio'}. Autonomous counteroffers, capacity checks, and client terms.`
+              ? 'Autonomous bargaining channels with sellers. Review packages, approve terms, and track settlement.'
+              : 'Incoming client procurement briefs. Your seller agent negotiates turnaround, pricing, and scope within your rules.'
             }
           </p>
         </div>
@@ -53,35 +73,36 @@ export const NegotiationsListPage: React.FC = () => {
             onClick={() => navigate('/app/requests/new')}
             leftIcon={<Plus className="w-4 h-4" />}
           >
-            New Procurement
+            Post a Request
           </Button>
         ) : (
           <Button
-            variant="secondary"
+            variant="primary"
             size="sm"
-            onClick={() => navigate('/app/network')}
-            leftIcon={<Bot className="w-4 h-4 text-vyro-success" />}
+            onClick={() => navigate('/app/listings/new')}
+            leftIcon={<Store className="w-4 h-4" />}
           >
-            Marketplace Registry
+            Create a Listing
           </Button>
         )}
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-2 border-b border-vyro-border pb-2 text-xs font-mono">
+      <div className="flex items-center gap-1.5 border-b border-vyro-line pb-2 text-xs font-mono overflow-x-auto">
         {[
-          { key: 'all', label: 'All Negotiations' },
-          { key: 'active', label: 'Active Dialogues' },
-          { key: 'agreed', label: 'Consensus Formed' },
+          { key: 'all', label: 'All Deals' },
+          { key: 'review', label: 'Needs Review' },
+          { key: 'active', label: 'In Negotiation' },
+          { key: 'agreed', label: 'Agreement Reached' },
           { key: 'completed', label: 'Settled & Paid' }
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setFilter(tab.key)}
-            className={`px-3 py-1.5 rounded uppercase tracking-wider transition-colors ${
+            className={`px-3 py-1.5 rounded-control transition-colors cursor-pointer text-xs ${
               filter === tab.key
-                ? 'bg-vyro-surface border border-vyro-accent text-vyro-text font-bold'
-                : 'text-vyro-muted hover:text-vyro-text'
+                ? 'bg-vyro-surface border border-vyro-line text-vyro-text font-semibold shadow-xs'
+                : 'text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface/50'
             }`}
           >
             {tab.label}
@@ -93,70 +114,57 @@ export const NegotiationsListPage: React.FC = () => {
       {isLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-24 rounded-[8px] bg-vyro-surface border border-vyro-border animate-pulse" />
+            <div key={i} className="h-20 rounded-control bg-vyro-surface border border-vyro-line animate-pulse" />
           ))}
         </div>
       ) : filtered.length > 0 ? (
         <div className="space-y-3">
           {filtered.map((neg) => {
-            const isAgreed = neg.status === 'agreement_reached' || (neg.status as string) === 'completed' || (neg.status as string) === 'COMPLETED';
+            const price = neg.currentProposal?.price || 150;
+            const deliveryDays = neg.currentProposal?.deliveryDays || 5;
 
             return (
               <div
                 key={neg.id}
-                onClick={() => navigate(`/app/negotiations/${neg.id}`)}
-                className={`p-5 rounded-[8px] border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 ${
-                  isAgreed
-                    ? 'bg-vyro-surface border-vyro-border hover:border-vyro-success/50'
-                    : 'bg-vyro-surface border-vyro-border hover:border-vyro-accent/50'
-                }`}
+                onClick={() => navigate(`/app/deals/${neg.id}`)}
+                className="p-4 rounded-control bg-vyro-surface border border-vyro-line hover:border-vyro-accent/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-xs"
               >
-                <div className="flex items-start gap-4 min-w-0">
-                  <div className={`w-10 h-10 rounded-[6px] border flex items-center justify-center shrink-0 ${
-                    isAgreed ? 'bg-vyro-success-bg/20 border-vyro-success text-vyro-success' : 'bg-vyro-card border-vyro-border text-vyro-accent'
-                  }`}>
-                    <Scale className="w-5 h-5" />
+                <div className="space-y-1.5 min-w-0">
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(neg.status)}
+                    <span className="text-xs text-vyro-muted">
+                      Round {neg.currentRound} of {neg.maxRounds}
+                    </span>
                   </div>
 
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold font-mono text-vyro-text">{neg.id}</h3>
-                      <Badge
-                        variant={
-                          ((neg.status as string) === 'completed' || (neg.status as string) === 'COMPLETED') ? 'success' :
-                          neg.status === 'agreement_reached' ? 'warning' :
-                          neg.status === 'in_negotiation' ? 'accent' : 'default'
-                        }
-                        size="sm"
-                      >
-                        {neg.status.replace('_', ' ').toUpperCase()}
-                      </Badge>
-                    </div>
+                  <h3 className="text-sm font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors truncate">
+                    {neg.currentProposal?.whyThisOffer || 'Commercial Service Package'}
+                  </h3>
 
-                    <div className="flex items-center gap-3 mt-1.5 text-xs text-vyro-muted font-mono">
-                      <span>Rounds: {neg.currentRound}/{neg.maxRounds}</span>
-                      <span>•</span>
-                      <span>{neg.messages.length} Structured Messages</span>
-                      <span>•</span>
-                      <span className="text-vyro-subtle">
-                        Updated {new Date(neg.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
+                  <div className="flex items-center gap-3 text-xs text-vyro-muted">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {deliveryDays} Business Days
+                    </span>
+                    <span>·</span>
+                    <span>
+                      {isBuyer ? 'Counterparty Seller' : 'Client Buyer'}
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 self-end sm:self-center shrink-0">
-                  <div className="text-right font-mono">
-                    <span className="text-base font-bold text-vyro-text block">
-                      ${neg.currentProposal?.price || 150}
+                  <div className="text-right">
+                    <span className="text-base font-bold text-vyro-text block tabular-nums">
+                      ${price} USD
                     </span>
-                    <span className="text-[10px] text-vyro-muted">
-                      {neg.currentProposal?.deliveryDays || 5}d Delivery
+                    <span className="text-xs text-vyro-muted">
+                      Agreed Package
                     </span>
                   </div>
 
                   <Button variant="outline" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-                    Inspect
+                    Open Cockpit
                   </Button>
                 </div>
               </div>
@@ -164,17 +172,37 @@ export const NegotiationsListPage: React.FC = () => {
           })}
         </div>
       ) : (
-        <div className="py-16 text-center text-xs text-vyro-muted bg-vyro-surface rounded-[8px] border border-vyro-border">
-          <Scale className="w-8 h-8 text-vyro-subtle mx-auto mb-2" />
-          <p>No negotiations found in this filter.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => navigate('/app/requests/new')}
-          >
-            Create New Request
-          </Button>
+        <div className="py-16 text-center text-xs text-vyro-muted bg-vyro-surface rounded-control border border-vyro-line space-y-3 p-6">
+          <Scale className="w-8 h-8 text-vyro-muted mx-auto mb-1" />
+          <h3 className="text-sm font-semibold text-vyro-text">
+            {filter === 'all' ? 'No deals yet' : `No deals in "${filter.replace(/_/g, ' ')}"`}
+          </h3>
+          <p className="max-w-sm mx-auto text-xs text-vyro-muted">
+            {isBuyer 
+              ? 'Post a request describing what you need. Your buyer agent will match with suppliers and negotiate automatically.'
+              : 'Create a listing with your standard price and confidential floor to receive proposals.'}
+          </p>
+          <div className="pt-2">
+            {isBuyer ? (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/app/requests/new')}
+                leftIcon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Post Your First Request
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/app/listings/new')}
+                leftIcon={<Plus className="w-3.5 h-3.5" />}
+              >
+                Create Your First Listing
+              </Button>
+            )}
+          </div>
         </div>
       )}
     </div>

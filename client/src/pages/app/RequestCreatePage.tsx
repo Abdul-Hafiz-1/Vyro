@@ -35,16 +35,12 @@ export const RequestCreatePage: React.FC = () => {
   const [hasParsed, setHasParsed] = useState(false);
 
   // Structured Parameters
-  const [title, setTitle] = useState('OWASP Express API Security Audit');
-  const [maxBudget, setMaxBudget] = useState<number>(350);
-  const [targetBudget, setTargetBudget] = useState<number>(300);
-  const [deadlineDays, setDeadlineDays] = useState<number>(4);
-  const [category, setCategory] = useState<string>('Security');
-  const [deliverables, setDeliverables] = useState<string[]>([
-    'Vulnerability assessment report',
-    'Remediation guide with code patches',
-    'Architecture threat model'
-  ]);
+  const [title, setTitle] = useState(initialPrompt ? 'Commercial Service Request' : '');
+  const [maxBudget, setMaxBudget] = useState<number | ''>(initialPrompt ? 250 : '');
+  const [targetBudget, setTargetBudget] = useState<number | ''>(initialPrompt ? 200 : '');
+  const [deadlineDays, setDeadlineDays] = useState<number | ''>(initialPrompt ? 5 : '');
+  const [category, setCategory] = useState<string>('Design');
+  const [deliverables, setDeliverables] = useState<string[]>([]);
   const [newDeliverable, setNewDeliverable] = useState('');
 
   // Fetch available seller agents

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const EDGE_PATH = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
-const OUTPUT_DIR = path.join(__dirname, '..', 'audit', 'round-0');
+const OUTPUT_DIR = process.env.OUTPUT_DIR || (process.argv[2] ? path.resolve(process.argv[2]) : path.join(__dirname, '..', 'audit', 'round-0'));
 
 if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
