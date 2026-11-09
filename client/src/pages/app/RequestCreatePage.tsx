@@ -136,9 +136,9 @@ export const RequestCreatePage: React.FC = () => {
         category: category,
         requiredCapabilities: [`${category} Architecture`, 'Quality Verification'],
         deliverables: deliverables.length > 0 ? deliverables : [`${title} Deliverable`, 'Verification Hand-off'],
-        maxBudget: maxBudget,
+        maxBudget: maxBudget === '' ? undefined : Number(maxBudget),
         currency: 'USD',
-        deadlineDays: deadlineDays,
+        deadlineDays: deadlineDays === '' ? undefined : Number(deadlineDays),
         qualityRequirements: 'Verified delivery, source tokens included, zero technical debt.'
       });
 

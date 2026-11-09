@@ -220,4 +220,100 @@ router.post('/onboarding', authenticateUser, (req: AuthenticatedRequest, res: Re
   });
 });
 
+// PATCH /api/v1/auth/profile
+router.patch('/profile', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const { displayName, bio, isAutomationPaused, buyerPreferences, sellerProfile } = req.body;
+
+  if (displayName && typeof displayName === 'string') {
+    user.displayName = displayName.trim();
+  }
+  if (bio !== undefined) {
+    user.bio = typeof bio === 'string' ? bio.trim() : null as any;
+  }
+  if (typeof isAutomationPaused === 'boolean') {
+    user.isAutomationPaused = isAutomationPaused;
+  }
+  if (buyerPreferences) {
+    user.buyerPreferences = { ...user.buyerPreferences, ...buyerPreferences };
+  }
+  if (sellerProfile) {
+    user.sellerProfile = { ...user.sellerProfile, ...sellerProfile };
+  }
+
+  const updated = store.saveUser(user);
+  return res.json({
+    success: true,
+    data: sanitizeUser(updated)
+  });
+});
+
+// POST /api/v1/auth/change-password
+router.post('/change-password', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const { currentPassword, newPassword } = req.body;
+
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({
+      success: false,
+      error: 'Current password and new password are required.'
+    });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 6) {
+    return res.status(400).json({
+      success: false,
+      error: 'New password must be at least 6 characters in length.'
+    });
+  }
+
+  const isCurrentValid = user.passwordHash ? bcrypt.compareSync(currentPassword, user.passwordHash) : false;
+  if (!isCurrentValid) {
+    return res.status(401).json({
+      success: false,
+      error: 'Current password does not match.'
+    });
+  }
+
+  user.passwordHash = bcrypt.hashSync(newPassword, 10);
+  store.saveUser(user);
+
+  return res.json({
+    success: true,
+    message: 'Password updated successfully.'
+  });
+});
+
+// POST /api/v1/auth/logout-all
+router.post('/logout-all', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  store.deleteSessionsForUser(user.id);
+  res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+  return res.json({
+    success: true,
+    message: 'Signed out of all active sessions.'
+  });
+});
+
+// DELETE /api/v1/auth/account
+router.delete('/account', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const userDeals = store.getNegotiationsForUser(user.id);
+  const activeDeals = userDeals.filter(d => ['negotiating', 'ready_for_review'].includes(d.status));
+
+  if (activeDeals.length > 0) {
+    return res.status(400).json({
+      success: false,
+      error: `Cannot delete account while you have ${activeDeals.length} active deal(s) in progress. Please complete or decline in-flight deals first.`
+    });
+  }
+
+  store.deleteUser(user.id);
+  res.clearCookie(SESSION_COOKIE_NAME, { path: '/' });
+  return res.json({
+    success: true,
+    message: 'Account and associated data deleted permanently.'
+  });
+});
+
 export default router;

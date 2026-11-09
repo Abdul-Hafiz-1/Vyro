@@ -288,8 +288,8 @@ export const AppLayout: React.FC = () => {
       >
         <Link
           to="/app"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 text-[11px] font-medium ${
-            location.pathname === '/app' || location.pathname === '/app/' ? 'text-vyro-accent' : 'text-vyro-muted'
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
+            location.pathname === '/app' || location.pathname === '/app/' ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
           <Inbox className="w-4 h-4" />
@@ -298,8 +298,8 @@ export const AppLayout: React.FC = () => {
 
         <Link
           to="/app/deals"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 text-[11px] font-medium ${
-            location.pathname.startsWith('/app/deals') ? 'text-vyro-accent' : 'text-vyro-muted'
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
+            location.pathname.startsWith('/app/deals') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
           <Scale className="w-4 h-4" />
@@ -309,26 +309,38 @@ export const AppLayout: React.FC = () => {
         {/* Center Primary Action */}
         <Link
           to={isBuyerWorkspace ? '/app/requests/new' : '/app/listings/new'}
-          className="w-9 h-9 rounded-full bg-vyro-accent flex items-center justify-center text-white shadow-md mx-1 shrink-0"
+          className="w-11 h-11 rounded-full bg-vyro-accent hover:bg-vyro-accent-hover active:scale-95 transition-all flex items-center justify-center text-white shadow-md mx-1 shrink-0 focus-visible:ring-2 focus-visible:ring-vyro-accent focus-visible:outline-none"
           aria-label={isBuyerWorkspace ? 'New request' : 'New listing'}
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-5 h-5" />
         </Link>
 
-        <Link
-          to="/app/marketplace"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 text-[11px] font-medium ${
-            location.pathname.startsWith('/app/marketplace') ? 'text-vyro-accent' : 'text-vyro-muted'
-          }`}
-        >
-          <Globe2 className="w-4 h-4" />
-          <span>Market</span>
-        </Link>
+        {isBuyerWorkspace ? (
+          <Link
+            to="/app/marketplace"
+            className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
+              location.pathname.startsWith('/app/marketplace') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
+            }`}
+          >
+            <Globe2 className="w-4 h-4" />
+            <span>Market</span>
+          </Link>
+        ) : (
+          <Link
+            to="/app/listings"
+            className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
+              location.pathname.startsWith('/app/listings') ? 'text-vyro-accent' : 'text-vyro-muted'
+            }`}
+          >
+            <Store className="w-4 h-4" />
+            <span>Listings</span>
+          </Link>
+        )}
 
         <Link
           to="/app/rules"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 py-1 text-[11px] font-medium ${
-            location.pathname.startsWith('/app/rules') ? 'text-vyro-accent' : 'text-vyro-muted'
+          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
+            location.pathname.startsWith('/app/rules') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
           <Sliders className="w-4 h-4" />

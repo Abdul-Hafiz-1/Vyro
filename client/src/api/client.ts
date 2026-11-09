@@ -119,8 +119,17 @@ export const api = {
     fetchJson<User>(`${API_BASE}/auth/capabilities`, { method: 'PATCH', body: JSON.stringify(capabilities) }),
   updateWorkspace: (workspace: WorkspaceType) =>
     fetchJson<User>(`${API_BASE}/auth/workspace`, { method: 'PATCH', body: JSON.stringify({ workspace }) }),
-  updateProfile: (payload: { displayName?: string; bio?: string; avatarUrl?: string; activeWorkspace?: WorkspaceType }) =>
+  updateProfile: (payload: { displayName?: string; bio?: string; avatarUrl?: string; activeWorkspace?: WorkspaceType; isAutomationPaused?: boolean; buyerPreferences?: any; sellerProfile?: any }) =>
     fetchJson<User>(`${API_BASE}/auth/profile`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  changePassword: (payload: { currentPassword: string; newPassword: string }) =>
+    fetchJson<{ success: boolean; message: string }>(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  logoutAll: () =>
+    fetchJson<{ success: boolean; message: string }>(`${API_BASE}/auth/logout-all`, { method: 'POST' }),
+  deleteAccount: () =>
+    fetchJson<{ success: boolean; message: string }>(`${API_BASE}/auth/account`, { method: 'DELETE' }),
   updateOnboarding: (payload: any) =>
     fetchJson<User>(`${API_BASE}/auth/onboarding`, { method: 'POST', body: JSON.stringify(payload) }),
 

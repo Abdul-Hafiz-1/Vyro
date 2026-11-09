@@ -476,6 +476,8 @@ export interface Transaction {
   paypalPayerEmail?: string;
   paypalPayerName?: string;
   paymentStatus: PaymentStatus;
+  status?: string;
+  itemTitle?: string;
   idempotencyKey: string;
   sellerShareHeld?: number;
   sellerPayoutStatus?: 'held' | 'simulated_paid';

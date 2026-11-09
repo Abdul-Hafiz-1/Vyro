@@ -10,6 +10,7 @@ import { HowItWorksPage } from './pages/public/HowItWorksPage';
 import { SecurityPage } from './pages/public/SecurityPage';
 import { LoginPage, SignupPage } from './pages/public/AuthPages';
 import { OnboardingPage } from './pages/public/OnboardingPage';
+import { TermsPage, PrivacyPage, DisputePolicyPage } from './pages/public/LegalPages';
 
 // App Layout & Pages
 import { AppLayout } from './components/common/AppLayout';
@@ -67,6 +68,9 @@ export const App: React.FC = () => {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/signup" element={<SignupPage />} />
             <Route path="/onboarding" element={<OnboardingPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/dispute-policy" element={<DisputePolicyPage />} />
 
             {/* Application Routes */}
             <Route path="/app" element={<AppLayout />}>

@@ -44,12 +44,12 @@ export const Footer: React.FC = () => {
           </div>
 
           <div>
-            <h4 className="text-xs font-mono uppercase tracking-wider text-vyro-text mb-3">Platform</h4>
+            <h4 className="text-xs font-mono uppercase tracking-wider text-vyro-text mb-3">Governance</h4>
             <ul className="space-y-2 text-xs">
+              <li><Link to="/terms" className="hover:text-vyro-text transition-colors">Terms of Service</Link></li>
+              <li><Link to="/privacy" className="hover:text-vyro-text transition-colors">Privacy Policy</Link></li>
+              <li><Link to="/dispute-policy" className="hover:text-vyro-text transition-colors">Refund & Dispute Policy</Link></li>
               <li><Link to="/security" className="hover:text-vyro-text transition-colors">Security Architecture</Link></li>
-              <li><Link to="/app/settings" className="hover:text-vyro-text transition-colors">API & Sandbox Status</Link></li>
-              <li><a href="https://developer.paypal.com/docs/api/orders/v2/" target="_blank" rel="noreferrer" className="hover:text-vyro-text transition-colors">PayPal Orders API Spec</a></li>
-              <li><a href="https://ai.google.dev/" target="_blank" rel="noreferrer" className="hover:text-vyro-text transition-colors">Gemini Structured Tools</a></li>
             </ul>
           </div>
         </div>

@@ -112,6 +112,11 @@ export class SQLiteStore {
   // =========================================================================
   // 1. Users
   // =========================================================================
+  public deleteUser(userId: string): void {
+    this.deleteSessionsForUser(userId);
+    this.db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  }
+
   public getUsers(): User[] {
     const rows = this.db.prepare('SELECT * FROM users ORDER BY created_at ASC').all() as any[];
     return rows.map(r => this.mapUser(r));

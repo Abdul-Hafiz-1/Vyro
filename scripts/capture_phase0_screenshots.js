@@ -97,6 +97,9 @@ async function run() {
       { url: 'http://localhost:5173/', name: 'public_landing' },
       { url: 'http://localhost:5173/how-it-works', name: 'public_how_it_works' },
       { url: 'http://localhost:5173/security', name: 'public_security' },
+      { url: 'http://localhost:5173/terms', name: 'public_terms' },
+      { url: 'http://localhost:5173/privacy', name: 'public_privacy' },
+      { url: 'http://localhost:5173/dispute-policy', name: 'public_dispute_policy' },
       { url: 'http://localhost:5173/login', name: 'public_login' },
       { url: 'http://localhost:5173/signup', name: 'public_signup' },
       { url: 'http://localhost:5173/onboarding', name: 'public_onboarding' }
