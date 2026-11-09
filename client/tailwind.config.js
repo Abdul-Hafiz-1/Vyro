@@ -42,8 +42,9 @@ export default {
         }
       },
       borderRadius: {
-        control: '6px',
-        surface: '12px',
+        control: '8px',
+        card: '14px',
+        surface: '14px',
       },
       fontFamily: {
         sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', 'sans-serif'],

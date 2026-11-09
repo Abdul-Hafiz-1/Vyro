@@ -4,27 +4,24 @@ import {
   Inbox,
   Scale,
   Globe2,
-  Sliders,
+  Store,
+  Settings,
   Plus,
   Bell,
   ChevronRight,
-  Store,
-  User,
-  Settings,
-  HelpCircle,
   LogOut,
-  Check,
   ArrowRightLeft,
-  Receipt
+  User
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { useAuth, getInitials } from '../../context/AuthContext';
 import { ThemeToggle } from './ThemeToggle';
+import { formatName } from '../../lib/present';
 
 export const AppLayout: React.FC = () => {
   const location = useLocation();
-  const { user, isBuyerWorkspace, isSellerWorkspace, switchWorkspace, logout } = useAuth();
+  const { user, isBuyerWorkspace, switchWorkspace, logout } = useAuth();
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
 
@@ -47,86 +44,84 @@ export const AppLayout: React.FC = () => {
 
   const unreadCount = notifications.filter(n => !n.read && !n.isRead).length;
 
-  // Buyer navigation: Today · Deals · Marketplace · Rules · Receipts
+  // Slim Desktop Navigation: Max 4 items (Today · Deals · Marketplace · Account)
   const buyerNavigation = [
     { name: 'Today', href: '/app', icon: Inbox },
     { name: 'Deals', href: '/app/deals', icon: Scale },
     { name: 'Marketplace', href: '/app/marketplace', icon: Globe2 },
-    { name: 'Rules', href: '/app/rules', icon: Sliders },
-    { name: 'Receipts', href: '/app/transactions', icon: Receipt },
+    { name: 'Account', href: '/app/settings', icon: Settings },
   ];
 
-  // Seller navigation: Today · Listings · Deals · Rules · Receipts
   const sellerNavigation = [
     { name: 'Today', href: '/app', icon: Inbox },
-    { name: 'Listings', href: '/app/listings', icon: Store },
     { name: 'Deals', href: '/app/deals', icon: Scale },
-    { name: 'Rules', href: '/app/rules', icon: Sliders },
-    { name: 'Receipts', href: '/app/transactions', icon: Receipt },
+    { name: 'Listings', href: '/app/listings', icon: Store },
+    { name: 'Account', href: '/app/settings', icon: Settings },
   ];
 
   const currentNavItems = isBuyerWorkspace ? buyerNavigation : sellerNavigation;
 
-  // Route-derived breadcrumb title
+  // Route-derived title
   const getBreadcrumbTitle = (): string => {
     const p = location.pathname;
     if (p === '/app' || p === '/app/') return 'Today';
-    if (p.startsWith('/app/deals/') || p.startsWith('/app/negotiations/')) return 'Deal Detail';
+    if (p.startsWith('/app/deals/') || p.startsWith('/app/negotiations/')) return 'Deal';
     if (p === '/app/deals' || p === '/app/negotiations') return 'Deals';
     if (p === '/app/marketplace') return 'Marketplace';
     if (p.startsWith('/app/listings/new')) return 'New Listing';
-    if (p.startsWith('/app/listings/')) return 'Edit Listing';
+    if (p.startsWith('/app/listings/')) return 'Listing';
     if (p === '/app/listings') return 'Listings';
     if (p === '/app/rules' || p === '/app/memory') return 'Rules';
     if (p === '/app/requests/new') return 'New Request';
-    if (p.startsWith('/app/transactions/')) return 'Receipt Detail';
+    if (p.startsWith('/app/transactions/')) return 'Receipt';
     if (p === '/app/transactions') return 'Receipts';
-    if (p === '/app/settings') return 'Settings';
+    if (p === '/app/settings') return 'Account';
     if (p === '/app/notifications') return 'Notifications';
-    return 'Operations Desk';
+    return 'Today';
   };
 
   const breadcrumb = getBreadcrumbTitle();
   const initials = getInitials(user?.displayName);
+  const cleanDisplayName = formatName(user?.displayName, 'User');
 
   return (
     <div className="min-h-screen bg-vyro-bg flex flex-col lg:flex-row text-vyro-text selection:bg-vyro-accent/20">
-      {/* Desktop Left Sidebar */}
-      <aside className="hidden lg:flex fixed top-0 bottom-0 left-0 w-60 z-40 flex-col bg-vyro-surface border-r border-vyro-line">
+      {/* Desktop Slim Left Navigation (Icons + Labels, Max 4 items) */}
+      <aside className="hidden lg:flex fixed top-0 bottom-0 left-0 w-64 z-40 flex-col bg-vyro-surface border-r border-vyro-line">
         {/* Brand */}
-        <div className="h-14 flex items-center px-4 border-b border-vyro-line gap-2.5">
-          <div className="w-6 h-6 rounded-control bg-vyro-accent flex items-center justify-center text-white font-bold text-xs">
+        <div className="h-16 flex items-center px-6 border-b border-vyro-line gap-3">
+          <div className="w-8 h-8 rounded-control bg-vyro-accent flex items-center justify-center text-white font-bold text-sm">
             V
           </div>
-          <span className="font-semibold tracking-tight text-sm text-vyro-text">VYRO</span>
-          <span className="ml-auto text-xs px-2 py-0.5 rounded-control bg-vyro-bg border border-vyro-line text-vyro-muted">
+          <span className="font-bold tracking-tight text-lg text-vyro-text">VYRO</span>
+          <span className="ml-auto text-sm px-2.5 py-0.5 rounded-control bg-vyro-bg border border-vyro-line text-vyro-muted font-medium">
             {isBuyerWorkspace ? 'Buying' : 'Selling'}
           </span>
         </div>
 
-        {/* Primary Action Button (Only in Sidebar) */}
-        <div className="p-3 border-b border-vyro-line-subtle">
+        {/* Primary Action Button */}
+        <div className="p-4 border-b border-vyro-line">
           {isBuyerWorkspace ? (
             <Link
               to="/app/requests/new"
-              className="w-full h-9 flex items-center justify-center gap-2 rounded-control bg-vyro-accent hover:bg-vyro-accent-hover text-white text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent"
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-control bg-vyro-accent hover:bg-vyro-accent-hover text-white text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent shadow-xs"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               <span>New request</span>
             </Link>
           ) : (
             <Link
               to="/app/listings/new"
-              className="w-full h-9 flex items-center justify-center gap-2 rounded-control bg-vyro-accent hover:bg-vyro-accent-hover text-white text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent"
+              className="w-full h-11 flex items-center justify-center gap-2 rounded-control bg-vyro-accent hover:bg-vyro-accent-hover text-white text-sm font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent shadow-xs"
             >
-              <Plus className="w-3.5 h-3.5" />
+              <Plus className="w-4 h-4" />
               <span>New listing</span>
             </Link>
           )}
         </div>
 
         {/* Primary Nav Links */}
-        <nav className="flex-1 px-2 py-3 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1.5" aria-label="Main Navigation">
           {currentNavItems.map((item) => {
             const isActive =
               (item.href === '/app' && (location.pathname === '/app' || location.pathname === '/app/')) ||
@@ -137,82 +132,83 @@ export const AppLayout: React.FC = () => {
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center gap-2.5 px-3 py-2 rounded-control text-xs font-medium transition-colors ${
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-control text-sm font-medium transition-colors ${
                   isActive
                     ? 'bg-vyro-bg text-vyro-text font-semibold border border-vyro-line'
                     : 'text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface-hover'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-vyro-accent' : 'text-vyro-muted'}`} />
+                <Icon className={`w-5 h-5 ${isActive ? 'text-vyro-accent' : 'text-vyro-muted'}`} />
                 <span>{item.name}</span>
               </Link>
             );
           })}
         </nav>
 
-        {/* Quiet Mode Footnote */}
-        <div className="p-3 border-t border-vyro-line text-xs text-vyro-subtle flex items-center justify-between">
-          <span>AI autonomous mode</span>
-          <span className="w-2 h-2 rounded-full bg-status-handled" title="Autonomous agents active" />
+        {/* Workspace Switcher in Left Sidebar */}
+        <div className="p-4 border-t border-vyro-line">
+          <button
+            onClick={() => switchWorkspace(isBuyerWorkspace ? 'seller' : 'buyer')}
+            className="w-full flex items-center justify-between px-3 py-2 rounded-control text-sm text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface-hover transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <ArrowRightLeft className="w-4 h-4 text-vyro-accent" />
+              <span>Switch to {isBuyerWorkspace ? 'Selling' : 'Buying'}</span>
+            </div>
+          </button>
         </div>
       </aside>
 
       {/* Main Container */}
-      <div className="flex-1 flex flex-col min-h-screen lg:pl-60 pb-16 lg:pb-0">
+      <div className="flex-1 flex flex-col min-h-screen lg:pl-64 pb-20 lg:pb-0">
         {/* Top Header */}
-        <header className="h-14 bg-vyro-bg/90 backdrop-blur-sm border-b border-vyro-line sticky top-0 z-30 flex items-center justify-between px-4 sm:px-6">
-          {/* Breadcrumb Title & Workspace Indicator */}
-          <div className="flex items-center gap-2 text-xs text-vyro-muted">
+        <header className="h-16 bg-vyro-bg/90 backdrop-blur-sm border-b border-vyro-line sticky top-0 z-30 flex items-center justify-between px-4 sm:px-8">
+          {/* Breadcrumb Title */}
+          <div className="flex items-center gap-2 text-sm text-vyro-muted">
             <span className="font-semibold text-vyro-text">VYRO</span>
-            <ChevronRight className="w-3.5 h-3.5 text-vyro-subtle" />
+            <ChevronRight className="w-4 h-4 text-vyro-subtle" />
             <span className="text-vyro-text font-medium">{breadcrumb}</span>
-            <span className="text-vyro-line">·</span>
-            <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono uppercase tracking-wider font-semibold border ${
-              isBuyerWorkspace
-                ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-            }`}>
-              {isBuyerWorkspace ? 'Buying' : 'Selling'}
-            </span>
           </div>
 
-          {/* Right Controls: Theme Toggle, Bell, Account Menu */}
-          <div className="flex items-center gap-2">
+          {/* Right Controls: Theme Toggle, Bell, Account */}
+          <div className="flex items-center gap-3">
             <ThemeToggle />
 
             {/* Notifications Bell */}
             <Link
               to="/app/notifications"
-              className="relative p-1.5 rounded-control text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent"
+              className="relative p-2 rounded-control text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent min-h-[44px] min-w-[44px] flex items-center justify-center"
               aria-label={`Notifications ${unreadCount > 0 ? `(${unreadCount} unread)` : ''}`}
             >
-              <Bell className="w-4 h-4" />
+              <Bell className="w-5 h-5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-vyro-accent" />
+                <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-vyro-accent" />
               )}
             </Link>
 
-            {/* Account Menu Dropdown */}
+            {/* Account Profile Trigger */}
             <div className="relative" ref={accountMenuRef}>
               <button
                 onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-                className="flex items-center gap-2 p-1 rounded-control hover:bg-vyro-surface transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent"
-                aria-label="Account menu"
+                className="flex items-center gap-2.5 p-1.5 rounded-control hover:bg-vyro-surface transition-colors focus-visible:ring-2 focus-visible:ring-vyro-accent min-h-[44px]"
+                aria-label="Account options"
                 aria-expanded={accountMenuOpen}
               >
-                <div className="w-7 h-7 rounded-full bg-vyro-surface border border-vyro-line flex items-center justify-center text-xs font-semibold text-vyro-text">
+                <div className="w-8 h-8 rounded-full bg-vyro-surface border border-vyro-line flex items-center justify-center text-sm font-semibold text-vyro-text">
                   {initials}
                 </div>
+                <span className="hidden sm:inline text-sm font-medium text-vyro-text">
+                  {cleanDisplayName}
+                </span>
               </button>
 
               {accountMenuOpen && (
-                <div className="absolute right-0 mt-1.5 w-64 rounded-surface bg-vyro-surface border border-vyro-line shadow-xl py-1 z-50 text-xs">
-                  <div className="px-3.5 py-2.5 border-b border-vyro-line">
-                    <p className="font-semibold text-vyro-text truncate">{user?.displayName || 'User'}</p>
-                    <p className="text-vyro-muted text-xs truncate mt-0.5">{user?.email}</p>
+                <div className="absolute right-0 mt-2 w-64 rounded-card bg-vyro-surface border border-vyro-line shadow-xl py-2 z-50 text-sm">
+                  <div className="px-4 py-2 border-b border-vyro-line">
+                    <p className="font-semibold text-vyro-text">{cleanDisplayName}</p>
+                    <p className="text-vyro-muted text-sm mt-0.5 truncate">{user?.email}</p>
                   </div>
 
-                  {/* Workspace Switcher */}
                   <div className="p-1 border-b border-vyro-line">
                     <button
                       onClick={() => {
@@ -222,50 +218,29 @@ export const AppLayout: React.FC = () => {
                       className="w-full flex items-center justify-between px-3 py-2 rounded-control text-vyro-text hover:bg-vyro-surface-hover text-left transition-colors"
                     >
                       <div className="flex items-center gap-2">
-                        <ArrowRightLeft className="w-3.5 h-3.5 text-vyro-accent" />
+                        <ArrowRightLeft className="w-4 h-4 text-vyro-accent" />
                         <span>Switch to {isBuyerWorkspace ? 'Selling' : 'Buying'}</span>
                       </div>
-                      <span className="text-[11px] text-vyro-muted">
-                        Active: {isBuyerWorkspace ? 'Buying' : 'Selling'}
-                      </span>
                     </button>
                   </div>
 
-                  {/* Secondary Links */}
                   <div className="p-1 border-b border-vyro-line">
-                    <Link
-                      to="/app/rules"
-                      onClick={() => setAccountMenuOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-control text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface-hover transition-colors"
-                    >
-                      <Sliders className="w-3.5 h-3.5" />
-                      <span>Automation Rules</span>
-                    </Link>
                     <Link
                       to="/app/settings"
                       onClick={() => setAccountMenuOpen(false)}
                       className="flex items-center gap-2 px-3 py-2 rounded-control text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface-hover transition-colors"
                     >
-                      <Settings className="w-3.5 h-3.5" />
-                      <span>Settings & Server Status</span>
-                    </Link>
-                    <Link
-                      to="/how-it-works"
-                      onClick={() => setAccountMenuOpen(false)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-control text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface-hover transition-colors"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      <span>Documentation</span>
+                      <Settings className="w-4 h-4" />
+                      <span>Account Settings</span>
                     </Link>
                   </div>
 
-                  {/* Sign out */}
                   <div className="p-1">
                     <button
                       onClick={logout}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-control text-status-declined hover:bg-vyro-surface-hover text-left transition-colors"
                     >
-                      <LogOut className="w-3.5 h-3.5" />
+                      <LogOut className="w-4 h-4" />
                       <span>Sign out</span>
                     </button>
                   </div>
@@ -275,76 +250,66 @@ export const AppLayout: React.FC = () => {
           </div>
         </header>
 
-        {/* Main Routed Content Area */}
-        <main className="flex-1 p-4 sm:p-6 max-w-6xl w-full mx-auto">
+        {/* Main Content Area (Max width ~1040px for lists, ~720px for task pages) */}
+        <main className="flex-1 p-6 sm:p-10 max-w-[1040px] w-full mx-auto">
           <Outlet />
         </main>
       </div>
 
-      {/* Mobile Bottom Tab Bar (Today, Deals, New, Marketplace, Menu) */}
+      {/* Mobile Bottom Tab Bar (Today, Deals, New, Marketplace, Account) */}
       <nav
-        className="lg:hidden fixed bottom-0 left-0 right-0 h-14 bg-vyro-surface border-t border-vyro-line z-40 flex items-center justify-around px-2"
+        className="lg:hidden fixed bottom-0 left-0 right-0 h-16 bg-vyro-surface border-t border-vyro-line z-40 flex items-center justify-around px-2"
         aria-label="Mobile Navigation"
       >
         <Link
           to="/app"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
-            location.pathname === '/app' || location.pathname === '/app/' ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
+          className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] py-1 text-sm font-medium transition-colors ${
+            location.pathname === '/app' || location.pathname === '/app/' ? 'text-vyro-accent font-semibold' : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
-          <Inbox className="w-4 h-4" />
+          <Inbox className="w-5 h-5" />
           <span>Today</span>
         </Link>
 
         <Link
           to="/app/deals"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
-            location.pathname.startsWith('/app/deals') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
+          className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] py-1 text-sm font-medium transition-colors ${
+            location.pathname.startsWith('/app/deals') ? 'text-vyro-accent font-semibold' : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
-          <Scale className="w-4 h-4" />
+          <Scale className="w-5 h-5" />
           <span>Deals</span>
         </Link>
 
-        {/* Center Primary Action */}
+        {/* Center Primary Action: New Request or New Listing */}
         <Link
           to={isBuyerWorkspace ? '/app/requests/new' : '/app/listings/new'}
-          className="w-11 h-11 rounded-full bg-vyro-accent hover:bg-vyro-accent-hover active:scale-95 transition-all flex items-center justify-center text-white shadow-md mx-1 shrink-0 focus-visible:ring-2 focus-visible:ring-vyro-accent focus-visible:outline-none"
+          className="w-12 h-12 rounded-full bg-vyro-accent hover:bg-vyro-accent-hover active:scale-95 transition-all flex items-center justify-center text-white shadow-md mx-1 shrink-0 focus-visible:ring-2 focus-visible:ring-vyro-accent"
           aria-label={isBuyerWorkspace ? 'New request' : 'New listing'}
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-6 h-6" />
         </Link>
 
-        {isBuyerWorkspace ? (
-          <Link
-            to="/app/marketplace"
-            className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
-              location.pathname.startsWith('/app/marketplace') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
-            }`}
-          >
-            <Globe2 className="w-4 h-4" />
-            <span>Market</span>
-          </Link>
-        ) : (
-          <Link
-            to="/app/listings"
-            className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
-              location.pathname.startsWith('/app/listings') ? 'text-vyro-accent' : 'text-vyro-muted'
-            }`}
-          >
-            <Store className="w-4 h-4" />
-            <span>Listings</span>
-          </Link>
-        )}
-
         <Link
-          to="/app/rules"
-          className={`flex flex-col items-center justify-center gap-1 flex-1 min-h-[44px] py-1 text-[11px] font-medium transition-colors ${
-            location.pathname.startsWith('/app/rules') ? 'text-vyro-accent' : 'text-vyro-muted hover:text-vyro-text'
+          to={isBuyerWorkspace ? '/app/marketplace' : '/app/listings'}
+          className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] py-1 text-sm font-medium transition-colors ${
+            location.pathname.startsWith('/app/marketplace') || location.pathname.startsWith('/app/listings')
+              ? 'text-vyro-accent font-semibold'
+              : 'text-vyro-muted hover:text-vyro-text'
           }`}
         >
-          <Sliders className="w-4 h-4" />
-          <span>Rules</span>
+          {isBuyerWorkspace ? <Globe2 className="w-5 h-5" /> : <Store className="w-5 h-5" />}
+          <span>{isBuyerWorkspace ? 'Market' : 'Listings'}</span>
+        </Link>
+
+        <Link
+          to="/app/settings"
+          className={`flex flex-col items-center justify-center gap-0.5 flex-1 min-h-[44px] py-1 text-sm font-medium transition-colors ${
+            location.pathname.startsWith('/app/settings') ? 'text-vyro-accent font-semibold' : 'text-vyro-muted hover:text-vyro-text'
+          }`}
+        >
+          <User className="w-5 h-5" />
+          <span>Account</span>
         </Link>
       </nav>
     </div>

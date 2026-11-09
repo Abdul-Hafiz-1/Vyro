@@ -14,7 +14,16 @@
     "db:seed:demo": "npm --prefix server run db:seed:demo",
     "start": "cd server && npm start"
   },
-  "keywords": ["ai", "commerce", "autonomous-agents", "paypal", "negotiation"],
+  "keywords": [
+    "ai",
+    "commerce",
+    "autonomous-agents",
+    "paypal",
+    "negotiation"
+  ],
   "author": "VYRO Technologies",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
 }
