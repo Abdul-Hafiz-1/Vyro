@@ -5,7 +5,6 @@ export interface ChipProps {
   selected?: boolean;
   onClick?: () => void;
   icon?: React.ReactNode;
-  variant?: 'sun' | 'coral' | 'mint' | 'lavender';
   className?: string;
 }
 
@@ -14,25 +13,17 @@ export const Chip: React.FC<ChipProps> = ({
   selected = false,
   onClick,
   icon,
-  variant = 'sun',
   className = '',
 }) => {
-  const activeFills = {
-    sun: 'bg-sun shadow-hard',
-    coral: 'bg-coral shadow-hard',
-    mint: 'bg-mint shadow-hard',
-    lavender: 'bg-lavender shadow-hard',
-  }[variant];
-
   const stateStyles = selected
-    ? `${activeFills} translate-y-0`
-    : 'bg-card hover:-translate-y-0.5 hover:shadow-hard-sm active:translate-y-0.5';
+    ? 'bg-raised text-text-primary border-volt/60 font-medium'
+    : 'bg-surface text-text-muted border-border-subtle hover:text-text-primary hover:bg-raised transition-colors';
 
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center gap-2 px-4 py-2 border-2 border-ink rounded-full font-bold text-small text-ink transition-all duration-150 cursor-pointer select-none ${stateStyles} ${className}`}
+      className={`inline-flex items-center gap-1.5 h-8.5 px-3 border rounded-control text-secondary select-none cursor-pointer ${stateStyles} ${className}`}
     >
       {icon && <span className="shrink-0 flex items-center">{icon}</span>}
       <span>{label}</span>

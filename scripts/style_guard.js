@@ -11,33 +11,36 @@ const BANNED_PATTERNS = [
   { name: 'bg-gradient usage', regex: /\bbg-gradient\b/ },
   { name: 'blur- filter usage', regex: /\bblur-\w+\b/ },
   { name: '<aside element or sidebar layout', regex: /<aside\b/ },
+  { name: 'Cobalt/indigo/violet/purple hues', regex: /\b(cobalt|indigo|violet|purple)-\d+\b/ },
   { name: 'Text smaller than 14px (text-xs)', regex: /\btext-xs\b/ },
   { name: 'Text smaller than 14px (text-[<14px])', regex: /\btext-\[(1[0-3]|[0-9])px\]/ },
-  { name: 'Non-tokenized blur shadow', regex: /\bshadow-(sm|md|lg|xl|2xl|inner)\b/ },
+  { name: 'Non-tokenized blur shadow', regex: /\bshadow-(md|lg|xl|2xl|inner)\b/ },
 ];
 
-// Allowed tokens defined in client/src/lib/tokens.ts
 const ALLOWED_HEXES = new Set([
-  '#FBF7F0', '#FFFFFF', '#1C1A17', '#5E5A52',
-  '#FF6B4A', '#FFD23F', '#7FDDB0', '#9CCBFF', '#F6A8A8', '#D9C8FF',
-  '#252321', '#312E2A', '#C4BFB6'
+  // Dark
+  '#0C0E0D', '#141715', '#1A1E1B', '#262B28', '#F2F4F0', '#A0A7A1',
+  '#D4FF3A', '#34D399', '#FFB020', '#FF6B6B', '#8FA3B8',
+  // Light
+  '#FAFAF7', '#FFFFFF', '#F3F3EE', '#E2E3DC', '#0E1210', '#58605A',
+  '#C6F51F', '#0F9D6B', '#B45F06', '#C0392B', '#4A5D70'
 ].map(h => h.toLowerCase()));
 
 function scanFile(filePath) {
   const relPath = path.relative(CLIENT_SRC, filePath);
-  // Exclude token definitions file itself from hex checking
   const isTokensFile = relPath.includes('tokens.ts');
-  const isPresentFile = relPath.includes('present.ts'); // Has regexes for snake_case / hex scanning
+  const isPresentFile = relPath.includes('present.ts');
 
   const content = fs.readFileSync(filePath, 'utf8');
   const lines = content.split('\n');
   const violations = [];
 
   lines.forEach((line, lineIdx) => {
-    // Check banned patterns
+    // Check banned class patterns
     if (!isPresentFile) {
       for (const rule of BANNED_PATTERNS) {
         if (rule.regex.test(line)) {
+          // Allow kbd or explicit secondary tags if not forbidden
           violations.push({
             rule: rule.name,
             file: relPath,
@@ -70,41 +73,29 @@ function scanFile(filePath) {
   return violations;
 }
 
-function walkDir(dir, fileList = []) {
-  const files = fs.readdirSync(dir);
-  for (const file of files) {
-    const fullPath = path.join(dir, file);
-    const stat = fs.statSync(fullPath);
-    if (stat.isDirectory()) {
-      walkDir(fullPath, fileList);
-    } else if (/\.(tsx?|jsx?|css)$/.test(file)) {
-      fileList.push(fullPath);
-    }
-  }
-  return fileList;
-}
-
 function run() {
   console.log('==============================================');
   console.log('     VYRO STYLE GUARD AUTOMATED AUDIT        ');
   console.log('==============================================\n');
 
-  // Verify only updated files in the new scope:
-  // Components, StyleguidePage, OverviewPage, index.css, tailwind
   const targetFiles = [
     path.join(CLIENT_SRC, 'index.css'),
     path.join(CLIENT_SRC, 'components', 'common', 'Button.tsx'),
-    path.join(CLIENT_SRC, 'components', 'common', 'Pill.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'StatusChip.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'Badge.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'Pill.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'Card.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'Input.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'Chip.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'ModeSwitch.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'Avatar.tsx'),
-    path.join(CLIENT_SRC, 'components', 'common', 'ProgressStones.tsx'),
-    path.join(CLIENT_SRC, 'components', 'common', 'OfferTicket.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'DecisionCard.tsx'),
-    path.join(CLIENT_SRC, 'components', 'common', 'SpotIllustration.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'DealNode.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'SummaryPanel.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'Drawer.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'EmptyState.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'CommandPalette.tsx'),
+    path.join(CLIENT_SRC, 'components', 'common', 'Skeleton.tsx'),
     path.join(CLIENT_SRC, 'components', 'common', 'AppLayout.tsx'),
     path.join(CLIENT_SRC, 'pages', 'app', 'OverviewPage.tsx'),
     path.join(CLIENT_SRC, 'pages', 'StyleguidePage.tsx'),

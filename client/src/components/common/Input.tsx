@@ -19,30 +19,30 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(({
   const inputId = id || (label ? label.toLowerCase().replace(/\s+/g, '-') : undefined);
 
   return (
-    <div className="w-full flex flex-col gap-1.5 text-ink">
+    <div className="w-full flex flex-col gap-1.5 text-text-primary">
       {label && (
-        <label htmlFor={inputId} className="font-bold text-body text-ink">
+        <label htmlFor={inputId} className="font-medium text-secondary text-text-primary">
           {label}
         </label>
       )}
       <div className="relative flex items-center">
         {icon && (
-          <span className="absolute left-4 text-ink pointer-events-none flex items-center">
+          <span className="absolute left-3.5 text-text-muted pointer-events-none flex items-center">
             {icon}
           </span>
         )}
         <input
           ref={ref}
           id={inputId}
-          className={`w-full min-h-[48px] px-4 py-3 bg-card border-2 border-ink rounded-[14px] text-body text-ink placeholder:text-muted focus:outline-none focus:shadow-hard transition-shadow ${icon ? 'pl-11' : ''} ${error ? 'border-rose bg-rose/10' : ''} ${className}`}
+          className={`w-full h-11 px-3.5 bg-surface border border-border-subtle rounded-control text-body text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-volt focus:ring-1 focus:ring-volt transition-colors ${icon ? 'pl-10.5' : ''} ${error ? 'border-status-declined/60' : ''} ${className}`}
           {...props}
         />
       </div>
       {error && (
-        <span className="text-small text-rose font-bold">{error}</span>
+        <span className="text-secondary text-status-declined">{error}</span>
       )}
       {helperText && !error && (
-        <span className="text-small text-muted">{helperText}</span>
+        <span className="text-secondary text-text-muted">{helperText}</span>
       )}
     </div>
   );

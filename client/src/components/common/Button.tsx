@@ -1,13 +1,12 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-export type ButtonVariant = 
-  | 'coral' | 'white' | 'sun' | 'mint' | 'rose' | 'lavender' | 'ghost'
-  | 'primary' | 'secondary' | 'outline' | 'danger' | 'accent';
+export type ButtonVariant = 'volt' | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'accent' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
-  size?: 'sm' | 'md' | 'lg';
+  size?: ButtonSize;
   fullWidth?: boolean;
   icon?: React.ReactNode;
   leftIcon?: React.ReactNode;
@@ -17,7 +16,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 
 export const Button: React.FC<ButtonProps> = ({
   children,
-  variant = 'coral',
+  variant = 'volt',
   size = 'md',
   fullWidth = false,
   icon,
@@ -28,62 +27,30 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const base = 'inline-flex items-center justify-center font-bold text-ink rounded-full select-none cursor-pointer text-center';
-  
+  const base = 'inline-flex items-center justify-center font-medium rounded-control select-none cursor-pointer transition-all duration-150 text-center tracking-normal';
+
   const sizeStyles = {
-    sm: 'min-h-[40px] px-4 py-1.5 text-small gap-2',
-    md: 'min-h-[46px] px-6 py-2.5 text-body gap-2.5',
-    lg: 'min-h-[52px] px-8 py-3 text-body gap-3 text-lg',
+    sm: 'h-9 px-3.5 text-secondary gap-1.5',
+    md: 'h-10.5 px-4.5 text-body gap-2',
+    lg: 'h-12 px-6 text-body gap-2.5 font-semibold',
   }[size];
 
-  // Map legacy variants to paper-and-ink palette
-  let activeVariant: 'coral' | 'white' | 'sun' | 'mint' | 'rose' | 'lavender' | 'ghost' = 'coral';
-  switch (variant) {
-    case 'primary':
-    case 'accent':
-    case 'coral':
-      activeVariant = 'coral';
-      break;
-    case 'secondary':
-    case 'outline':
-    case 'white':
-      activeVariant = 'white';
-      break;
-    case 'danger':
-    case 'rose':
-      activeVariant = 'rose';
-      break;
-    case 'sun':
-      activeVariant = 'sun';
-      break;
-    case 'mint':
-      activeVariant = 'mint';
-      break;
-    case 'lavender':
-      activeVariant = 'lavender';
-      break;
-    case 'ghost':
-      activeVariant = 'ghost';
-      break;
+  // Map variants: 'volt' and 'primary' both use the bold Volt lime fill with near-black text
+  let variantStyles = 'bg-volt text-[#0C0E0D] font-semibold border border-transparent hover:brightness-105 active:scale-[0.98]';
+  if (variant === 'secondary' || variant === 'outline') {
+    variantStyles = 'bg-surface text-text-primary border border-border-subtle hover:bg-raised active:scale-[0.98]';
+  } else if (variant === 'ghost') {
+    variantStyles = 'bg-transparent text-text-muted hover:text-text-primary hover:bg-raised active:scale-[0.98]';
+  } else if (variant === 'destructive' || variant === 'danger') {
+    variantStyles = 'bg-status-declined/10 text-status-declined border border-status-declined/25 hover:bg-status-declined/20 active:scale-[0.98]';
   }
 
-  const variantStyles = {
-    coral: 'bg-coral border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    white: 'bg-card border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    sun: 'bg-sun border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    mint: 'bg-mint border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    rose: 'bg-rose border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    lavender: 'bg-lavender border-2 border-ink shadow-hard hover:-translate-y-0.5 active:translate-y-0.75 active:shadow-hard-press',
-    ghost: 'bg-transparent border-2 border-transparent hover:bg-card/40 active:translate-y-0.5',
-  }[activeVariant];
-
   const isDisabled = disabled || isLoading;
-  const disabledStyles = isDisabled 
-    ? 'opacity-50 cursor-not-allowed shadow-none transform-none hover:transform-none active:transform-none pointer-events-none' 
-    : 'transition-all duration-150';
+  const disabledStyles = isDisabled
+    ? 'opacity-40 cursor-not-allowed transform-none hover:transform-none pointer-events-none'
+    : '';
 
   const widthStyle = fullWidth ? 'w-full' : '';
-
   const prefixIcon = leftIcon || icon;
 
   return (
@@ -93,7 +60,7 @@ export const Button: React.FC<ButtonProps> = ({
       {...props}
     >
       {isLoading ? (
-        <Loader2 className="w-4 h-4 text-ink animate-spin shrink-0" />
+        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
       ) : (
         prefixIcon && <span className="shrink-0 flex items-center">{prefixIcon}</span>
       )}

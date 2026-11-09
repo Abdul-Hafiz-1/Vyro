@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './Button';
 import { Input } from './Input';
-import { Pill } from './Pill';
-import { Sparkles, ArrowRight, X, AlertTriangle } from 'lucide-react';
+import { StatusChip } from './StatusChip';
+import { Sparkles, ArrowRight, X } from 'lucide-react';
+import { formatMoney } from '../../lib/present';
 
 export interface DecisionCardProps {
   title: string;
@@ -41,6 +42,29 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   );
   const [counterDays, setCounterDays] = useState(String(proposedDays));
 
+  // Global keyboard shortcuts: A (Approve), C (Counter), D (Decline)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ignore if user is typing inside an input
+      if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
+        return;
+      }
+      const key = e.key.toLowerCase();
+      if (key === 'a' && !isLoading) {
+        e.preventDefault();
+        onApprove();
+      } else if (key === 'c' && !isLoading) {
+        e.preventDefault();
+        setShowCounterForm(true);
+      } else if (key === 'd' && !isLoading) {
+        e.preventDefault();
+        onDecline();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isLoading, onApprove, onDecline]);
+
   const handleCounterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const p = parseFloat(counterPrice);
@@ -52,87 +76,90 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
   };
 
   const defaultReason = buyerCeiling
-    ? `${counterpartName} wants $${proposedPrice}. Your limit is $${buyerCeiling}.`
-    : `${counterpartName} proposed $${proposedPrice} for this project.`;
+    ? `${counterpartName} asked for ${formatMoney(proposedPrice)}. Your limit is ${formatMoney(buyerCeiling)}.`
+    : `${counterpartName} proposed ${formatMoney(proposedPrice)} for this service.`;
 
   const defaultSuggestion = buyerCeiling
-    ? `Our suggestion: counter at $${Math.max(buyerCeiling - 5, proposedPrice - 10)} for ${proposedDays} days.`
-    : `Our suggestion: review terms before proceeding.`;
+    ? `Our suggestion: counter at ${formatMoney(Math.max(buyerCeiling - 5, proposedPrice - 10))} for ${proposedDays}\u00A0days.`
+    : `Our suggestion: review agreed terms before proceeding.`;
 
   return (
     <div
-      className={`w-full bg-sun border-2 border-ink rounded-[20px] shadow-hard p-6 text-ink flex flex-col gap-5 ${className}`}
+      className={`w-full bg-surface border border-border-subtle rounded-surface shadow-decision p-6 text-text-primary flex flex-col gap-5 ${className}`}
     >
-      {/* Header Pill & Title */}
+      {/* Top Header Pill & Title */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <Pill label="Needs your decision" variant="coral" size="sm" />
-            <span className="text-small text-ink font-bold">· {counterpartName}</span>
+          <div className="flex items-center gap-2 mb-2">
+            <StatusChip label="Needs your OK" role="needsYou" size="sm" />
+            <span className="text-secondary text-text-muted">· {counterpartName}</span>
           </div>
-          <h3 className="font-display font-bold text-card-title text-ink">
+          <h3 className="font-display font-semibold text-section text-text-primary">
             {title}
           </h3>
         </div>
       </div>
 
       {/* Plain Words Question & Reason */}
-      <div className="bg-card border-2 border-ink rounded-[14px] p-4 text-ink flex flex-col gap-2 shadow-hard-sm">
-        <p className="font-bold text-body text-ink">
+      <div className="bg-raised border border-border-subtle rounded-control p-4 flex flex-col gap-2">
+        <p className="font-medium text-body text-text-primary">
           {reasonText || defaultReason}
         </p>
-        <div className="flex items-center gap-2 text-small text-muted font-medium">
-          <Sparkles className="w-4 h-4 text-coral shrink-0" strokeWidth={2.5} />
+        <div className="flex items-center gap-2 text-secondary text-text-muted">
+          <Sparkles className="w-4 h-4 text-status-needs shrink-0" strokeWidth={2} />
           <span>{suggestionText || defaultSuggestion}</span>
         </div>
       </div>
 
-      {/* Action Buttons or Counter Form */}
+      {/* Actions or Counter Drawer Form */}
       {!showCounterForm ? (
         <div className="flex flex-wrap items-center gap-3 pt-1">
           <Button
-            variant="coral"
+            variant="volt"
+            size="md"
             onClick={onApprove}
             disabled={isLoading}
-            className="flex-1 min-w-[140px]"
+            className="flex-1 min-w-[150px]"
           >
-            <span>Approve ${proposedPrice}</span>
-            <span className="text-small opacity-70 ml-1 font-normal">(A)</span>
+            <span>Approve {formatMoney(proposedPrice)}</span>
+            <kbd className="ml-2 text-secondary opacity-70">A</kbd>
           </Button>
 
           <Button
-            variant="white"
+            variant="secondary"
+            size="md"
             onClick={() => setShowCounterForm(true)}
             disabled={isLoading}
             className="flex-1 min-w-[120px]"
           >
             <span>Counter</span>
-            <span className="text-small opacity-70 ml-1 font-normal">(C)</span>
+            <kbd className="ml-2 text-secondary opacity-70">C</kbd>
           </Button>
 
           <Button
-            variant="white"
+            variant="secondary"
+            size="md"
             onClick={onDecline}
             disabled={isLoading}
             className="min-w-[100px]"
           >
             <span>Decline</span>
-            <span className="text-small opacity-70 ml-1 font-normal">(D)</span>
+            <kbd className="ml-2 text-secondary opacity-70">D</kbd>
           </Button>
         </div>
       ) : (
         <form
           onSubmit={handleCounterSubmit}
-          className="bg-card border-2 border-ink rounded-[14px] p-4 flex flex-col gap-4 shadow-hard-sm"
+          className="bg-raised border border-border-subtle rounded-control p-4 flex flex-col gap-4"
         >
           <div className="flex items-center justify-between">
-            <span className="font-bold text-body text-ink">Your counter proposal</span>
+            <span className="font-medium text-body text-text-primary">Your counter proposal</span>
             <button
               type="button"
               onClick={() => setShowCounterForm(false)}
-              className="p-1 hover:bg-paper rounded-full cursor-pointer"
+              className="p-1 text-text-muted hover:text-text-primary cursor-pointer"
             >
-              <X className="w-5 h-5 text-ink" strokeWidth={2.5} />
+              <X className="w-4 h-4" strokeWidth={2} />
             </button>
           </div>
 
@@ -145,7 +172,7 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
               required
             />
             <Input
-              label="Delivery (Days)"
+              label="Delivery (days)"
               type="number"
               value={counterDays}
               onChange={(e) => setCounterDays(e.target.value)}
@@ -153,19 +180,21 @@ export const DecisionCard: React.FC<DecisionCardProps> = ({
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2">
+          <div className="flex items-center justify-end gap-3 pt-1">
             <Button
               type="button"
               variant="ghost"
+              size="sm"
               onClick={() => setShowCounterForm(false)}
             >
               Cancel
             </Button>
             <Button
               type="submit"
-              variant="coral"
+              variant="volt"
+              size="sm"
               disabled={isLoading}
-              icon={<ArrowRight className="w-4 h-4 text-ink" strokeWidth={2.5} />}
+              icon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
             >
               Send counter offer
             </Button>

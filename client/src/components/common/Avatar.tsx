@@ -3,40 +3,41 @@ import React from 'react';
 export interface AvatarProps {
   name?: string;
   size?: 'sm' | 'md' | 'lg';
-  variant?: 'sun' | 'mint' | 'sky' | 'lavender' | 'coral';
   className?: string;
 }
+
+const BG_PALETTE = [
+  'bg-status-progress/20 text-status-progress',
+  'bg-status-handled/20 text-status-handled',
+  'bg-status-needs/20 text-status-needs',
+  'bg-volt/20 text-volt',
+];
 
 export const Avatar: React.FC<AvatarProps> = ({
   name = 'User',
   size = 'md',
-  variant = 'lavender',
   className = '',
 }) => {
   const sizeStyles = {
-    sm: 'w-8 h-8 text-small',
-    md: 'w-10 h-10 text-body font-bold',
-    lg: 'w-12 h-12 text-card-title',
+    sm: 'w-8 h-8 text-secondary font-medium',
+    md: 'w-9 h-9 text-secondary font-medium',
+    lg: 'w-11 h-11 text-body font-semibold',
   }[size];
 
-  const variantStyles = {
-    sun: 'bg-sun',
-    mint: 'bg-mint',
-    sky: 'bg-sky',
-    lavender: 'bg-lavender',
-    coral: 'bg-coral',
-  }[variant];
-
-  // Derive 1-2 letter initials
-  const clean = name.trim();
+  // Derive initials
+  const clean = (name || '').trim();
   const parts = clean.split(/\s+/);
-  const initials = parts.length >= 2 
+  const initials = parts.length >= 2
     ? `${parts[0][0]}${parts[1][0]}`.toUpperCase()
     : (clean.slice(0, 2) || 'U').toUpperCase();
 
+  // Deterministic color from name
+  const charCode = clean.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+  const colorClass = BG_PALETTE[charCode % BG_PALETTE.length];
+
   return (
     <div
-      className={`inline-flex items-center justify-center rounded-full border-2 border-ink text-ink select-none shrink-0 ${sizeStyles} ${variantStyles} ${className}`}
+      className={`inline-flex items-center justify-center rounded-full select-none shrink-0 border border-border-subtle ${sizeStyles} ${colorClass} ${className}`}
       title={name}
     >
       <span>{initials}</span>

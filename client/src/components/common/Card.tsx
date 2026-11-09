@@ -1,40 +1,36 @@
 import React from 'react';
 
 export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
-  variant?: 'white' | 'paper' | 'sun' | 'mint' | 'sky' | 'rose' | 'lavender';
+  variant?: 'surface' | 'raised' | 'flat';
   interactive?: boolean;
   padding?: 'none' | 'sm' | 'md' | 'lg';
 }
 
 export const Card: React.FC<CardProps> = ({
   children,
-  variant = 'white',
+  variant = 'surface',
   interactive = false,
   padding = 'md',
   className = '',
   ...props
 }) => {
-  const base = 'border-2 border-ink rounded-[20px] shadow-hard text-ink';
+  const base = 'rounded-surface border border-border-subtle text-text-primary transition-colors duration-150';
 
   const paddingStyles = {
     none: 'p-0',
     sm: 'p-4',
-    md: 'p-6', // 24px
+    md: 'p-6',
     lg: 'p-8',
   }[padding];
 
   const variantStyles = {
-    white: 'bg-card',
-    paper: 'bg-paper',
-    sun: 'bg-sun',
-    mint: 'bg-mint',
-    sky: 'bg-sky',
-    rose: 'bg-rose',
-    lavender: 'bg-lavender',
+    surface: 'bg-surface',
+    raised: 'bg-raised',
+    flat: 'bg-transparent',
   }[variant];
 
   const interactiveStyles = interactive
-    ? 'cursor-pointer transition-all duration-150 hover:-translate-y-1 hover:shadow-hard-lg active:translate-y-0.75 active:shadow-hard-press select-none'
+    ? 'cursor-pointer hover:border-text-muted/40 select-none'
     : '';
 
   return (

@@ -1,108 +1,81 @@
-@import '@fontsource/bricolage-grotesque/700.css';
-@import '@fontsource/figtree/400.css';
-@import '@fontsource/figtree/500.css';
-@import '@fontsource/figtree/600.css';
-@import '@fontsource/figtree/700.css';
+@import '@fontsource/sora/600.css';
+@import '@fontsource/sora/700.css';
+@import '@fontsource/hanken-grotesk/400.css';
+@import '@fontsource/hanken-grotesk/500.css';
+@import '@fontsource/hanken-grotesk/600.css';
+@import '@fontsource/hanken-grotesk/700.css';
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
+  /* Dark is DEFAULT */
   :root {
-    --bg-paper: #FBF7F0;
-    --bg-card: #FFFFFF;
-    --text-ink: #1C1A17;
-    --text-muted: #5E5A52;
+    --bg: #0C0E0D;
+    --surface: #141715;
+    --raised: #1A1E1B;
+    --border-subtle: #262B28;
+    --text-primary: #F2F4F0;
+    --text-muted: #A0A7A1;
+    --volt: #D4FF3A;
+    --status-handled: #34D399;
+    --status-needs: #FFB020;
+    --status-declined: #FF6B6B;
+    --status-progress: #8FA3B8;
   }
 
-  .dark {
-    --bg-paper: #252321;
-    --bg-card: #312E2A;
-    --text-ink: #FBF7F0;
-    --text-muted: #C4BFB6;
+  /* Light Theme Fully Supported */
+  .light {
+    --bg: #FAFAF7;
+    --surface: #FFFFFF;
+    --raised: #F3F3EE;
+    --border-subtle: #E2E3DC;
+    --text-primary: #0E1210;
+    --text-muted: #58605A;
+    --volt: #C6F51F;
+    --status-handled: #0F9D6B;
+    --status-needs: #B45F06;
+    --status-declined: #C0392B;
+    --status-progress: #4A5D70;
   }
 
   html {
-    font-family: 'Figtree', sans-serif;
-    font-size: 17px;
-    background-color: var(--bg-paper);
-    color: var(--text-ink);
+    font-family: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 16px;
+    background-color: var(--bg);
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     min-height: 100vh;
-    background-color: var(--bg-paper);
-    color: var(--text-ink);
+    background-color: var(--bg);
+    color: var(--text-primary);
     margin: 0;
     padding: 0;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Bricolage Grotesque', sans-serif;
-    font-weight: 700;
-    letter-spacing: -0.02em;
+    font-family: 'Sora', sans-serif;
+    letter-spacing: -0.025em;
   }
 }
 
-/* Tactile Paper-and-Ink Interactive Press */
-.tactile-btn {
-  border: 2px solid #1C1A17;
-  box-shadow: 0 4px 0 #1C1A17;
-  transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 140ms ease;
+/* Agreement Volt Sweep Banner */
+@keyframes volt-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
 }
 
-.tactile-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 5px 0 #1C1A17;
-}
-
-.tactile-btn:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 #1C1A17;
-}
-
-.tactile-card {
-  border: 2px solid #1C1A17;
-  box-shadow: 0 4px 0 #1C1A17;
-  border-radius: 20px;
-  background-color: #FFFFFF;
-}
-
-.dark .tactile-card {
-  background-color: #312E2A;
-  border-color: #1C1A17;
-}
-
-.tactile-card-interactive {
-  border: 2px solid #1C1A17;
-  box-shadow: 0 4px 0 #1C1A17;
-  border-radius: 20px;
-  background-color: #FFFFFF;
-  transition: transform 140ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 140ms ease;
-}
-
-.dark .tactile-card-interactive {
-  background-color: #312E2A;
-}
-
-.tactile-card-interactive:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 0 #1C1A17;
-}
-
-.tactile-card-interactive:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 #1C1A17;
-}
-
-.ticket-notch {
-  position: relative;
-  border: 2px solid #1C1A17;
-  border-radius: 20px;
-  background-color: #FFFFFF;
+.animate-volt-sweep {
+  animation: volt-sweep 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @media (prefers-reduced-motion: reduce) {

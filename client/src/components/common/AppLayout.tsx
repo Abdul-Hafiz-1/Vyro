@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Avatar } from './Avatar';
-import { Button } from './Button';
+import { ModeSwitch } from './ModeSwitch';
+import { CommandPalette } from './CommandPalette';
 import { 
   Sun, 
   Handshake, 
@@ -10,8 +11,10 @@ import {
   User, 
   Plus, 
   LogOut, 
-  ListOrdered,
-  Sparkles
+  Bell, 
+  Search,
+  Moon,
+  SunMedium
 } from 'lucide-react';
 
 export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }) => {
@@ -19,21 +22,38 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
   const navigate = useNavigate();
   const location = useLocation();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isCommandOpen, setIsCommandOpen] = useState(false);
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return document.documentElement.classList.contains('light');
+  });
+
+  const toggleTheme = () => {
+    if (isLightMode) {
+      document.documentElement.classList.remove('light');
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+      setIsLightMode(false);
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.classList.add('light');
+      localStorage.setItem('theme', 'light');
+      setIsLightMode(true);
+    }
+  };
 
   const isSeller = isSellerWorkspace;
 
-  // Navigation Items
   const navItems = isSeller
     ? [
         { to: '/app', label: 'Today', icon: Sun },
-        { to: '/app/listings', label: 'Listings', icon: Store },
         { to: '/app/deals', label: 'Deals', icon: Handshake },
+        { to: '/app/listings', label: 'Listings', icon: Store },
         { to: '/app/settings', label: 'Account', icon: User },
       ]
     : [
         { to: '/app', label: 'Today', icon: Sun },
         { to: '/app/deals', label: 'Deals', icon: Handshake },
-        { to: '/app/marketplace', label: 'Marketplace', icon: Store },
+        { to: '/app/marketplace', label: 'Market', icon: Store },
         { to: '/app/settings', label: 'Account', icon: User },
       ];
 
@@ -45,61 +65,65 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
     }
   };
 
-  const actionLabel = isSeller ? 'New listing' : 'New request';
-
   return (
-    <div className="min-h-screen bg-paper text-ink flex flex-col">
+    <div className="min-h-screen bg-bg text-text-primary flex flex-col selection:bg-volt selection:text-[#0C0E0D]">
       {/* 1. TOP BAR (DESKTOP) */}
-      <header className="sticky top-0 bg-paper border-b-2 border-ink z-40 px-4 md:px-8 py-3">
-        <div className="max-w-[1100px] mx-auto flex items-center justify-between gap-4">
+      <header className="sticky top-0 bg-surface/90 border-b border-border-subtle z-40 px-4 md:px-8 h-14 flex items-center">
+        <div className="w-full max-w-[1120px] mx-auto flex items-center justify-between gap-4">
           
-          {/* Logo */}
-          <NavLink to="/app" className="flex items-center gap-2 select-none group">
-            <div className="w-10 h-10 rounded-full bg-sun border-2 border-ink flex items-center justify-center font-display font-bold text-card-title text-ink shadow-hard-sm group-hover:-translate-y-0.5 transition-transform">
-              V
+          {/* Left: Logo & Mode Switch */}
+          <div className="flex items-center gap-4">
+            <NavLink to="/app" className="flex items-center gap-2 select-none group">
+              <span className="font-display font-bold text-[22px] tracking-tight text-text-primary">
+                VYRO
+              </span>
+              <span className="w-2 h-2 rounded-full bg-volt" />
+            </NavLink>
+
+            <div className="hidden sm:block">
+              <ModeSwitch />
             </div>
-            <span className="font-display font-bold text-[26px] tracking-tight text-ink">
-              VYRO
-            </span>
-          </NavLink>
+          </div>
 
-          {/* Centered Desktop Pill Tabs */}
-          <nav className="hidden md:flex items-center gap-2 bg-card border-2 border-ink rounded-full p-1.5 shadow-hard-sm">
-            {navItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = location.pathname === item.to || 
-                (item.to !== '/app' && location.pathname.startsWith(item.to));
-
-              return (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={`flex items-center gap-2 px-5 py-2 rounded-full font-bold text-body transition-all select-none ${
-                    isActive
-                      ? 'bg-sun text-ink border-2 border-ink shadow-hard-sm translate-y-0'
-                      : 'text-muted hover:text-ink hover:bg-paper'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 text-ink" strokeWidth={2.5} />
-                  <span>{item.label}</span>
-                </NavLink>
-              );
-            })}
-          </nav>
-
-          {/* Right Action: Big Coral Pill + Avatar */}
-          <div className="flex items-center gap-3">
-            <Button
-              variant="coral"
-              size="md"
-              onClick={handleNewAction}
-              icon={<Plus className="w-5 h-5 text-ink" strokeWidth={3} />}
-              className="hidden sm:inline-flex"
+          {/* Center: Command Palette Bar (⌘K / Ctrl+K) */}
+          <div className="flex-1 max-w-[440px] hidden md:block">
+            <button
+              type="button"
+              onClick={() => setIsCommandOpen(true)}
+              className="w-full h-9 px-3 bg-raised border border-border-subtle rounded-control text-secondary text-text-muted hover:text-text-primary flex items-center justify-between transition-colors cursor-pointer"
             >
-              {actionLabel}
-            </Button>
+              <div className="flex items-center gap-2">
+                <Search className="w-4 h-4 text-text-muted" strokeWidth={2} />
+                <span>Search or jump to...</span>
+              </div>
+              <kbd className="px-1.5 py-0.5 text-secondary text-text-muted bg-surface border border-border-subtle rounded">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
 
-            {/* Avatar & User Dropdown */}
+          {/* Right: Actions, Notifications, Avatar */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Mobile Search Button */}
+            <button
+              type="button"
+              onClick={() => setIsCommandOpen(true)}
+              className="md:hidden p-2 text-text-muted hover:text-text-primary rounded-control cursor-pointer"
+              title="Search"
+            >
+              <Search className="w-5 h-5" strokeWidth={2} />
+            </button>
+
+            {/* Notification Bell */}
+            <NavLink
+              to="/app/notifications"
+              className="p-2 text-text-muted hover:text-text-primary rounded-control hover:bg-raised transition-colors relative"
+              title="Notifications"
+            >
+              <Bell className="w-4.5 h-4.5" strokeWidth={2} />
+            </NavLink>
+
+            {/* User Avatar Menu */}
             <div className="relative">
               <button
                 type="button"
@@ -107,26 +131,44 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                 className="cursor-pointer focus:outline-none rounded-full"
                 title={user?.displayName || 'Account'}
               >
-                <Avatar name={user?.displayName || 'User'} size="md" variant="sun" />
+                <Avatar name={user?.displayName || 'User'} size="md" />
               </button>
 
               {showUserMenu && (
-                <div className="absolute right-0 mt-3 w-56 bg-card border-2 border-ink rounded-[20px] shadow-hard p-3 z-50 flex flex-col gap-1">
-                  <div className="px-3 py-2 border-b-2 border-ink mb-1">
-                    <p className="font-bold text-body text-ink truncate">
+                <div className="absolute right-0 mt-2 w-56 bg-surface border border-border-subtle rounded-surface shadow-decision p-2 z-50 flex flex-col gap-1">
+                  <div className="px-3 py-2 border-b border-border-subtle mb-1">
+                    <p className="font-semibold text-secondary text-text-primary truncate">
                       {user?.displayName || 'My Account'}
                     </p>
-                    <p className="text-small text-muted truncate">
+                    <p className="text-secondary text-text-muted truncate">
                       {user?.email}
                     </p>
                   </div>
 
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toggleTheme();
+                      setShowUserMenu(false);
+                    }}
+                    className="flex items-center justify-between px-3 py-2 rounded-control hover:bg-raised text-secondary text-text-primary cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      {isLightMode ? (
+                        <Moon className="w-4 h-4 text-text-muted" strokeWidth={2} />
+                      ) : (
+                        <SunMedium className="w-4 h-4 text-text-muted" strokeWidth={2} />
+                      )}
+                      <span>{isLightMode ? 'Dark theme' : 'Light theme'}</span>
+                    </span>
+                  </button>
+
                   <NavLink
                     to="/app/settings"
                     onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-paper font-bold text-body text-ink"
+                    className="flex items-center gap-2 px-3 py-2 rounded-control hover:bg-raised text-secondary text-text-primary"
                   >
-                    <User className="w-4 h-4 text-ink" strokeWidth={2.5} />
+                    <User className="w-4 h-4 text-text-muted" strokeWidth={2} />
                     <span>Account settings</span>
                   </NavLink>
 
@@ -136,27 +178,26 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                       setShowUserMenu(false);
                       logout();
                     }}
-                    className="flex items-center gap-2 px-3 py-2 rounded-full hover:bg-rose/20 text-rose font-bold text-body text-left cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-2 rounded-control hover:bg-status-declined/10 text-secondary text-status-declined text-left cursor-pointer"
                   >
-                    <LogOut className="w-4 h-4 text-rose" strokeWidth={2.5} />
+                    <LogOut className="w-4 h-4" strokeWidth={2} />
                     <span>Sign out</span>
                   </button>
                 </div>
               )}
             </div>
-
           </div>
 
         </div>
       </header>
 
-      {/* 2. MAIN CONTENT COLUMN (MAX 880px) */}
-      <main className="flex-1 w-full max-w-[880px] mx-auto px-4 sm:px-6 py-8 pb-28 md:pb-12">
+      {/* 2. MAIN CONTENT (MAX ~1120px) */}
+      <main className="flex-1 w-full max-w-[1120px] mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-12">
         {children || <Outlet />}
       </main>
 
-      {/* 3. MOBILE FLOATING BOTTOM TAB BAR */}
-      <div className="md:hidden fixed bottom-4 left-4 right-4 max-w-[400px] mx-auto bg-card border-2 border-ink rounded-full shadow-hard px-3 py-2 flex items-center justify-around z-50">
+      {/* 3. MOBILE BOTTOM TABS */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-surface/95 border-t border-border-subtle px-4 flex items-center justify-around z-40">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = location.pathname === item.to || 
@@ -166,26 +207,32 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
             <NavLink
               key={item.to}
               to={item.to}
-              className={`flex flex-col items-center justify-center min-w-[56px] min-h-[44px] rounded-full transition-all ${
-                isActive ? 'text-coral font-bold' : 'text-muted font-medium'
+              className={`flex flex-col items-center justify-center min-w-[50px] transition-colors ${
+                isActive ? 'text-volt font-medium' : 'text-text-muted'
               }`}
             >
-              <Icon className="w-5 h-5 text-ink" strokeWidth={isActive ? 3 : 2} />
-              <span className="text-[14px] leading-tight text-ink mt-0.5">{item.label}</span>
+              <Icon className="w-5 h-5" strokeWidth={isActive ? 2.4 : 1.8} />
+              <span className="text-secondary leading-tight mt-1">{item.label}</span>
             </NavLink>
           );
         })}
 
-        {/* Round "+" Button */}
+        {/* Mobile New Action Pill */}
         <button
           type="button"
           onClick={handleNewAction}
-          className="w-12 h-12 rounded-full bg-coral border-2 border-ink shadow-hard flex items-center justify-center cursor-pointer active:translate-y-0.75 active:shadow-hard-press"
-          title={actionLabel}
+          className="w-10 h-10 rounded-full bg-volt text-[#0C0E0D] flex items-center justify-center cursor-pointer shadow-sm active:scale-95"
+          title={isSeller ? 'New listing' : 'New request'}
         >
-          <Plus className="w-6 h-6 text-ink" strokeWidth={3} />
+          <Plus className="w-5 h-5" strokeWidth={2.5} />
         </button>
-      </div>
+      </nav>
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={isCommandOpen}
+        onClose={() => setIsCommandOpen(false)}
+      />
     </div>
   );
 };

@@ -1,12 +1,9 @@
 import React from 'react';
-import { Pill } from './Pill';
-import { CheckCircle2, Clock, AlertCircle, XCircle } from 'lucide-react';
+import { StatusChip, StatusRole } from './StatusChip';
 
 export interface BadgeProps {
   children: React.ReactNode;
-  variant?: 
-    | 'success' | 'warning' | 'danger' | 'info' | 'default' | 'accent' | 'neutral' | 'error'
-    | 'coral' | 'sun' | 'mint' | 'sky' | 'rose' | 'lavender';
+  variant?: string;
   size?: 'sm' | 'md';
   icon?: React.ReactNode;
   dot?: boolean;
@@ -19,56 +16,22 @@ export const Badge: React.FC<BadgeProps> = ({
   variant = 'default',
   size = 'md',
   icon,
-  dot,
   className = '',
   onClick
 }) => {
-  let mappedVariant: 'coral' | 'sun' | 'mint' | 'sky' | 'rose' | 'lavender' = 'lavender';
-  let defaultIcon: React.ReactNode = null;
-
-  switch (variant) {
-    case 'success':
-    case 'mint':
-      mappedVariant = 'mint';
-      defaultIcon = <CheckCircle2 className="w-4 h-4 text-ink" strokeWidth={2.5} />;
-      break;
-    case 'warning':
-    case 'sun':
-      mappedVariant = 'sun';
-      defaultIcon = <AlertCircle className="w-4 h-4 text-ink" strokeWidth={2.5} />;
-      break;
-    case 'danger':
-    case 'error':
-    case 'rose':
-      mappedVariant = 'rose';
-      defaultIcon = <XCircle className="w-4 h-4 text-ink" strokeWidth={2.5} />;
-      break;
-    case 'info':
-    case 'sky':
-      mappedVariant = 'sky';
-      defaultIcon = <Clock className="w-4 h-4 text-ink" strokeWidth={2.5} />;
-      break;
-    case 'coral':
-    case 'accent':
-      mappedVariant = 'coral';
-      break;
-    case 'neutral':
-    default:
-      mappedVariant = 'lavender';
-      break;
-  }
+  let role: StatusRole = 'neutral';
+  if (variant === 'success' || variant === 'mint') role = 'handled';
+  else if (variant === 'warning' || variant === 'sun' || variant === 'coral' || variant === 'accent') role = 'needsYou';
+  else if (variant === 'danger' || variant === 'error' || variant === 'rose') role = 'declined';
+  else if (variant === 'info' || variant === 'sky') role = 'inProgress';
 
   const label = typeof children === 'string' ? children : String(children || '');
 
   return (
-    <Pill
+    <StatusChip
       label={label}
-      variant={mappedVariant}
-      icon={
-        icon || (dot ? (
-          <span className="w-2 h-2 rounded-full bg-ink inline-block" />
-        ) : defaultIcon)
-      }
+      role={role}
+      icon={icon}
       size={size}
       className={className}
       onClick={onClick}

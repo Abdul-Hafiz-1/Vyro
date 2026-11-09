@@ -1,39 +1,53 @@
 /**
- * VYRO "Friendly Paper-and-Ink" Design Tokens
- * Light first. Background #FBF7F0, card #FFFFFF, ink #1C1A17, muted #5E5A52.
+ * VYRO Premium Design Tokens
+ * Derived from Linear, Stripe, and Ramp reference teardown.
+ * Dark by default. Light fully supported.
  */
 
 export const TOKENS = {
-  // Base Surfaces & Inks
-  paper: '#FBF7F0',
-  card: '#FFFFFF',
-  ink: '#1C1A17',
-  muted: '#5E5A52',
-
-  // Status & Action Palette (Flat Fills with Ink Text)
-  coral: '#FF6B4A',     // Primary action
-  sun: '#FFD23F',       // "Needs you"
-  mint: '#7FDDB0',      // Done / Approved
-  sky: '#9CCBFF',       // In progress
-  rose: '#F6A8A8',      // Declined
-  lavender: '#D9C8FF',  // Neutral highlight / tags
-
-  // Warm Dark Variant (Never pure black, same chunky outlines)
-  darkPaper: '#252321',
-  darkCard: '#312E2A',
-  darkInk: '#FBF7F0',
-  darkMuted: '#C4BFB6'
-} as const;
-
-export const SHADOWS = {
-  card: '0 4px 0 #1C1A17',
-  cardPressed: '0 1px 0 #1C1A17',
-  cardHover: '0 6px 0 #1C1A17',
-  darkCard: '0 4px 0 #1C1A17',
-} as const;
-
-export const RADIUS = {
-  card: '20px',
-  input: '14px',
-  pill: '999px',
+  // Dark (Default)
+  dark: {
+    bg: '#0C0E0D',
+    surface: '#141715',
+    raised: '#1A1E1B',
+    border: '#262B28',
+    text: '#F2F4F0',
+    muted: '#A0A7A1',
+    volt: '#D4FF3A',
+    status: {
+      handled: '#34D399',
+      needsYou: '#FFB020',
+      declined: '#FF6B6B',
+      inProgress: '#8FA3B8',
+    }
+  },
+  // Light
+  light: {
+    bg: '#FAFAF7',
+    surface: '#FFFFFF',
+    raised: '#F3F3EE',
+    border: '#E2E3DC',
+    text: '#0E1210',
+    muted: '#58605A',
+    volt: '#C6F51F',
+    status: {
+      handled: '#0F9D6B',
+      needsYou: '#B45F06',
+      declined: '#C0392B',
+      inProgress: '#4A5D70',
+    }
+  },
+  // Radii Specs
+  radius: {
+    control: '10px',
+    surface: '16px',
+    pill: '9999px',
+  },
+  // Typography Specs
+  fonts: {
+    display: 'Sora, sans-serif',
+    body: 'Hanken Grotesk, sans-serif',
+  },
+  // Layout Max Width
+  maxWidth: '1120px'
 } as const;

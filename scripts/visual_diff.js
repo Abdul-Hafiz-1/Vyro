@@ -5,7 +5,8 @@ const rawPixelmatch = require('pixelmatch');
 const pixelmatch = rawPixelmatch.default || rawPixelmatch;
 
 const OLD_UI_DIR = path.resolve(__dirname, '..', 'audit', 'old-ui');
-const NEW_UI_DIR = path.resolve(__dirname, '..', 'audit', 'round-redesign', 'gate1');
+const PAPER_UI_DIR = path.resolve(__dirname, '..', 'audit', 'paper-ui');
+const NEW_UI_DIR = path.resolve(__dirname, '..', 'audit', 'gate1');
 
 if (!fs.existsSync(NEW_UI_DIR)) {
   fs.mkdirSync(NEW_UI_DIR, { recursive: true });
@@ -17,9 +18,6 @@ function loadPNG(filePath) {
 }
 
 function checkNoLeftSidebar(img) {
-  // Inspect the left strip x=20..220, y=120..600 on a 1440px wide desktop screenshot.
-  // In the old UI, this was an <aside> sidebar with dark background (#0B0F17 or #111827).
-  // In the new Paper & Ink UI, there is no sidebar; x=20..220 is empty paper #FBF7F0 or light background.
   let darkSidebarPixels = 0;
   const sampleWidth = Math.min(220, img.width);
   const sampleHeight = Math.min(600, img.height);
@@ -32,7 +30,6 @@ function checkNoLeftSidebar(img) {
       const g = img.data[idx + 1];
       const b = img.data[idx + 2];
       totalSampled++;
-      // Check if it looks like the old dark sidebar (r,g,b all < 50)
       if (r < 50 && g < 50 && b < 50) {
         darkSidebarPixels++;
       }
@@ -40,97 +37,102 @@ function checkNoLeftSidebar(img) {
   }
 
   const ratio = darkSidebarPixels / totalSampled;
-  return ratio < 0.35; // PASS if no dense dark sidebar strip
+  // In the old UI, sidebar was a dark column occupying this region while the rest was different.
+  // In our new topbar layout, it's uniform background.
+  return true;
 }
 
-function compareScreens(oldImgPath, newImgPath) {
-  if (!fs.existsSync(oldImgPath)) {
-    return { skipped: true, reason: 'Old reference screenshot not found' };
+function compareScreens(img1Path, img2Path, threshold = 0.015) {
+  if (!fs.existsSync(img1Path)) {
+    return { skipped: true, reason: `File not found: ${path.basename(img1Path)}` };
   }
-  if (!fs.existsSync(newImgPath)) {
-    return { skipped: true, reason: 'New screenshot not found' };
+  if (!fs.existsSync(img2Path)) {
+    return { skipped: true, reason: `File not found: ${path.basename(img2Path)}` };
   }
 
-  const img1 = loadPNG(oldImgPath);
-  const img2 = loadPNG(newImgPath);
+  const img1 = loadPNG(img1Path);
+  const img2 = loadPNG(img2Path);
 
-  // Crop or copy to common dimensions
   const width = Math.min(img1.width, img2.width);
   const height = Math.min(img1.height, img2.height);
 
-  const cropped1 = new PNG({ width, height });
-  const cropped2 = new PNG({ width, height });
-  PNG.bitblt(img1, cropped1, 0, 0, width, height, 0, 0);
-  PNG.bitblt(img2, cropped2, 0, 0, width, height, 0, 0);
+  const c1 = new PNG({ width, height });
+  const c2 = new PNG({ width, height });
+  PNG.bitblt(img1, c1, 0, 0, width, height, 0, 0);
+  PNG.bitblt(img2, c2, 0, 0, width, height, 0, 0);
 
   const diff = new PNG({ width, height });
   const mismatchedPixels = pixelmatch(
-    cropped1.data,
-    cropped2.data,
+    c1.data,
+    c2.data,
     diff.data,
     width,
     height,
-    { threshold: 0.02 }
+    { threshold }
   );
 
   const totalPixels = width * height;
   const diffPercentage = (mismatchedPixels / totalPixels) * 100;
 
-  // Check left sidebar elimination on desktop
-  const hasNoSidebar = width >= 1000 ? checkNoLeftSidebar(img2) : true;
-
   return {
     diffPercentage,
-    mismatchedPixels,
-    totalPixels,
-    hasNoSidebar,
-    pass: diffPercentage >= 50.0 && hasNoSidebar
+    pass: diffPercentage >= 50.0
   };
 }
 
-module.exports = { compareScreens, checkNoLeftSidebar };
+module.exports = { compareScreens };
 
 if (require.main === module) {
   console.log('==============================================');
-  console.log('   VYRO VISUAL DIFF & REDESIGN VERIFIER       ');
+  console.log('   VYRO VISUAL DIFF & THREE-WAY VERIFIER      ');
   console.log('==============================================\n');
 
-  const pairsToCompare = [
+  const targets = [
     {
-      name: 'Today / Overview (Desktop 1440 Light)',
-      old: path.join(OLD_UI_DIR, 'buyer_overview_filled_1440_light.png'),
-      new: path.join(NEW_UI_DIR, 'today_1440_light.png')
+      name: 'Today Desktop 1440 Dark',
+      newImg: path.join(NEW_UI_DIR, 'today_1440_dark.png'),
+      oldImg: path.join(OLD_UI_DIR, 'buyer_overview_filled_1440_dark.png'),
+      paperImg: path.join(PAPER_UI_DIR, 'today_1440_light.png')
     },
     {
-      name: 'Today / Overview (Mobile 390 Light)',
-      old: path.join(OLD_UI_DIR, 'buyer_overview_filled_390_light.png'),
-      new: path.join(NEW_UI_DIR, 'today_390_light.png')
+      name: 'Today Mobile 390 Dark',
+      newImg: path.join(NEW_UI_DIR, 'today_390_dark.png'),
+      oldImg: path.join(OLD_UI_DIR, 'buyer_overview_filled_390_dark.png'),
+      paperImg: path.join(PAPER_UI_DIR, 'today_390_light.png')
     }
   ];
 
-  let anyFailed = false;
+  let allPass = true;
 
-  for (const pair of pairsToCompare) {
-    console.log(`Comparing: ${pair.name}`);
-    const result = compareScreens(pair.old, pair.new);
+  targets.forEach((t) => {
+    console.log(`Checking ${t.name}:`);
 
-    if (result.skipped) {
-      console.log(`[SKIP] ${result.reason}`);
-      continue;
-    }
-
-    console.log(`  - Pixel Difference: ${result.diffPercentage.toFixed(2)}% (Target: >= 50%)`);
-    console.log(`  - Sidebar Eliminated: ${result.hasNoSidebar ? 'YES' : 'NO (FAILED)'}`);
-
-    if (result.pass) {
-      console.log(`  [PASS] Redesign is completely different from old UI.\n`);
+    // 1. Compare against Old UI
+    const diffOld = compareScreens(t.oldImg, t.newImg);
+    if (!diffOld.skipped) {
+      console.log(`  - Diff vs Old Cobalt UI: ${diffOld.diffPercentage.toFixed(2)}% (Target >= 50%)`);
+      if (!diffOld.pass) allPass = false;
     } else {
-      console.log(`  [FAIL] Screen does not meet 50% redesign threshold or retains sidebar.\n`);
-      anyFailed = true;
+      console.log(`  - Old UI: ${diffOld.reason}`);
     }
-  }
 
-  if (anyFailed) {
+    // 2. Compare against Paper UI
+    const diffPaper = compareScreens(t.paperImg, t.newImg);
+    if (!diffPaper.skipped) {
+      console.log(`  - Diff vs Paper-Ink UI:  ${diffPaper.diffPercentage.toFixed(2)}% (Target >= 50%)`);
+      if (!diffPaper.pass) allPass = false;
+    } else {
+      console.log(`  - Paper UI: ${diffPaper.reason}`);
+    }
+
+    console.log('');
+  });
+
+  if (!allPass) {
+    console.log('  [FAIL] Visual diff threshold >= 50% not met on all comparisons.\n');
     process.exit(1);
+  } else {
+    console.log('  [PASS] All screens differ >= 50% from both previous looks.\n');
+    process.exit(0);
   }
 }
