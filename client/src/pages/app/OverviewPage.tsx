@@ -11,7 +11,11 @@ import {
   ChevronRight,
   RotateCcw,
   SlidersHorizontal,
-  X
+  X,
+  Plus,
+  Handshake,
+  Store,
+  CreditCard
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -144,6 +148,118 @@ export const OverviewPage: React.FC = () => {
     navigate(`/app/deals/${dealId}`);
   };
 
+  const totalDeals = needsYou.length + inProgress.length;
+  const dealsBadge = needsYou.length > 0 
+    ? `${needsYou.length} need OK` 
+    : `${totalDeals} active`;
+
+  const quickActions = isSellerWorkspace
+    ? [
+        {
+          title: 'Create a listing',
+          desc: 'Publish your rates, scope, and SLA boundaries',
+          to: '/app/listings/new',
+          icon: Plus,
+          badge: 'New',
+          badgeVolt: true,
+        },
+        {
+          title: 'My deals',
+          desc: 'Incoming buyer inquiries and active orders',
+          to: '/app/deals',
+          icon: Handshake,
+          badge: dealsBadge,
+          badgeVolt: needsYou.length > 0,
+        },
+        {
+          title: 'Listings',
+          desc: 'Manage your active services and public rates',
+          to: '/app/listings',
+          icon: Store,
+          badge: 'Active',
+          badgeVolt: false,
+        },
+        {
+          title: 'Payments',
+          desc: 'Delivered milestone earnings and payout logs',
+          to: '/app/transactions',
+          icon: CreditCard,
+          badge: formatMoney(homeData?.userLimits?.balance || 0),
+          badgeVolt: false,
+        },
+      ]
+    : [
+        {
+          title: 'Start a request',
+          desc: 'Tell your agent what to find and negotiate',
+          to: '/app/requests/new',
+          icon: Plus,
+          badge: 'New',
+          badgeVolt: true,
+        },
+        {
+          title: 'My deals',
+          desc: 'Proposals, live negotiations, and outcomes',
+          to: '/app/deals',
+          icon: Handshake,
+          badge: dealsBadge,
+          badgeVolt: needsYou.length > 0,
+        },
+        {
+          title: 'Marketplace',
+          desc: 'Browse verified engineering and design talent',
+          to: '/app/marketplace',
+          icon: Store,
+          badge: 'Explore',
+          badgeVolt: false,
+        },
+        {
+          title: 'Payments',
+          desc: 'Escrow funds, transactions, and invoices',
+          to: '/app/transactions',
+          icon: CreditCard,
+          badge: formatMoney(homeData?.userLimits?.balance || 2500),
+          badgeVolt: false,
+        },
+      ];
+
+  const renderQuickActions = () => (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      {quickActions.map((action) => {
+        const Icon = action.icon;
+        return (
+          <Link
+            key={action.title}
+            to={action.to}
+            className="bg-surface border border-border-subtle hover:border-volt/60 rounded-surface p-4 sm:p-5 flex flex-col justify-between gap-3 transition-all hover:bg-raised/40 group cursor-pointer"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="w-9 h-9 rounded-control bg-raised border border-border-subtle flex items-center justify-center text-text-primary group-hover:text-volt transition-colors">
+                <Icon className="w-4.5 h-4.5" strokeWidth={2.2} />
+              </div>
+              <span className={`px-2 py-0.5 rounded-chip text-secondary font-semibold border ${
+                action.badgeVolt
+                  ? 'bg-volt/15 text-volt border-volt/30'
+                  : 'bg-raised text-text-muted border-border-subtle group-hover:text-text-primary'
+              }`}>
+                {action.badge}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="font-display font-semibold text-[15px] text-text-primary group-hover:text-volt transition-colors flex items-center justify-between">
+                <span>{action.title}</span>
+                <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-volt group-hover:translate-x-0.5 transition-all" />
+              </span>
+              <p className="text-secondary text-text-muted leading-snug line-clamp-2">
+                {action.desc}
+              </p>
+            </div>
+          </Link>
+        );
+      })}
+    </div>
+  );
+
   if (isLoading) {
     return (
       <div className="flex flex-col gap-8 py-4 animate-pulse">
@@ -169,6 +285,9 @@ export const OverviewPage: React.FC = () => {
               : 'Describe what you need. Your assistant will search verified specialists and negotiate pricing within your ceiling.'}
           </p>
         </div>
+
+        {/* 4 Quick Action Cards */}
+        {renderQuickActions()}
 
         {/* Hero Prompt Card */}
         <div className="bg-surface border border-border-subtle rounded-surface p-6 md:p-8 flex flex-col gap-6">
@@ -238,6 +357,9 @@ export const OverviewPage: React.FC = () => {
           {statusSentence}
         </h1>
       </div>
+
+      {/* 4 Quick Action Cards */}
+      {renderQuickActions()}
 
       {/* Hero Prompt Panel (Lovable Reference) */}
       <div className="bg-surface border border-border-subtle rounded-surface p-6 flex flex-col gap-4">

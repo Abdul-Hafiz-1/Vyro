@@ -11,6 +11,7 @@ import { SecurityPage } from './pages/public/SecurityPage';
 import { LoginPage, SignupPage } from './pages/public/AuthPages';
 import { OnboardingPage } from './pages/public/OnboardingPage';
 import { TermsPage, PrivacyPage, DisputePolicyPage } from './pages/public/LegalPages';
+import { HelpPage } from './pages/public/HelpPage';
 import { StyleguidePage } from './pages/StyleguidePage';
 
 // App Layout & Pages
@@ -74,6 +75,7 @@ export const App: React.FC = () => {
             <Route path="/terms" element={<TermsPage />} />
             <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="/dispute-policy" element={<DisputePolicyPage />} />
+            <Route path="/help" element={<HelpPage />} />
 
             {/* Application Routes */}
             <Route path="/app" element={<AppLayout />}>
@@ -84,6 +86,7 @@ export const App: React.FC = () => {
               <Route path="deals/:id" element={<NegotiationDetailPage />} />
               
               {/* Buyer Procurement */}
+              <Route path="requests" element={<RequestCreatePage />} />
               <Route path="requests/new" element={<RequestCreatePage />} />
               <Route path="marketplace" element={<ListingsPage />} />
 
@@ -102,6 +105,7 @@ export const App: React.FC = () => {
               {/* Account, Notifications & Settings */}
               <Route path="notifications" element={<NotificationsPage />} />
               <Route path="settings" element={<SettingsPage />} />
+              <Route path="help" element={<HelpPage />} />
 
               {/* Clean Canonical Redirects for Legacy / Merged Aliases */}
               <Route path="negotiations" element={<Navigate to="/app/deals" replace />} />

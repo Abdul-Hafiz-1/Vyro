@@ -12,7 +12,8 @@ import {
   Lock,
   LogOut,
   AlertTriangle,
-  Check
+  Check,
+  ArrowLeft
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
@@ -108,7 +109,19 @@ export const SettingsPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-10">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-6">
+      {/* Way back (Breadcrumb) */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/app')}
+          className="inline-flex items-center gap-1.5 text-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Today</span>
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col gap-1 pb-4 border-b border-border-subtle">
         <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">

@@ -13,7 +13,8 @@ import {
   AlertTriangle,
   Scale,
   CreditCard,
-  ChevronRight
+  ChevronRight,
+  ArrowLeft
 } from 'lucide-react';
 
 export const NotificationsPage: React.FC = () => {
@@ -50,7 +51,19 @@ export const NotificationsPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-8">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-6">
+      {/* Way back (Breadcrumb) */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => navigate('/app')}
+          className="inline-flex items-center gap-1.5 text-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back to Today</span>
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
         <div className="flex flex-col gap-1">

@@ -18,6 +18,7 @@ import systemRoutes from './routes/system.js';
 import aiRoutes from './routes/ai.js';
 import homeRoutes from './routes/home.js';
 import eventsRoutes from './routes/events.js';
+import { seedDemoAccounts } from './db/seedDemo.js';
 
 const app = express();
 
@@ -78,6 +79,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 app.listen(config.port, () => {
+  seedDemoAccounts().catch(err => console.error('[DB] Demo seeding notice:', err));
   console.log(`====================================================`);
   console.log(`  VYRO — Autonomous AI Commerce Network Engine`);
   console.log(`  Running on http://localhost:${config.port}`);

@@ -110,7 +110,19 @@ export const ListingEditorPage: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto py-8 px-4 flex flex-col gap-8">
+    <div className="w-full max-w-3xl mx-auto py-8 px-4 flex flex-col gap-6">
+      {/* Way back (Breadcrumb) */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => step > 1 ? setStep((prev) => (prev - 1) as any) : navigate('/app/listings')}
+          className="inline-flex items-center gap-1.5 text-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{step > 1 ? 'Back to previous step' : 'Back to Listings'}</span>
+        </button>
+      </div>
+
       {/* Top Stepper (Airbnb style) */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
