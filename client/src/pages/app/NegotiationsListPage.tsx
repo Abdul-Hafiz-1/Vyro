@@ -1,16 +1,20 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Scale, ArrowRight, Clock, Plus, Store, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowRight, Clock, Plus, ShieldCheck, ChevronRight } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip, StatusRole } from '../../components/common/StatusChip';
+import { EmptyState } from '../../components/common/EmptyState';
+import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { formatMoney, formatStatus, formatName, formatDate } from '../../lib/present';
 
 export const NegotiationsListPage: React.FC = () => {
   const navigate = useNavigate();
   const { isBuyerWorkspace: isBuyer } = useAuth();
-  const [filter, setFilter] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'needs_you' | 'in_progress' | 'handled'>('all');
 
   const { data: negotiations = [], isLoading } = useQuery({
     queryKey: ['negotiationsList'],
@@ -18,191 +22,206 @@ export const NegotiationsListPage: React.FC = () => {
     refetchInterval: 6000
   });
 
-  const filtered = negotiations.filter((n) => {
-    if (filter === 'all') return true;
-    if (filter === 'review') return n.status === 'escalated';
-    if (filter === 'active') return n.status === 'in_negotiation' || n.status === 'initiated';
-    if (filter === 'agreed') return n.status === 'agreement_reached' || n.status === 'accepted';
-    if (filter === 'completed') return (n.status as string) === 'completed' || (n.status as string) === 'COMPLETED';
-    return true;
-  });
+  // Group deals into Linear-style sections
+  const needsYouDeals = negotiations.filter(
+    (n) => (n.status as string) === 'escalated' || (n.status as string) === 'needs_review'
+  );
+  const inProgressDeals = negotiations.filter(
+    (n) => n.status === 'in_negotiation' || (n.status as string) === 'initiated' || n.status === 'agreement_reached'
+  );
+  const handledDeals = negotiations.filter(
+    (n) =>
+      n.status === 'completed' ||
+      (n.status as string) === 'COMPLETED' ||
+      (n.status as string) === 'accepted' ||
+      n.status === 'declined' ||
+      (n.status as string) === 'auto_declined'
+  );
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'escalated':
-        return <Badge variant="warning" size="sm" dot>Needs Your Review</Badge>;
-      case 'in_negotiation':
-      case 'initiated':
-        return <Badge variant="accent" size="sm" dot>Negotiating</Badge>;
-      case 'agreement_reached':
-      case 'accepted':
-        return <Badge variant="success" size="sm" dot>Agreement Reached</Badge>;
-      case 'completed':
-      case 'COMPLETED':
-        return <Badge variant="success" size="sm">Settled & Paid</Badge>;
-      case 'declined':
-        return <Badge variant="error" size="sm">Declined</Badge>;
-      default:
-        return <Badge variant="default" size="sm">{status.replace(/_/g, ' ')}</Badge>;
+  const getFilteredGroups = () => {
+    if (activeFilter === 'needs_you') {
+      return [{ title: 'Needs your decision', items: needsYouDeals, emptyMessage: 'Nothing currently requires your decision.' }];
     }
+    if (activeFilter === 'in_progress') {
+      return [{ title: 'In progress', items: inProgressDeals, emptyMessage: 'No negotiations currently in progress.' }];
+    }
+    if (activeFilter === 'handled') {
+      return [{ title: 'Handled & completed', items: handledDeals, emptyMessage: 'No completed deals yet.' }];
+    }
+    return [
+      { title: 'Needs your decision', items: needsYouDeals, emptyMessage: '' },
+      { title: 'In progress', items: inProgressDeals, emptyMessage: '' },
+      { title: 'Handled & completed', items: handledDeals, emptyMessage: '' }
+    ];
+  };
+
+  const statusRoleMap: Record<string, StatusRole> = {
+    handled: 'handled',
+    needs_you: 'needsYou',
+    declined: 'declined',
+    in_progress: 'inProgress'
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-8">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-line gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
               Deals
             </h1>
-            <Badge variant="default" size="sm">{filtered.length} Total</Badge>
+            <span className="text-secondary px-2.5 py-0.5 rounded-control bg-raised border border-border-subtle text-text-muted">
+              {negotiations.length} total
+            </span>
           </div>
-          <p className="text-xs text-vyro-muted">
-            {isBuyer 
-              ? 'Autonomous bargaining channels with sellers. Review packages, approve terms, and track settlement.'
-              : 'Incoming client procurement briefs. Your seller agent negotiates turnaround, pricing, and scope within your rules.'
-            }
+          <p className="text-secondary text-text-muted">
+            {isBuyer
+              ? 'Autonomous negotiation channels with sellers. Review terms, approve deals, and track settlement.'
+              : 'Incoming requests where your seller agent negotiates scope and pricing within your authorized rules.'}
           </p>
         </div>
 
-        {isBuyer ? (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => navigate('/app/requests/new')}
-            leftIcon={<Plus className="w-4 h-4" />}
-          >
-            Post a Request
-          </Button>
-        ) : (
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => navigate('/app/listings/new')}
-            leftIcon={<Store className="w-4 h-4" />}
-          >
-            Create a Listing
-          </Button>
-        )}
+        <Button
+          variant="volt"
+          size="md"
+          onClick={() => navigate(isBuyer ? '/app/requests/new' : '/app/listings/new')}
+          leftIcon={<Plus className="w-4 h-4" strokeWidth={2} />}
+        >
+          {isBuyer ? 'New request' : 'Create listing'}
+        </Button>
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex items-center gap-1.5 border-b border-vyro-line pb-2 text-xs font-mono overflow-x-auto">
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
         {[
-          { key: 'all', label: 'All Deals' },
-          { key: 'review', label: 'Needs Review' },
-          { key: 'active', label: 'In Negotiation' },
-          { key: 'agreed', label: 'Agreement Reached' },
-          { key: 'completed', label: 'Settled & Paid' }
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setFilter(tab.key)}
-            className={`px-3 py-1.5 rounded-control transition-colors cursor-pointer text-xs ${
-              filter === tab.key
-                ? 'bg-vyro-surface border border-vyro-line text-vyro-text font-semibold shadow-xs'
-                : 'text-vyro-muted hover:text-vyro-text hover:bg-vyro-surface/50'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+          { key: 'all', label: 'All deals' },
+          { key: 'needs_you', label: `Needs decision (${needsYouDeals.length})` },
+          { key: 'in_progress', label: `In progress (${inProgressDeals.length})` },
+          { key: 'handled', label: `Handled (${handledDeals.length})` }
+        ].map((tab) => {
+          const isSelected = activeFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveFilter(tab.key as any)}
+              className={`px-4 py-2 rounded-control text-secondary font-medium transition-colors cursor-pointer shrink-0 ${
+                isSelected
+                  ? 'bg-volt text-[#0C0E0D] font-bold'
+                  : 'bg-surface border border-border-subtle text-text-muted hover:text-text-primary'
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Negotiations List */}
+      {/* Deals Groups (Linear style) */}
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-20 rounded-control bg-vyro-surface border border-vyro-line animate-pulse" />
-          ))}
+        <div className="flex flex-col gap-4 animate-pulse">
+          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
+          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
+          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
         </div>
-      ) : filtered.length > 0 ? (
-        <div className="space-y-3">
-          {filtered.map((neg) => {
-            const price = neg.currentProposal?.price || 150;
-            const deliveryDays = neg.currentProposal?.deliveryDays || 5;
+      ) : negotiations.length === 0 ? (
+        <EmptyState
+          title="No deals formed yet"
+          description={
+            isBuyer
+              ? 'Start a new request to let your buyer agent find matching sellers and negotiate the best price.'
+              : 'Create a listing or wait for buyer agents to discover your services.'
+          }
+          actionLabel={isBuyer ? 'Start a request' : 'Create listing'}
+          onAction={() => navigate(isBuyer ? '/app/requests/new' : '/app/listings/new')}
+        />
+      ) : (
+        <div className="flex flex-col gap-8">
+          {getFilteredGroups().map((group) => {
+            if (activeFilter === 'all' && group.items.length === 0) return null;
 
             return (
-              <div
-                key={neg.id}
-                onClick={() => navigate(`/app/deals/${neg.id}`)}
-                className="p-4 rounded-control bg-vyro-surface border border-vyro-line hover:border-vyro-accent/50 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer group shadow-xs"
-              >
-                <div className="space-y-1.5 min-w-0">
-                  <div className="flex items-center gap-2">
-                    {getStatusBadge(neg.status)}
-                    <span className="text-xs text-vyro-muted">
-                      Round {neg.currentRound} of {neg.maxRounds}
-                    </span>
-                  </div>
-
-                  <h3 className="text-sm font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors truncate">
-                    {neg.currentProposal?.whyThisOffer || 'Commercial Service Package'}
-                  </h3>
-
-                  <div className="flex items-center gap-3 text-xs text-vyro-muted">
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5" />
-                      {deliveryDays} Business Days
-                    </span>
-                    <span>·</span>
-                    <span>
-                      {isBuyer ? 'Counterparty Seller' : 'Client Buyer'}
-                    </span>
-                  </div>
+              <div key={group.title} className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold text-text-primary">
+                    {group.title}
+                  </span>
+                  <span className="text-secondary text-text-muted">
+                    {group.items.length} {group.items.length === 1 ? 'deal' : 'deals'}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-4 self-end sm:self-center shrink-0">
-                  <div className="text-right">
-                    <span className="text-base font-bold text-vyro-text block tabular-nums">
-                      ${price} USD
-                    </span>
-                    <span className="text-xs text-vyro-muted">
-                      Agreed Package
-                    </span>
+                {group.items.length === 0 ? (
+                  <div className="p-6 bg-surface border border-border-subtle rounded-surface text-center text-secondary text-text-muted">
+                    {group.emptyMessage}
                   </div>
+                ) : (
+                  <div className="bg-surface border border-border-subtle rounded-surface divide-y divide-border-subtle overflow-hidden">
+                    {group.items.map((deal: any) => {
+                      const counterpart = deal.sellerAgent?.businessName || deal.sellerName || 'Verified Seller';
+                      const title = deal.request?.title || deal.title || 'Commercial Project';
+                      const price = deal.agreement?.finalPrice || deal.currentProposal?.price || 150;
+                      const days = deal.agreement?.deliveryDays || deal.currentProposal?.deliveryDays || deal.request?.deadlineDays || 5;
+                      const statusRaw = formatStatus(deal.status);
+                      const statusRole = statusRoleMap[statusRaw.role] || 'inProgress';
 
-                  <Button variant="outline" size="sm" rightIcon={<ArrowRight className="w-3.5 h-3.5" />}>
-                    Open Cockpit
-                  </Button>
-                </div>
+                      return (
+                        <div
+                          key={deal.id}
+                          onClick={() => navigate(`/app/deals/${deal.id}`)}
+                          className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-raised transition-colors cursor-pointer group"
+                        >
+                          {/* Left: Avatar + Title & Counterpart */}
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <Avatar name={formatName(counterpart)} size="md" />
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-semibold text-body text-text-primary group-hover:text-volt transition-colors truncate">
+                                {title}
+                              </span>
+                              <div className="flex items-center gap-2 text-secondary text-text-muted mt-0.5">
+                                <span>With {formatName(counterpart)}</span>
+                                <span>·</span>
+                                <div className="flex items-center gap-1">
+                                  <Clock className="w-3.5 h-3.5 text-text-muted" strokeWidth={2} />
+                                  <span>{days}&nbsp;days</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Right: Price + Status + Chevron */}
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="text-right">
+                              <span className="font-display font-bold text-[18px] text-text-primary block">
+                                {formatMoney(price)}
+                              </span>
+                              {deal.updatedAt && (
+                                <span className="text-secondary text-text-muted block">
+                                  {formatDate(deal.updatedAt)}
+                                </span>
+                              )}
+                            </div>
+
+                            <StatusChip
+                              label={statusRaw.label}
+                              role={statusRole}
+                              size="sm"
+                            />
+
+                            <ChevronRight
+                              className="w-5 h-5 text-text-muted group-hover:text-text-primary transition-colors hidden sm:block"
+                              strokeWidth={2}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
-        </div>
-      ) : (
-        <div className="py-16 text-center text-xs text-vyro-muted bg-vyro-surface rounded-control border border-vyro-line space-y-3 p-6">
-          <Scale className="w-8 h-8 text-vyro-muted mx-auto mb-1" />
-          <h3 className="text-sm font-semibold text-vyro-text">
-            {filter === 'all' ? 'No deals yet' : `No deals in "${filter.replace(/_/g, ' ')}"`}
-          </h3>
-          <p className="max-w-sm mx-auto text-xs text-vyro-muted">
-            {isBuyer 
-              ? 'Post a request describing what you need. Your buyer agent will match with suppliers and negotiate automatically.'
-              : 'Create a listing with your standard price and confidential floor to receive proposals.'}
-          </p>
-          <div className="pt-2">
-            {isBuyer ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/app/requests/new')}
-                leftIcon={<Plus className="w-3.5 h-3.5" />}
-              >
-                Post Your First Request
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/app/listings/new')}
-                leftIcon={<Plus className="w-3.5 h-3.5" />}
-              >
-                Create Your First Listing
-              </Button>
-            )}
-          </div>
         </div>
       )}
     </div>

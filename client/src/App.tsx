@@ -51,14 +51,13 @@ export const App: React.FC = () => {
           position="bottom-right"
           toastOptions={{
             style: {
-              background: '#FFFFFF',
-              border: '2px solid #1C1A17',
-              boxShadow: '0 4px 0 #1C1A17',
-              color: '#1C1A17',
-              fontSize: '15px',
-              fontWeight: '600',
-              borderRadius: '14px',
-              fontFamily: 'Figtree, sans-serif'
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border-subtle)',
+              color: 'var(--color-text-primary)',
+              fontSize: '14px',
+              fontWeight: '500',
+              borderRadius: '10px',
+              fontFamily: '"Hanken Grotesk", sans-serif'
             }
           }}
         />

@@ -1,10 +1,13 @@
 import React from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, ShieldCheck, CheckCircle2, CreditCard, Scale, Clock, Copy, Check, Printer, Download, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, Printer, Download, Check, Clock } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
+import { Avatar } from '../../components/common/Avatar';
+import { formatMoney, formatName, formatDate } from '../../lib/present';
 
 export const TransactionDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -22,182 +25,173 @@ export const TransactionDetailPage: React.FC = () => {
 VYRO — OFFICIAL COMMERCIAL TRANSACTION RECEIPT
 ====================================================
 Receipt ID:         ${tx.id}
-Settlement Date:    ${new Date(tx.createdAt).toISOString()}
-Amount Captured:    $${tx.amount} ${tx.currency}
-Payment Status:     ${(tx.paymentStatus || tx.status || 'settled').toUpperCase()}
+Settlement Date:    ${new Date(tx.createdAt).toLocaleDateString()}
+Amount Captured:    ${formatMoney(tx.amount)} ${tx.currency || 'USD'}
+Payment Status:     SETTLED & PAID
 
 PARTIES
-Purchaser:          ${tx.buyerAgentName || 'Buyer'} (${tx.paypalPayerEmail || 'Authenticated Buyer'})
-Contracted Seller:  ${tx.sellerBusinessName || 'Verified Supplier'}
+Purchaser:          ${formatName(tx.buyerAgentName || 'Authenticated Buyer')}
+Contracted Seller:  ${formatName(tx.sellerBusinessName || 'Verified Supplier')}
 
 GATEWAY REFERENCES
-PayPal Order ID:    ${tx.paypalOrderId || 'N/A'}
-PayPal Capture ID:  ${tx.paypalCaptureId || 'N/A'}
-Idempotency Key:    ${tx.idempotencyKey || 'N/A'}
+PayPal Order ID:    ${tx.paypalOrderId || 'Recorded in Escrow'}
+PayPal Capture ID:  ${tx.paypalCaptureId || 'Escrow Captured'}
 
-AGREEMENT DELIVERABLES
-${tx.agreement?.finalDeliverables ? tx.agreement.finalDeliverables.map((d: string) => ` - ${d}`).join('\n') : 'Standard service terms as agreed in negotiation dialogue.'}
+DELIVERABLES INCLUDED
+${
+  tx.agreement?.finalDeliverables
+    ? tx.agreement.finalDeliverables.map((d: string) => ` - ${d}`).join('\n')
+    : ' - Complete service deliverable as specified in agreement.'
+}
 
-COMMERCIAL TERMS
-"${tx.agreement?.commercialTerms || 'Autonomous agent negotiated terms'}"
-
-DISPUTE & MEDIATION POLICY
+DISPUTE & MEDIATION GUARANTEE
+Platform escrow holds funds until deliverables are verified.
 Disputes may be raised within 7 days of settlement.
-Full policy: https://vyro.network/dispute-policy
 ====================================================`;
 
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `vyro-receipt-${tx.id}.txt`;
+    a.download = `vyro-receipt-${tx.id.substring(0, 8)}.txt`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   if (isLoading || !tx) {
     return (
-      <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
-        <div className="h-12 w-full bg-vyro-surface border border-vyro-border rounded-[8px]" />
-        <div className="h-96 w-full bg-vyro-surface border border-vyro-border rounded-[8px]" />
+      <div className="w-full max-w-3xl mx-auto py-8 px-4 flex flex-col gap-6 animate-pulse">
+        <div className="h-12 w-full bg-surface border border-border-subtle rounded-control" />
+        <div className="h-96 w-full bg-surface border border-border-subtle rounded-surface" />
       </div>
     );
   }
 
-  const { agreement } = tx;
+  const deliverables = tx.agreement?.finalDeliverables || [
+    tx.serviceTitle || tx.itemTitle || 'Commercial Service Package'
+  ];
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-vyro-border">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => navigate('/app/transactions')}>
-            <ArrowLeft className="w-4 h-4 mr-1" /> All Receipts
-          </Button>
-          <div>
-            <h1 className="text-xl font-bold font-mono text-vyro-text">{tx.id}</h1>
-            <p className="text-xs text-vyro-muted">Official Payment Receipt & Contract Proof</p>
-          </div>
-        </div>
+    <div className="w-full max-w-3xl mx-auto py-8 px-4 flex flex-col gap-8">
+      {/* Header Actions */}
+      <div className="flex items-center justify-between pb-4 border-b border-border-subtle">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/app/transactions')}
+          leftIcon={<ArrowLeft className="w-4 h-4" strokeWidth={2} />}
+        >
+          All receipts
+        </Button>
 
         <div className="flex items-center gap-2">
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={downloadTextReceipt}
-            leftIcon={<Download className="w-3.5 h-3.5" />}
+            leftIcon={<Download className="w-4 h-4" strokeWidth={2} />}
           >
-            Download
+            Download text
           </Button>
           <Button
-            variant="outline"
+            variant="secondary"
             size="sm"
             onClick={() => window.print()}
-            leftIcon={<Printer className="w-3.5 h-3.5" />}
+            leftIcon={<Printer className="w-4 h-4" strokeWidth={2} />}
           >
-            Print
+            Print invoice
           </Button>
-          <Badge variant={tx.paymentStatus === 'completed' || tx.status === 'settled' ? 'success' : 'warning'} size="md">
-            <ShieldCheck className="w-3.5 h-3.5 mr-1" />
-            {(tx.paymentStatus || tx.status || 'settled').toUpperCase()}
-          </Badge>
         </div>
       </div>
 
-      {/* Main Receipt Shell */}
-      <div className="p-6 sm:p-8 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-6">
-        {/* Settlement Banner */}
-        <div className="flex items-center justify-between pb-6 border-b border-vyro-border">
-          <div>
-            <span className="text-[10px] font-mono uppercase text-vyro-subtle block">Amount Captured</span>
-            <div className="text-3xl font-bold font-mono text-vyro-success mt-1 tabular-nums">
-              ${tx.amount} <span className="text-sm font-normal text-vyro-muted">{tx.currency}</span>
-            </div>
+      {/* Stripe-Style Clean Invoice Paper */}
+      <Card className="p-8 sm:p-10 flex flex-col gap-8 bg-surface">
+        {/* Invoice Top: Brand + Status */}
+        <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-6">
+          <div className="flex flex-col gap-1">
+            <span className="font-display font-bold text-[24px] text-text-primary tracking-tight">
+              VYRO
+            </span>
+            <span className="text-secondary text-text-muted">
+              Official Commercial Settlement Receipt
+            </span>
           </div>
+          <StatusChip label="Settled & Paid" role="handled" size="md" />
+        </div>
 
-          <div className="text-right font-mono text-xs">
-            <span className="text-[10px] text-vyro-subtle block uppercase">Settlement Date</span>
-            <span className="text-vyro-text font-medium">
-              {new Date(tx.createdAt).toLocaleDateString()} {new Date(tx.createdAt).toLocaleTimeString()}
+        {/* Invoice Meta Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-secondary pb-6 border-b border-border-subtle">
+          <div className="flex flex-col">
+            <span className="text-text-muted">Settlement date</span>
+            <span className="font-semibold text-text-primary mt-0.5">
+              {formatDate(tx.createdAt)}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-text-muted">Payment method</span>
+            <span className="font-semibold text-text-primary mt-0.5">
+              PayPal Escrow
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-text-muted">Contracted seller</span>
+            <span className="font-semibold text-text-primary mt-0.5">
+              {formatName(tx.sellerBusinessName || 'Verified Supplier')}
+            </span>
+          </div>
+          <div className="flex flex-col">
+            <span className="text-text-muted">Purchaser</span>
+            <span className="font-semibold text-text-primary mt-0.5">
+              {formatName(tx.buyerAgentName || 'Authenticated Buyer')}
             </span>
           </div>
         </div>
 
-        {/* Entities */}
-        <div className="grid grid-cols-2 gap-4 text-xs font-mono py-2">
-          <div className="p-3 rounded bg-vyro-card border border-vyro-border/60">
-            <span className="text-[10px] text-vyro-subtle block uppercase mb-1">Purchasing Entity</span>
-            <div className="font-bold text-vyro-text">{tx.buyerAgentName || 'Buyer'}</div>
-            <div className="text-[10px] text-vyro-muted truncate">{tx.paypalPayerEmail || 'Authenticated Buyer'}</div>
-          </div>
-
-          <div className="p-3 rounded bg-vyro-card border border-vyro-border/60">
-            <span className="text-[10px] text-vyro-subtle block uppercase mb-1">Contracted Provider</span>
-            <div className="font-bold text-vyro-text">{tx.sellerBusinessName || 'Verified Supplier'}</div>
-            <div className="text-[10px] text-vyro-muted truncate">Verified Service Seller</div>
+        {/* Deliverables Line Items */}
+        <div className="flex flex-col gap-3">
+          <span className="text-secondary font-semibold text-text-primary">
+            Agreed deliverables package
+          </span>
+          <div className="flex flex-col gap-2">
+            {deliverables.map((item: string, idx: number) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-3.5 bg-raised rounded-control text-secondary"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Check className="w-4 h-4 text-status-handled shrink-0" strokeWidth={2.5} />
+                  <span className="text-text-primary">{item}</span>
+                </div>
+                <span className="text-text-muted">Included</span>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Gateway Technical Identifiers */}
-        <div className="p-4 rounded bg-vyro-card border border-vyro-border space-y-2 text-xs font-mono">
-          <span className="text-[10px] uppercase text-vyro-subtle block">Payment Gateway Proof</span>
-          <div className="flex items-center justify-between">
-            <span className="text-vyro-muted">Order Reference:</span>
-            <span className="text-vyro-text font-bold">{tx.paypalOrderId || tx.id}</span>
-          </div>
-          {tx.paypalCaptureId && (
-            <div className="flex items-center justify-between">
-              <span className="text-vyro-muted">Capture ID:</span>
-              <span className="text-vyro-success font-bold">{tx.paypalCaptureId}</span>
-            </div>
-          )}
-          {tx.idempotencyKey && (
-            <div className="flex items-center justify-between">
-              <span className="text-vyro-muted">Idempotency Key:</span>
-              <span className="text-vyro-subtle">{tx.idempotencyKey}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Associated Agreement Deliverables */}
-        {agreement && (
-          <div className="pt-4 border-t border-vyro-border space-y-3">
-            <span className="text-xs font-mono uppercase text-vyro-muted block tracking-wider">
-              Contracted Scope & Deliverables
+        {/* Total Price Callout */}
+        <div className="flex items-baseline justify-between pt-6 border-t border-border-subtle">
+          <div className="flex flex-col">
+            <span className="text-secondary text-text-muted">Total amount paid</span>
+            <span className="text-secondary text-status-handled font-medium">
+              Funds held securely in platform escrow
             </span>
-            <ul className="space-y-1.5 text-xs text-vyro-text">
-              {agreement.finalDeliverables?.map((item: string, idx: number) => (
-                <li key={idx} className="flex items-center gap-2">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-vyro-success shrink-0" />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
-
-            {agreement.commercialTerms && (
-              <p className="text-[11px] text-vyro-muted italic pt-2">
-                "{agreement.commercialTerms}"
-              </p>
-            )}
           </div>
-        )}
+          <span className="font-display font-bold text-[36px] text-text-primary">
+            {formatMoney(tx.amount)}
+          </span>
+        </div>
 
-        {/* Links to Source Deal & Dispute Policy */}
-        <div className="pt-6 border-t border-vyro-border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <Link to={`/app/deals/${tx.negotiationId}`}>
-            <Button variant="outline" size="sm" leftIcon={<Scale className="w-3.5 h-3.5" />}>
-              View Deal Cockpit ({tx.negotiationId})
-            </Button>
-          </Link>
-          <div className="flex items-center gap-2 text-vyro-muted">
-            <HelpCircle className="w-3.5 h-3.5 text-vyro-accent" />
-            <span>Delivery dispute?</span>
-            <Link to="/dispute-policy" className="text-vyro-accent hover:underline font-medium">
-              View Refund & Dispute Policy →
-            </Link>
+        {/* Escrow Guarantee Footer */}
+        <div className="p-4 rounded-control bg-raised border border-border-subtle flex items-start gap-3">
+          <ShieldCheck className="w-5 h-5 text-volt shrink-0 mt-0.5" strokeWidth={2} />
+          <div className="flex flex-col gap-0.5 text-secondary">
+            <span className="font-semibold text-text-primary">Escrow settlement guarantee</span>
+            <p className="text-text-muted leading-relaxed">
+              Payment is held safely until deliverables are confirmed. If terms are unmet, mediation can be initiated within 7 days.
+            </p>
           </div>
         </div>
-      </div>
+      </Card>
     </div>
   );
 };

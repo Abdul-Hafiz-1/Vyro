@@ -1,577 +1,319 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { Search, Plus, Sparkles, Clock, Check, ShieldCheck, ArrowRight } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { Listing, Agent } from '../../types';
+import { Listing } from '../../types';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
-import { Modal } from '../../components/common/Modal';
-import { toast } from 'sonner';
-import {
-  Store,
-  Plus,
-  Search,
-  Clock,
-  CheckCircle2,
-  ArrowRight,
-  ShieldCheck,
-  Bot,
-  Layers,
-  Sparkles
-} from 'lucide-react';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
+import { Avatar } from '../../components/common/Avatar';
+import { EmptyState } from '../../components/common/EmptyState';
+import { formatMoney, formatName } from '../../lib/present';
 
-const getInitials = (name?: string): string => {
-  if (!name) return 'VY';
-  const parts = name.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-};
+const CATEGORIES = ['All', 'Design', 'Engineering', 'Security', 'Mobile', 'Writing'];
+
+const SEARCH_SUGGESTIONS = [
+  'OWASP Security Audit',
+  'Tailwind Design Tokens',
+  'React Native App Architecture',
+  'API Security Hardening'
+];
 
 export const ListingsPage: React.FC = () => {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
   const { user, isBuyerWorkspace } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'all' | 'my'>(isBuyerWorkspace ? 'all' : 'my');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
-  // Create Listing Modal State
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [title, setTitle] = useState('');
-  const [category, setCategory] = useState('Design');
-  const [price, setPrice] = useState<number | ''>(250);
-  const [minPrice, setMinPrice] = useState<number | ''>(200);
-  const [deliveryDays, setDeliveryDays] = useState<number | ''>(4);
-  const [deliverablesText, setDeliverablesText] = useState('Production UI Components, Figma Source, Code Review Walkthrough');
-  const [description, setDescription] = useState('');
-
   // Fetch listings
-  const { data: listings = [], isLoading: isListingsLoading } = useQuery({
+  const { data: listings = [], isLoading } = useQuery({
     queryKey: ['listings', activeTab, searchQuery, selectedCategory, user?.id],
-    queryFn: () => api.getListings({
-      sellerId: activeTab === 'my' ? user?.id : undefined,
-      category: selectedCategory !== 'All' ? selectedCategory : undefined,
-      search: searchQuery || undefined
-    }),
+    queryFn: () =>
+      api.getListings({
+        sellerId: activeTab === 'my' ? user?.id : undefined,
+        category: selectedCategory !== 'All' ? selectedCategory : undefined,
+        search: searchQuery || undefined
+      }),
     refetchInterval: 10000
   });
 
-  // Fetch verified seller agents
-  const { data: allAgents = [], isLoading: isAgentsLoading } = useQuery({
-    queryKey: ['marketplaceAgents', selectedCategory],
-    queryFn: () => api.getAgents({
-      type: 'seller',
-      category: selectedCategory !== 'All' ? selectedCategory : undefined
-    })
-  });
-
-  const categories = ['All', 'Design', 'Development', 'Security', 'Marketing', 'Hardware'];
-
-  const createMutation = useMutation({
-    mutationFn: (data: Partial<Listing>) => api.createListing(data),
-    onSuccess: (newListing) => {
-      toast.success(`Published offering: "${newListing.title}"`);
-      setIsCreateOpen(false);
-      setTitle('');
-      setDescription('');
-      setActiveTab('my');
-      queryClient.invalidateQueries({ queryKey: ['listings'] });
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to create listing');
-    }
-  });
-
-  const handleCreateSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) {
-      toast.error('Listing title is required.');
-      return;
-    }
-    const numPrice = Number(price);
-    if (!numPrice || numPrice <= 0) {
-      toast.error('Valid listing price is required.');
-      return;
-    }
-    const numMin = Number(minPrice) || Math.round(numPrice * 0.85);
-    if (numMin > numPrice) {
-      toast.error('Private floor price cannot exceed asking price.');
-      return;
-    }
-
-    const deliverables = deliverablesText
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
-    createMutation.mutate({
-      title: title.trim(),
-      category: category as any,
-      price: numPrice,
-      minAcceptablePrice: numMin,
-      deliveryDays: Number(deliveryDays) || 5,
-      deliverables,
-      description: description.trim(),
-      currency: 'USD',
-      type: 'service',
-      isNegotiable: true
-    });
-  };
-
-  const handleHireAgent = (agent: Agent) => {
+  const handleStartNegotiationWithListing = (listing: Listing) => {
     navigate('/app/requests/new', {
       state: {
-        targetSellerId: agent.id,
-        initialPrompt: `I would like to hire ${agent.businessName} (${agent.name}) for a project in ${agent.category}. Please negotiate terms within my standard budget limits.`
+        targetSellerId: listing.sellerId,
+        initialPrompt: `I want to engage ${listing.title}. Target budget around ${formatMoney(listing.price)} within ${listing.deliveryDays || 5} days.`
       }
     });
   };
 
-  const handleProcureListing = (listing: Listing) => {
-    navigate('/app/requests/new', {
-      state: {
-        targetSellerId: listing.sellerAgentId,
-        initialPrompt: `I want to engage services for "${listing.title}" listed at $${listing.price} ${listing.currency} with estimated delivery in ${listing.deliveryDays} days.`
-      }
-    });
-  };
+  const featuredListing = listings.length > 0 ? listings[0] : null;
+  const regularListings = listings.length > 1 ? listings.slice(1) : [];
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto pb-12">
-      {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-vyro-border/60">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-sm font-semibold font-mono text-vyro-text uppercase tracking-wider">
-              {activeTab === 'my' ? 'My Commercial Offerings' : 'Autonomous Marketplace'}
-            </h1>
-            <Badge variant="accent" size="sm">
-              {listings.length} Active Services
-            </Badge>
-          </div>
-          <p className="text-xs text-vyro-muted mt-0.5">
-            {activeTab === 'my'
-              ? 'Manage your published offerings. Buyer agents negotiate autonomously against your private pricing floor.'
-              : 'Verified seller agents with proven delivery track records. Hire directly with autonomous multi-round negotiation.'}
+    <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-8">
+      {/* Header & Tabs */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+        <div className="flex flex-col gap-1">
+          <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
+            Marketplace
+          </h1>
+          <p className="text-secondary text-text-muted">
+            Verified sellers with autonomous agents ready to negotiate scope and pricing.
           </p>
         </div>
 
-        {/* View Toggle & Create Button */}
-        <div className="flex items-center gap-2.5 self-start sm:self-auto">
-          <div className="flex items-center p-0.5 rounded-lg bg-vyro-surface border border-vyro-border text-xs font-mono">
+        <div className="flex items-center gap-2.5">
+          {/* Tab Selector */}
+          <div className="flex bg-surface p-1 rounded-control border border-border-subtle">
             <button
+              type="button"
               onClick={() => setActiveTab('all')}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-colors cursor-pointer ${
                 activeTab === 'all'
-                  ? 'bg-vyro-card text-vyro-text shadow-xs'
-                  : 'text-vyro-muted hover:text-vyro-text'
+                  ? 'bg-volt text-[#0C0E0D] font-bold'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
             >
-              All Marketplace
+              All offerings
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('my')}
-              className={`px-3 py-1 rounded-md font-medium transition-colors ${
+              className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-colors cursor-pointer ${
                 activeTab === 'my'
-                  ? 'bg-vyro-card text-vyro-text shadow-xs'
-                  : 'text-vyro-muted hover:text-vyro-text'
+                  ? 'bg-volt text-[#0C0E0D] font-bold'
+                  : 'text-text-muted hover:text-text-primary'
               }`}
             >
-              My Offerings
+              My listings
             </button>
           </div>
 
           <Button
-            variant="primary"
-            size="sm"
-            onClick={() => setIsCreateOpen(true)}
-            leftIcon={<Plus className="w-3.5 h-3.5" />}
+            variant="volt"
+            size="md"
+            onClick={() => navigate('/app/listings/new')}
+            leftIcon={<Plus className="w-4 h-4" strokeWidth={2} />}
           >
-            Create Listing
+            Create listing
           </Button>
         </div>
       </div>
 
-      {/* Search and Category Filters */}
-      <div className="p-3 rounded-xl bg-vyro-surface border border-vyro-border flex flex-col md:flex-row items-center justify-between gap-3 shadow-xs">
-        <div className="relative w-full md:w-80">
+      {/* Search Bar & Suggestions */}
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="w-5 h-5 text-text-muted absolute left-4 top-3.5 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search offerings, deliverables, or capabilities..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-vyro-card border border-vyro-border rounded-lg pl-8 pr-3 py-1.5 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent transition-colors font-sans"
+            placeholder="Search by service, technology, or seller name…"
+            className="w-full h-[52px] pl-12 pr-4 bg-surface border border-border-subtle rounded-control text-body text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
           />
-          <Search className="w-3.5 h-3.5 text-vyro-subtle absolute left-2.5 top-2.5" />
         </div>
 
-        <div className="flex items-center gap-1.5 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 font-mono text-xs">
-          <span className="text-[10px] text-vyro-subtle uppercase shrink-0 mr-1">Filter:</span>
-          {categories.map((cat) => (
+        {/* Quick Search Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          <span className="text-secondary text-text-muted shrink-0">Popular:</span>
+          {SEARCH_SUGGESTIONS.map((sug) => (
+            <button
+              key={sug}
+              type="button"
+              onClick={() => setSearchQuery(sug)}
+              className="text-secondary px-3 py-1 bg-surface border border-border-subtle rounded-control text-text-muted hover:text-text-primary shrink-0 transition-colors cursor-pointer"
+            >
+              {sug}
+            </button>
+          ))}
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="text-secondary text-text-muted hover:text-text-primary underline ml-2 shrink-0 cursor-pointer"
+            >
+              Clear search
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Category Pills Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        {CATEGORIES.map((cat) => {
+          const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+          return (
             <button
               key={cat}
+              type="button"
               onClick={() => setSelectedCategory(cat)}
-              className={`px-2.5 py-1 rounded-md transition-colors shrink-0 ${
-                selectedCategory === cat
-                  ? 'bg-vyro-text text-vyro-bg font-semibold'
-                  : 'bg-vyro-card text-vyro-muted hover:text-vyro-text border border-vyro-border/60'
+              className={`px-4 py-2 rounded-control text-secondary font-medium transition-colors cursor-pointer shrink-0 ${
+                isSelected
+                  ? 'bg-volt text-[#0C0E0D] font-bold'
+                  : 'bg-surface border border-border-subtle text-text-muted hover:text-text-primary'
               }`}
             >
               {cat}
             </button>
-          ))}
-        </div>
+          );
+        })}
       </div>
-
-      {/* Verified Specialist Agents */}
-      {activeTab === 'all' && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Bot className="w-4 h-4 text-emerald-400" />
-              <h2 className="text-xs font-semibold font-mono text-vyro-text uppercase tracking-wider">
-                Autonomous Studio Specialists
-              </h2>
-            </div>
-            <Link
-              to="/app/network"
-              className="text-xs text-vyro-muted hover:text-vyro-text font-mono transition-colors flex items-center gap-1"
-            >
-              <span>Full Network Directory</span>
-              <ArrowRight className="w-3 h-3" />
-            </Link>
-          </div>
-
-          {isAgentsLoading ? (
-            <div className="py-6 text-center text-xs font-mono text-vyro-muted animate-pulse">
-              Syncing studio agent telemetry...
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {allAgents.slice(0, 3).map((agent) => (
-                <div
-                  key={agent.id}
-                  className="p-3.5 rounded-xl bg-vyro-surface border border-vyro-border hover:border-vyro-border-light transition-all flex flex-col justify-between group shadow-xs"
-                >
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <h3 className="text-xs font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors">
-                          {agent.businessName}
-                        </h3>
-                        <p className="text-[11px] font-mono text-vyro-muted">{agent.name}</p>
-                      </div>
-                      <Badge variant="success" size="sm">
-                        {agent.verificationStatus.toUpperCase()}
-                      </Badge>
-                    </div>
-
-                    <p className="text-xs text-vyro-muted line-clamp-2 leading-relaxed">
-                      {agent.description}
-                    </p>
-
-                    <div className="flex flex-wrap gap-1 pt-1">
-                      {agent.capabilities.slice(0, 2).map((cap, i) => (
-                        <span
-                          key={i}
-                          className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-vyro-card border border-vyro-border text-vyro-subtle"
-                        >
-                          {cap}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="pt-3 mt-3 border-t border-vyro-border/60 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-mono text-vyro-subtle block">Asking</span>
-                      <span className="text-xs font-bold font-mono text-vyro-text tabular-nums">
-                        ${agent.pricingConstraints.startingPrice || 150} USD
-                      </span>
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => handleHireAgent(agent)}
-                      className="text-xs h-7 px-2.5 rounded-lg"
-                    >
-                      Commission Agent
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Listings Grid */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-vyro-accent" />
-            <h2 className="text-xs font-semibold font-mono text-vyro-text uppercase tracking-wider">
-              {activeTab === 'my' ? 'Your Active Listings' : 'Published Service Catalog'}
-            </h2>
-          </div>
-          <span className="text-[11px] font-mono text-vyro-muted tabular-nums">
-            {listings.length} Results
-          </span>
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+          <div className="md:col-span-2 h-72 bg-surface rounded-surface border border-border-subtle" />
+          <div className="h-72 bg-surface rounded-surface border border-border-subtle" />
+          <div className="h-72 bg-surface rounded-surface border border-border-subtle" />
+          <div className="h-72 bg-surface rounded-surface border border-border-subtle" />
+          <div className="h-72 bg-surface rounded-surface border border-border-subtle" />
         </div>
-
-        {isListingsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-44 rounded-xl bg-vyro-surface border border-vyro-border animate-pulse" />
-            ))}
-          </div>
-        ) : listings.length === 0 ? (
-          <div className="p-12 rounded-xl bg-vyro-surface border border-vyro-border text-center space-y-4">
-            <Store className="w-10 h-10 text-vyro-subtle mx-auto" />
-            <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-vyro-text">
-                {activeTab === 'my' ? 'No commercial offerings published' : 'No listings found'}
-              </h3>
-              <p className="text-xs text-vyro-muted max-w-sm mx-auto">
-                {activeTab === 'my'
-                  ? 'Publish your first service listing to start receiving autonomous procurement requests from verified buyers.'
-                  : 'No services match your active filters. Try selecting another category or clear the search query.'}
-              </p>
-            </div>
-            {activeTab === 'my' && (
-              <div>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => setIsCreateOpen(true)}
-                  leftIcon={<Plus className="w-3.5 h-3.5" />}
-                >
-                  Create your first listing
-                </Button>
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {listings.map((listing) => {
-              const initials = getInitials(listing.sellerName || 'Vendor');
-
-              return (
-                <div
-                  key={listing.id}
-                  className="p-4 rounded-xl bg-vyro-surface border border-vyro-border hover:border-vyro-border-light transition-all flex flex-col justify-between space-y-3 group"
-                >
-                  <div>
-                    {/* Header: Seller & Category */}
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-blue-600/20 border border-blue-500/30 text-blue-400 font-bold font-mono text-[10px] flex items-center justify-center shrink-0">
-                          {initials}
-                        </div>
-                        <span className="text-[11px] font-mono text-vyro-muted truncate">
-                          {listing.sellerName || 'Verified Seller'}
-                        </span>
-                      </div>
-                      <Badge variant="default" size="sm">
-                        {listing.category}
-                      </Badge>
-                    </div>
-
-                    <h3 className="text-xs font-semibold text-vyro-text group-hover:text-vyro-accent transition-colors leading-snug">
-                      {listing.title}
-                    </h3>
-                    <p className="text-xs text-vyro-muted mt-1.5 line-clamp-2 leading-relaxed font-sans">
-                      {listing.description}
-                    </p>
-
-                    {/* Deliverables snippet */}
-                    {listing.deliverables && listing.deliverables.length > 0 && (
-                      <div className="mt-3 pt-2 border-t border-vyro-border/40 space-y-1">
-                        {listing.deliverables.slice(0, 2).map((del, i) => (
-                          <div key={i} className="flex items-center gap-1.5 text-[11px] text-vyro-subtle">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                            <span className="truncate">{del}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+      ) : listings.length === 0 ? (
+        <EmptyState
+          title={activeTab === 'my' ? 'No listings published yet' : 'No offerings found'}
+          description={
+            activeTab === 'my'
+              ? 'Publish an offering so buyers and their autonomous agents can discover your services.'
+              : 'Try selecting a different category or adjusting your search keywords.'
+          }
+          actionLabel={activeTab === 'my' ? 'Create first listing' : undefined}
+          onAction={activeTab === 'my' ? () => navigate('/app/listings/new') : undefined}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+          {/* Featured Tile (2x column width) */}
+          {featuredListing && (
+            <Card
+              className="md:col-span-2 p-6 flex flex-col justify-between gap-6 border-volt/40 bg-surface relative overflow-hidden"
+            >
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <StatusChip label="Featured Offering" role="handled" size="sm" />
+                    <span className="text-secondary text-text-muted">
+                      {featuredListing.category || 'Engineering'}
+                    </span>
                   </div>
-
-                  {/* Pricing and Action */}
-                  <div className="pt-3 border-t border-vyro-border/50 flex items-center justify-between">
-                    <div>
-                      <div className="flex items-center gap-1 font-mono font-bold text-xs text-vyro-text tabular-nums">
-                        <span>${listing.price} {listing.currency}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-[10px] font-mono text-vyro-subtle">
-                        <Clock className="w-3 h-3" />
-                        <span>{listing.deliveryDays}d delivery</span>
-                      </div>
-                    </div>
-
-                    {activeTab === 'all' ? (
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        onClick={() => handleProcureListing(listing)}
-                        rightIcon={<ArrowRight className="w-3 h-3" />}
-                        className="text-xs h-7 px-3 rounded-lg font-medium"
-                      >
-                        Procure
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        {listing.minAcceptablePrice && (
-                          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 tabular-nums">
-                            Floor: ${listing.minAcceptablePrice}
-                          </span>
-                        )}
-                        <Badge variant="accent" size="sm">Active</Badge>
-                      </div>
-                    )}
+                  <div className="flex items-center gap-1.5 text-secondary text-status-handled">
+                    <ShieldCheck className="w-4 h-4" strokeWidth={2} />
+                    <span>Verified seller</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
 
-      {/* Create Listing Modal */}
-      <Modal
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        title="Create Commercial Offering"
-        description="Publish your service to the Autonomous Marketplace. Buyer agents will negotiate autonomously within your private pricing rules."
-      >
-        <form onSubmit={handleCreateSubmit} className="space-y-4 p-6">
-          <div>
-            <label className="block text-xs font-medium text-vyro-text mb-1">
-              Offering Title
-            </label>
-            <input
-              type="text"
-              required
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Next.js SaaS Architecture Sprint"
-              className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-            />
-          </div>
+                <div className="flex flex-col gap-1.5">
+                  <h3 className="font-display font-bold text-[24px] text-text-primary">
+                    {featuredListing.title}
+                  </h3>
+                  <p className="text-body text-text-muted leading-relaxed line-clamp-2">
+                    {featuredListing.description ||
+                      'Comprehensive commercial engagement with verified deliverables and rapid turnaround.'}
+                  </p>
+                </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">
-                Category
-              </label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-              >
-                <option value="Design">Design</option>
-                <option value="Development">Development</option>
-                <option value="Security">Security</option>
-                <option value="Marketing">Marketing</option>
-                <option value="Hardware">Hardware</option>
-              </select>
-            </div>
+                {/* Scope deliverables tags */}
+                {featuredListing.deliverables && featuredListing.deliverables.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {featuredListing.deliverables.slice(0, 3).map((item, idx) => (
+                      <div
+                        key={idx}
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-control bg-raised border border-border-subtle text-secondary text-text-primary"
+                      >
+                        <Check className="w-3.5 h-3.5 text-status-handled shrink-0" strokeWidth={2.5} />
+                        <span>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">
-                Delivery Turnaround (Days)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="60"
-                value={deliveryDays}
-                onChange={(e) => setDeliveryDays(e.target.value ? Number(e.target.value) : '')}
-                className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-            </div>
-          </div>
+              {/* Bottom Row */}
+              <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
+                <div className="flex items-center gap-3">
+                  <Avatar name={formatName(featuredListing.sellerName || 'Verified Studio')} size="md" />
+                  <div className="flex flex-col">
+                    <span className="text-secondary font-semibold text-text-primary">
+                      {formatName(featuredListing.sellerName || 'Verified Studio')}
+                    </span>
+                    <div className="flex items-center gap-1.5 text-secondary text-text-muted">
+                      <Clock className="w-3.5 h-3.5 text-text-muted" strokeWidth={2} />
+                      <span>{featuredListing.deliveryDays || 4}&nbsp;days turnaround</span>
+                    </div>
+                  </div>
+                </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">
-                Public Asking Price ($)
-              </label>
-              <input
-                type="number"
-                min="1"
-                required
-                value={price}
-                onChange={(e) => setPrice(e.target.value ? Number(e.target.value) : '')}
-                className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-            </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <span className="text-secondary text-text-muted block">Starting from</span>
+                    <span className="font-display font-bold text-[24px] text-text-primary">
+                      {formatMoney(featuredListing.price)}
+                    </span>
+                  </div>
 
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1 flex items-center justify-between">
-                <span>Private Floor Price ($)</span>
-                <span className="text-[10px] text-emerald-400 font-mono">CONFIDENTIAL</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={minPrice}
-                onChange={(e) => setMinPrice(e.target.value ? Number(e.target.value) : '')}
-                className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-              <p className="text-[10px] text-vyro-muted mt-0.5">
-                Never shared with buyers or exposed in APIs.
-              </p>
-            </div>
-          </div>
+                  <Button
+                    variant="volt"
+                    size="md"
+                    onClick={() => handleStartNegotiationWithListing(featuredListing)}
+                    rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+                  >
+                    Negotiate terms
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
 
-          <div>
-            <label className="block text-xs font-medium text-vyro-text mb-1">
-              Included Deliverables (comma-separated)
-            </label>
-            <input
-              type="text"
-              value={deliverablesText}
-              onChange={(e) => setDeliverablesText(e.target.value)}
-              className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-vyro-text mb-1">
-              Description & Specifications
-            </label>
-            <textarea
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Full service deliverables, guarantees, and requirements..."
-              className="w-full bg-vyro-card border border-vyro-border rounded-lg px-3 py-2 text-xs text-vyro-text focus:outline-none focus:border-vyro-accent"
-            />
-          </div>
-
-          <div className="pt-3 border-t border-vyro-border flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setIsCreateOpen(false)}
+          {/* Standard Listings Cards (Fiverr style) */}
+          {regularListings.map((listing) => (
+            <Card
+              key={listing.id}
+              interactive
+              onClick={() => handleStartNegotiationWithListing(listing)}
+              className="p-5 flex flex-col justify-between gap-5 h-full text-left"
             >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={createMutation.isPending}
-            >
-              Publish to Marketplace
-            </Button>
-          </div>
-        </form>
-      </Modal>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-medium text-text-muted">
+                    {listing.category || 'Services'}
+                  </span>
+                  <div className="flex items-center gap-1 text-secondary text-text-muted">
+                    <Clock className="w-3.5 h-3.5" strokeWidth={2} />
+                    <span>{listing.deliveryDays || 5}d</span>
+                  </div>
+                </div>
+
+                <h4 className="font-display font-bold text-[18px] text-text-primary line-clamp-2">
+                  {listing.title}
+                </h4>
+
+                <p className="text-secondary text-text-muted line-clamp-2 leading-relaxed">
+                  {listing.description || 'Verified delivery with satisfaction guarantee and quality checks.'}
+                </p>
+              </div>
+
+              {/* Bottom Seller Info & Price */}
+              <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
+                <div className="flex items-center gap-2">
+                  <Avatar name={formatName(listing.sellerName || 'Studio')} size="sm" />
+                  <span className="text-secondary text-text-primary font-medium truncate max-w-[110px]">
+                    {formatName(listing.sellerName || 'Studio')}
+                  </span>
+                </div>
+
+                <div className="text-right">
+                  <span className="text-secondary text-text-muted block">From</span>
+                  <span className="font-display font-bold text-[18px] text-text-primary">
+                    {formatMoney(listing.price)}
+                  </span>
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

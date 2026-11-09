@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Cpu, Lock, Mail, User as UserIcon, CheckCircle2 } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, User as UserIcon, AlertCircle } from 'lucide-react';
 import { Button } from '../../components/common/Button';
+import { Card } from '../../components/common/Card';
 import { useAuth } from '../../context/AuthContext';
 import { toast } from 'sonner';
 
@@ -10,12 +11,15 @@ export const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     if (!email.trim() || !password) {
-      toast.error('Please enter your email and password');
+      setErrorMessage('Please enter your email and password.');
       return;
     }
     setLoading(true);
@@ -23,81 +27,108 @@ export const LoginPage: React.FC = () => {
       await login(email.trim(), password);
       navigate('/app');
     } catch (err: any) {
-      // Toast already shown in AuthContext
+      setErrorMessage(err.message || 'Incorrect email or password.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-vyro-bg flex flex-col justify-center items-center px-4 sm:px-6">
-      <div className="max-w-md w-full space-y-6">
-        <div className="text-center">
-          <Link to="/" className="inline-flex items-center gap-2 mb-4">
-            <div className="w-9 h-9 rounded-control bg-vyro-surface border border-vyro-line flex items-center justify-center text-vyro-accent">
-              <Cpu className="w-5 h-5" />
-            </div>
-            <span className="font-semibold tracking-tight text-xl text-vyro-text">VYRO</span>
+    <div className="min-h-screen bg-bg flex flex-col justify-center items-center px-4 sm:px-6 py-12">
+      <div className="max-w-md w-full flex flex-col gap-8">
+        {/* Brand Header */}
+        <div className="flex flex-col items-center text-center gap-2">
+          <Link to="/" className="inline-flex items-center gap-2 mb-2">
+            <span className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+              VYRO
+            </span>
           </Link>
-          <h2 className="text-2xl font-bold text-vyro-text tracking-tight">Access Autonomous Network</h2>
-          <p className="text-xs text-vyro-muted mt-1">Sign in to control your procurement and seller agents</p>
+          <h1 className="font-display font-bold text-[24px] text-text-primary tracking-tight">
+            Sign in to your account
+          </h1>
+          <p className="text-secondary text-text-muted">
+            Manage your autonomous procurement requests and seller listings.
+          </p>
         </div>
 
-        <div className="p-6 sm:p-8 rounded-surface bg-vyro-surface border border-vyro-line shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-vyro-muted block mb-1.5">
-                Work Email
+        {/* Auth Card */}
+        <Card className="p-8 flex flex-col gap-6 bg-surface">
+          {errorMessage && (
+            <div className="p-3.5 rounded-control bg-status-declined/10 border border-status-declined/30 text-secondary text-status-declined flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={2} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                Email address
               </label>
               <div className="relative">
+                <Mail className="w-5 h-5 text-text-muted absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type="email"
                   value={email}
-                  placeholder="you@company.com"
+                  placeholder="name@company.com"
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   autoFocus
-                  className="w-full bg-vyro-bg border border-vyro-line rounded-control px-3.5 py-2 text-sm text-vyro-text placeholder:text-vyro-muted/50 focus:outline-none focus:ring-1 focus:ring-vyro-accent transition-colors pl-10"
+                  className="w-full h-11 pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
                 />
-                <Mail className="w-4 h-4 text-vyro-muted absolute left-3.5 top-2.5" />
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-vyro-muted block mb-1.5">
-                Password
-              </label>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-secondary font-medium text-text-primary">
+                  Password
+                </label>
+              </div>
               <div className="relative">
+                <Lock className="w-5 h-5 text-text-muted absolute left-3.5 top-3 pointer-events-none" />
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   value={password}
                   placeholder="••••••••••••"
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="w-full bg-vyro-bg border border-vyro-line rounded-control px-3.5 py-2 text-sm text-vyro-text placeholder:text-vyro-muted/50 focus:outline-none focus:ring-1 focus:ring-vyro-accent transition-colors pl-10"
+                  className="w-full h-11 pl-11 pr-11 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
                 />
-                <Lock className="w-4 h-4 text-vyro-muted absolute left-3.5 top-2.5" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" strokeWidth={2} />
+                  ) : (
+                    <Eye className="w-5 h-5" strokeWidth={2} />
+                  )}
+                </button>
               </div>
             </div>
 
             <Button
               type="submit"
-              variant="primary"
+              variant="volt"
               size="lg"
-              disabled={loading}
-              className="w-full justify-center mt-2"
+              fullWidth
+              isLoading={loading}
+              className="mt-2"
             >
-              {loading ? 'Authenticating...' : 'Sign In'}
+              Sign in
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-vyro-muted border-t border-vyro-line pt-4">
-            New to VYRO?{' '}
-            <Link to="/signup" className="text-vyro-accent hover:underline font-medium">
-              Create an account
+          <div className="text-center text-secondary text-text-muted pt-4 border-t border-border-subtle">
+            Don’t have an account?{' '}
+            <Link to="/signup" className="text-text-primary font-semibold hover:underline">
+              Create account
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -109,16 +140,19 @@ export const SignupPage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
     if (!displayName.trim() || !email.trim() || !password) {
-      toast.error('Please fill in all required fields');
+      setErrorMessage('Please fill in all required fields.');
       return;
     }
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    if (password.length < 8) {
+      setErrorMessage('Password must be at least 8 characters.');
       return;
     }
 
@@ -130,35 +164,46 @@ export const SignupPage: React.FC = () => {
         password,
         capabilities: { buying: true, selling: true }
       });
-      navigate('/onboarding');
+      navigate('/app');
     } catch (err: any) {
-      // Toast already shown in AuthContext
+      setErrorMessage(err.message || 'Registration failed. Try a different email.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-vyro-bg flex flex-col justify-center items-center px-4 sm:px-6">
-      <div className="max-w-md w-full space-y-6">
-        <div className="text-center">
-          <Link to="/" className="inline-flex items-center gap-2 mb-4">
-            <div className="w-9 h-9 rounded-control bg-vyro-surface border border-vyro-line flex items-center justify-center text-vyro-accent">
-              <Cpu className="w-5 h-5" />
-            </div>
-            <span className="font-semibold tracking-tight text-xl text-vyro-text">VYRO</span>
+    <div className="min-h-screen bg-bg flex flex-col justify-center items-center px-4 sm:px-6 py-12">
+      <div className="max-w-md w-full flex flex-col gap-8">
+        <div className="flex flex-col items-center text-center gap-2">
+          <Link to="/" className="inline-flex items-center gap-2 mb-2">
+            <span className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+              VYRO
+            </span>
           </Link>
-          <h2 className="text-2xl font-bold text-vyro-text tracking-tight">Create Network Identity</h2>
-          <p className="text-xs text-vyro-muted mt-1">Deploy autonomous procurement & seller agents</p>
+          <h1 className="font-display font-bold text-[24px] text-text-primary tracking-tight">
+            Create your account
+          </h1>
+          <p className="text-secondary text-text-muted">
+            Start completely clean. Buy and sell with full isolation.
+          </p>
         </div>
 
-        <div className="p-6 sm:p-8 rounded-surface bg-vyro-surface border border-vyro-line shadow-sm">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-xs font-medium text-vyro-muted block mb-1.5">
-                Full Name / Organization
+        <Card className="p-8 flex flex-col gap-6 bg-surface">
+          {errorMessage && (
+            <div className="p-3.5 rounded-control bg-status-declined/10 border border-status-declined/30 text-secondary text-status-declined flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={2} />
+              <span>{errorMessage}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                Full name or studio name
               </label>
               <div className="relative">
+                <UserIcon className="w-5 h-5 text-text-muted absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="e.g. Jordan Cross"
@@ -166,73 +211,77 @@ export const SignupPage: React.FC = () => {
                   onChange={(e) => setDisplayName(e.target.value)}
                   required
                   autoFocus
-                  className="w-full bg-vyro-bg border border-vyro-line rounded-control px-3.5 py-2 text-sm text-vyro-text placeholder:text-vyro-muted/50 focus:outline-none focus:ring-1 focus:ring-vyro-accent pl-10"
+                  className="w-full h-11 pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
                 />
-                <UserIcon className="w-4 h-4 text-vyro-muted absolute left-3.5 top-2.5" />
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-vyro-muted block mb-1.5">
-                Work Email
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                Email address
               </label>
               <div className="relative">
+                <Mail className="w-5 h-5 text-text-muted absolute left-3.5 top-3 pointer-events-none" />
                 <input
                   type="email"
                   placeholder="name@domain.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full bg-vyro-bg border border-vyro-line rounded-control px-3.5 py-2 text-sm text-vyro-text placeholder:text-vyro-muted/50 focus:outline-none focus:ring-1 focus:ring-vyro-accent pl-10"
+                  className="w-full h-11 pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
                 />
-                <Mail className="w-4 h-4 text-vyro-muted absolute left-3.5 top-2.5" />
               </div>
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-vyro-muted block mb-1.5">
-                Password (min 6 characters)
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                Password
               </label>
               <div className="relative">
+                <Lock className="w-5 h-5 text-text-muted absolute left-3.5 top-3 pointer-events-none" />
                 <input
-                  type="password"
-                  placeholder="••••••••••••"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="At least 8 characters"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={6}
-                  className="w-full bg-vyro-bg border border-vyro-line rounded-control px-3.5 py-2 text-sm text-vyro-text placeholder:text-vyro-muted/50 focus:outline-none focus:ring-1 focus:ring-vyro-accent pl-10"
+                  minLength={8}
+                  className="w-full h-11 pl-11 pr-11 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors"
                 />
-                <Lock className="w-4 h-4 text-vyro-muted absolute left-3.5 top-2.5" />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3 text-text-muted hover:text-text-primary transition-colors cursor-pointer"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" strokeWidth={2} />
+                  ) : (
+                    <Eye className="w-5 h-5" strokeWidth={2} />
+                  )}
+                </button>
               </div>
-            </div>
-
-            <div className="p-3 rounded-control bg-vyro-bg border border-vyro-line text-[11px] text-vyro-muted space-y-1">
-              <div className="flex items-center gap-1.5 text-vyro-text font-medium">
-                <CheckCircle2 className="w-3.5 h-3.5 text-vyro-accent" />
-                <span>Unified Account (Dual-Role Enabled)</span>
-              </div>
-              <p>You can buy and sell from this single account with isolated workspaces.</p>
             </div>
 
             <Button
               type="submit"
-              variant="primary"
+              variant="volt"
               size="lg"
-              disabled={loading}
-              className="w-full justify-center mt-2"
+              fullWidth
+              isLoading={loading}
+              className="mt-2"
             >
-              {loading ? 'Creating Identity...' : 'Initialize Account'}
+              Create account
             </Button>
           </form>
 
-          <div className="mt-6 text-center text-xs text-vyro-muted border-t border-vyro-line pt-4">
+          <div className="text-center text-secondary text-text-muted pt-4 border-t border-border-subtle">
             Already have an account?{' '}
-            <Link to="/login" className="text-vyro-accent hover:underline font-medium">
+            <Link to="/login" className="text-text-primary font-semibold hover:underline">
               Sign in
             </Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,460 +1,405 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import {
   ArrowRight,
-  Bot,
   ShieldCheck,
-  CheckCircle2,
+  Check,
   Lock,
-  Layers,
   Sparkles,
-  TrendingDown,
-  TrendingUp,
-  AlertTriangle,
-  Play,
-  Scale,
-  DollarSign,
   Clock,
-  Terminal,
-  Zap
+  ChevronRight,
+  Sliders,
+  DollarSign
 } from 'lucide-react';
-import { Navbar } from '../../components/common/Navbar';
-import { Footer } from '../../components/common/Footer';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
+import { DealNode } from '../../components/common/DealNode';
+import { formatMoney } from '../../lib/present';
 
 export const LandingPage: React.FC = () => {
   const navigate = useNavigate();
 
-  // Interactive Live Price Ladder Simulator state
-  const [simBudget, setSimBudget] = useState<number>(200);
-  const [simRound, setSimRound] = useState<number>(2);
+  // Interactive Live Demo State
+  const [demoRound, setDemoRound] = useState<1 | 2 | 3>(2);
 
-  const samplePrompts = [
-    {
-      title: 'OWASP Security Audit',
-      budget: '$350',
-      days: '4d',
-      text: 'I need an OWASP top-10 security audit of my Express API completed within 4 days for under $350 USD.'
+  const demoRoundsData = {
+    1: {
+      sellerPrice: 220,
+      sellerDays: 6,
+      buyerPrice: 160,
+      buyerDays: 4,
+      status: 'Open gap ($60)',
+      summary: 'Seller opened at $220 with 6 days delivery. Buyer countered at $160 for 4 days.'
     },
-    {
-      title: 'Brand Design System',
-      budget: '$180',
-      days: '5d',
-      text: 'I need a responsive, high-converting brand landing page with accessible Tailwind design tokens, delivery in 5 days, budget under $180 USD.'
+    2: {
+      sellerPrice: 190,
+      sellerDays: 5,
+      buyerPrice: 175,
+      buyerDays: 5,
+      status: 'Converging (-$30 concession)',
+      summary: 'Seller conceded $30 for a 5-day delivery window. Buyer moved up $15.'
     },
-    {
-      title: 'Mobile Architecture',
-      budget: '$280',
-      days: '6d',
-      text: 'Cross-platform mobile app architecture with clean state management, API integration, and unit tests. Budget $280 within 6 days.'
+    3: {
+      sellerPrice: 180,
+      sellerDays: 5,
+      buyerPrice: 180,
+      buyerDays: 5,
+      status: 'Consensus reached',
+      summary: 'Agreement struck at $180 with 5 days turnaround. Escrow authorized.'
     }
-  ];
+  };
+
+  const currentDemo = demoRoundsData[demoRound];
 
   return (
-    <div className="min-h-screen bg-vyro-bg text-vyro-text selection:bg-vyro-accent/20">
-      <Navbar />
+    <div className="min-h-screen bg-bg text-text-primary selection:bg-volt/20">
+      {/* Top Navbar */}
+      <header className="sticky top-0 z-40 bg-surface/90 border-b border-border-subtle">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-2">
+            <span className="font-display font-bold text-[22px] text-text-primary tracking-tight">
+              VYRO
+            </span>
+          </Link>
+
+          <nav className="hidden md:flex items-center gap-6 text-secondary text-text-muted">
+            <Link to="/marketplace" className="hover:text-text-primary transition-colors">
+              Marketplace
+            </Link>
+            <Link to="/how-it-works" className="hover:text-text-primary transition-colors">
+              How it works
+            </Link>
+            <Link to="/security" className="hover:text-text-primary transition-colors">
+              Security
+            </Link>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Link to="/login">
+              <Button variant="ghost" size="sm">
+                Sign in
+              </Button>
+            </Link>
+            <Link to="/app">
+              <Button variant="volt" size="sm">
+                Open app
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </header>
 
       {/* Hero Section */}
-      <section className="relative pt-32 pb-20 md:pt-40 md:pb-28 overflow-hidden">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="max-w-3xl mx-auto text-center space-y-6">
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4 }}
-              className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-vyro-surface border border-vyro-border shadow-xs text-xs font-mono text-vyro-muted"
-            >
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse-subtle" />
-              <span className="text-vyro-text font-semibold">Autonomous Commerce</span>
-              <span className="text-vyro-subtle">·</span>
-              <span>Needs-You Review Model</span>
-            </motion.div>
+      <section className="pt-20 pb-16 sm:pt-28 sm:pb-24 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto flex flex-col items-center text-center gap-8">
+          {/* Pill Badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface border border-border-subtle text-secondary text-text-muted">
+            <span className="w-2 h-2 rounded-full bg-status-handled animate-pulse" />
+            <span className="text-text-primary font-semibold">Autonomous Commerce</span>
+            <span>·</span>
+            <span>Zero Slop · Human Sovereignty</span>
+          </div>
 
-            <motion.h1
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="text-4xl sm:text-6xl font-bold tracking-tight text-vyro-text leading-[1.1] font-mono"
-            >
-              The AI-operated marketplace. <br />
-              <span className="text-vyro-accent">Humans handle only exceptions.</span>
-            </motion.h1>
+          {/* Headline */}
+          <h1 className="font-display font-bold text-[40px] sm:text-[64px] text-text-primary leading-[1.08] tracking-tight">
+            Where AI agents negotiate, decide, and pay on your behalf.
+          </h1>
 
-            <motion.p
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-sm sm:text-base text-vyro-muted leading-relaxed max-w-2xl mx-auto font-sans"
-            >
-              Autonomous buyer and seller agents discover, negotiate, compare, and settle deals. You step in only when an edge case or rejection requires human judgment.
-            </motion.p>
+          {/* Subtitle */}
+          <p className="text-body text-text-muted max-w-2xl leading-relaxed">
+            Buyers define what they need and a private ceiling. Sellers set their private floor. Autonomous agents find each other, negotiate multi-issue terms, and settle through escrow. Humans only handle exceptions.
+          </p>
 
-            {/* CTAs */}
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.3 }}
-              className="flex flex-wrap items-center justify-center gap-3 pt-2"
+          {/* Hero CTAs */}
+          <div className="flex flex-wrap items-center justify-center gap-3.5 pt-2">
+            <Button
+              variant="volt"
+              size="lg"
+              onClick={() => navigate('/app/requests/new')}
+              rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
             >
-              <Link to="/app">
-                <Button size="lg" variant="primary" rightIcon={<ArrowRight className="w-4 h-4" />} className="px-6">
-                  Launch Workspace
-                </Button>
-              </Link>
-              <Link to="/app/requests/new">
-                <Button size="lg" variant="outline" className="px-5 font-mono text-xs">
-                  Start New Request
-                </Button>
-              </Link>
-            </motion.div>
+              Start a request
+            </Button>
+            <Button
+              variant="secondary"
+              size="lg"
+              onClick={() => navigate('/marketplace')}
+            >
+              Explore marketplace
+            </Button>
+          </div>
+        </div>
+      </section>
 
-            {/* Quick Presets */}
-            <div className="pt-4 flex flex-wrap items-center justify-center gap-2 text-xs font-mono">
-              <span className="text-vyro-subtle text-[11px] uppercase mr-1">Sample Requests:</span>
-              {samplePrompts.map((p, idx) => (
+      {/* Live Interactive Negotiation Preview */}
+      <section className="py-12 px-4 sm:px-6 max-w-5xl mx-auto">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="text-secondary font-semibold text-text-primary">
+                Live Bilateral Negotiation Simulator
+              </span>
+              <p className="text-secondary text-text-muted">
+                Observe how two autonomous agents dynamically trade price and turnaround days.
+              </p>
+            </div>
+
+            {/* Round Switcher */}
+            <div className="flex items-center gap-1.5 bg-surface p-1 rounded-control border border-border-subtle self-start sm:self-auto">
+              {[1, 2, 3].map((r) => (
                 <button
-                  key={idx}
-                  onClick={() => navigate('/app/requests/new', { state: { initialPrompt: p.text } })}
-                  className="px-2.5 py-1 rounded-lg bg-vyro-surface border border-vyro-border hover:border-vyro-accent/50 text-vyro-muted hover:text-vyro-text transition-colors flex items-center gap-1.5"
+                  key={r}
+                  type="button"
+                  onClick={() => setDemoRound(r as any)}
+                  className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-colors cursor-pointer ${
+                    demoRound === r
+                      ? 'bg-volt text-[#0C0E0D] font-bold'
+                      : 'text-text-muted hover:text-text-primary'
+                  }`}
                 >
-                  <span>{p.title}</span>
-                  <span className="text-vyro-accent font-semibold">{p.budget}</span>
+                  Round {r}
                 </button>
               ))}
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* The Core Truth: 90% Autonomous vs 10% Exception Queue */}
-      <section className="py-20 border-t border-vyro-border/60 bg-vyro-surface/40">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-14 space-y-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-vyro-accent font-semibold block">
-              The Architecture
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-vyro-text tracking-tight font-mono">
-              The Needs-you queue is the product.
-            </h2>
-            <p className="text-xs text-vyro-muted leading-relaxed font-sans">
-              The best session is one where you open VYRO, see <code className="text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded font-mono">"Everything is handled"</code>, and leave.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Left Card: 90% Autonomous */}
-            <div className="p-6 rounded-2xl bg-vyro-surface border border-vyro-border shadow-xs space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-vyro-border/60">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold font-mono text-vyro-text">90% Autonomous Flow</h3>
-                    <span className="text-[10px] text-vyro-muted font-mono">Zero Human Attention Required</span>
-                  </div>
-                </div>
-                <Badge variant="success" size="sm">Auto-Approved</Badge>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    1
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">Scout & Match</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      Buyer agent parses requirements and queries verified seller agents.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    2
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">Converging Concessions</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      Multi-round price ladder negotiates deliverables and delivery without leaking budget ceilings or floor prices.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    3
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">Server Decision & Settlement</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      Auto-approved if price $\le$ buyer ceiling, $\ge$ seller floor, amount $\le$ $200, and daily spend cap holds.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono text-emerald-400 flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 shrink-0" />
-                <span>Result: Everything handled silently. Money captures via PayPal Sandbox.</span>
-              </div>
-            </div>
-
-            {/* Right Card: 10% Exception Queue */}
-            <div className="p-6 rounded-2xl bg-vyro-surface border border-amber-500/30 shadow-xs space-y-5">
-              <div className="flex items-center justify-between pb-3 border-b border-vyro-border/60">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center">
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold font-mono text-vyro-text">10% Needs-You Review Queue</h3>
-                    <span className="text-[10px] text-vyro-muted font-mono">Humans Handle ONLY Exceptions</span>
-                  </div>
-                </div>
-                <Badge variant="warning" size="sm">Escalated</Badge>
-              </div>
-
-              <div className="space-y-3 text-xs">
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    !
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">Threshold or Cap Exceeded</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      Deal exceeds your $200 auto-approval ceiling or would breach your daily spend cap.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    !
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">Operational Impasse</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      Seller absolute floor exceeds buyer max budget, or delivery timeframe is incompatible.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3">
-                  <span className="w-5 h-5 rounded-full bg-vyro-card border border-vyro-border flex items-center justify-center font-mono text-[10px] font-bold text-vyro-text shrink-0 mt-0.5">
-                    !
-                  </span>
-                  <div>
-                    <span className="font-semibold text-vyro-text block">One-Click Human Decisions</span>
-                    <p className="text-vyro-muted text-[11px] mt-0.5">
-                      One-click Approve, Decline, or Counter with inline price. Overrides generate suggested rules.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs font-mono text-amber-300 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 shrink-0 text-amber-400" />
-                <span>Result: You decide only what matters. 10-second undo window on all actions.</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Live Interactive Price Convergence Proof */}
-      <section className="py-20 border-t border-vyro-border/60">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-          <div className="text-center space-y-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-vyro-accent font-semibold block">
-              Deterministic Convergence
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-vyro-text tracking-tight font-mono">
-              Watch agents converge without leaking budgets
-            </h2>
-            <p className="text-xs text-vyro-muted max-w-xl mx-auto">
-              Simulate an autonomous procurement negotiation below. Neither party ever reveals their private floor or ceiling.
-            </p>
-          </div>
-
-          {/* Interactive Simulation Card */}
-          <div className="p-5 sm:p-6 rounded-2xl bg-vyro-surface border border-vyro-border shadow-xs space-y-5">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-vyro-border/60">
-              <div className="flex items-center gap-2">
-                <Scale className="w-4 h-4 text-vyro-accent" />
-                <span className="text-xs font-mono font-semibold text-vyro-text">
-                  Simulation: Express API Security Audit
+          {/* Preview Cockpit Card */}
+          <Card className="p-6 sm:p-8 flex flex-col gap-6 bg-surface">
+            <div className="flex items-center justify-between border-b border-border-subtle pb-4">
+              <div className="flex items-center gap-3">
+                <StatusChip
+                  label={demoRound === 3 ? 'Consensus Struck' : `Round ${demoRound} in Progress`}
+                  role={demoRound === 3 ? 'handled' : 'inProgress'}
+                  size="md"
+                />
+                <span className="text-secondary text-text-muted">
+                  Brand Identity & Token Architecture
                 </span>
               </div>
-
-              <div className="flex items-center gap-2 text-xs font-mono">
-                <span className="text-vyro-muted">Your Private Ceiling:</span>
-                <span className="px-2 py-0.5 rounded bg-vyro-card border border-vyro-border font-bold text-vyro-text tabular-nums">
-                  ${simBudget} USD
-                </span>
-              </div>
-            </div>
-
-            {/* Simulated Horizontal Convergence Track */}
-            <div className="space-y-3 font-mono text-xs">
-              {/* Round 1 */}
-              <div className="p-3 rounded-lg bg-vyro-card border border-vyro-border space-y-2">
-                <div className="flex justify-between items-center text-[11px] text-vyro-muted">
-                  <span>Round 1: Opening Positions</span>
-                  <span>Spread: $80</span>
-                </div>
-                <div className="relative h-8 bg-vyro-bg rounded flex items-center px-3 border border-vyro-border/60">
-                  <div className="flex items-center gap-1.5 z-10">
-                    <span className="w-2 h-2 rounded-full bg-[#4C7DF0]" />
-                    <span className="text-xs font-bold text-vyro-text">$160 Buyer</span>
-                  </div>
-                  <div className="mx-auto z-10">
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-vyro-surface border border-vyro-border text-vyro-muted">
-                      $80 gap
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 z-10 ml-auto">
-                    <span className="text-xs font-bold text-vyro-text">$240 Seller</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Round 2 */}
-              <div className="p-3 rounded-lg bg-vyro-card border border-vyro-border space-y-2">
-                <div className="flex justify-between items-center text-[11px] text-vyro-muted">
-                  <div className="flex items-center gap-2">
-                    <span>Round 2: Mutual Concessions</span>
-                    <span className="text-blue-400 text-[10px]">Buyer +$25</span>
-                    <span className="text-emerald-400 text-[10px]">Seller -$30</span>
-                  </div>
-                  <span>Spread: $25</span>
-                </div>
-                <div className="relative h-8 bg-vyro-bg rounded flex items-center px-3 border border-vyro-border/60">
-                  <div className="flex items-center gap-1.5 z-10">
-                    <span className="w-2 h-2 rounded-full bg-[#4C7DF0]" />
-                    <span className="text-xs font-bold text-vyro-text">$185 Buyer</span>
-                  </div>
-                  <div className="mx-auto z-10">
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-vyro-surface border border-vyro-border text-vyro-muted">
-                      $25 gap
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 z-10 ml-auto">
-                    <span className="text-xs font-bold text-vyro-text">$210 Seller</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  </div>
-                </div>
-              </div>
-
-              {/* Consensus */}
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="font-semibold text-vyro-text">Consensus Reached: $195 USD</span>
-                </div>
-                <Badge variant="success" size="sm">
-                  {195 <= simBudget ? 'Auto-Approved (under limit)' : 'Needs-You Review (exceeds limit)'}
-                </Badge>
-              </div>
-            </div>
-
-            {/* Privacy verification footer */}
-            <div className="pt-2 flex items-center justify-between text-[11px] font-mono text-vyro-muted">
-              <span className="flex items-center gap-1 text-emerald-400">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Canary Privacy Check: PASS (0 Leaks)</span>
+              <span className="text-secondary text-status-handled font-medium">
+                {currentDemo.status}
               </span>
-              <span>Validated against strict JSON schema</span>
             </div>
+
+            {/* Bilateral Comparison Columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {/* Buyer Agent Position */}
+              <div className="p-5 rounded-control bg-raised border border-border-subtle flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold text-text-primary">
+                    Buyer Agent
+                  </span>
+                  <span className="text-secondary text-text-muted">Ceiling: $250</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display font-bold text-[32px] text-text-primary">
+                    {formatMoney(currentDemo.buyerPrice)}
+                  </span>
+                  <span className="text-secondary text-text-muted">
+                    · {currentDemo.buyerDays} days turnaround
+                  </span>
+                </div>
+                <p className="text-secondary text-text-muted">
+                  Authorized to negotiate within 4–6 day delivery window.
+                </p>
+              </div>
+
+              {/* Seller Agent Position */}
+              <div className="p-5 rounded-control bg-raised border border-border-subtle flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-secondary font-semibold text-text-primary">
+                    Seller Agent
+                  </span>
+                  <span className="text-secondary text-text-muted">Floor: $160</span>
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <span className="font-display font-bold text-[32px] text-text-primary">
+                    {formatMoney(currentDemo.sellerPrice)}
+                  </span>
+                  <span className="text-secondary text-text-muted">
+                    · {currentDemo.sellerDays} days turnaround
+                  </span>
+                </div>
+                <p className="text-secondary text-text-muted">
+                  Authorized to concede down to floor in exchange for production buffer.
+                </p>
+              </div>
+            </div>
+
+            {/* Explanation Sentence */}
+            <div className="p-4 rounded-control bg-raised border border-border-subtle text-secondary text-text-muted leading-relaxed">
+              {currentDemo.summary}
+            </div>
+          </Card>
+        </div>
+      </section>
+
+      {/* 3 Key Benefits */}
+      <section className="py-20 px-4 sm:px-6 max-w-6xl mx-auto border-t border-border-subtle">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <Card className="p-6 flex flex-col gap-4 bg-surface">
+            <div className="w-10 h-10 rounded-full bg-status-handled/15 text-status-handled flex items-center justify-center">
+              <Lock className="w-5 h-5" strokeWidth={2} />
+            </div>
+            <h3 className="font-display font-bold text-[20px] text-text-primary">
+              Zero-Knowledge Privacy
+            </h3>
+            <p className="text-secondary text-text-muted leading-relaxed">
+              Buyer ceilings and seller floors are strictly quarantined server-side. Counterparties never see your private limits, eliminating negotiation anxiety.
+            </p>
+          </Card>
+
+          <Card className="p-6 flex flex-col gap-4 bg-surface">
+            <div className="w-10 h-10 rounded-full bg-volt/20 text-[#0C0E0D] dark:text-volt flex items-center justify-center font-bold">
+              <Sliders className="w-5 h-5" strokeWidth={2} />
+            </div>
+            <h3 className="font-display font-bold text-[20px] text-text-primary">
+              Multi-Issue Bargaining
+            </h3>
+            <p className="text-secondary text-text-muted leading-relaxed">
+              Real commerce isn't single-number haggling. Agents trade turnaround windows, revision packages, and milestone escrow terms to reach Pareto-optimal outcomes.
+            </p>
+          </Card>
+
+          <Card className="p-6 flex flex-col gap-4 bg-surface">
+            <div className="w-10 h-10 rounded-full bg-status-handled/15 text-status-handled flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5" strokeWidth={2} />
+            </div>
+            <h3 className="font-display font-bold text-[20px] text-text-primary">
+              Human Sovereignty
+            </h3>
+            <p className="text-secondary text-text-muted leading-relaxed">
+              Agents execute automatically only within your strict pre-authorized rules. When an edge case or rejection arises, it routes cleanly to your review queue.
+            </p>
+          </Card>
+        </div>
+      </section>
+
+      {/* Proof & Stats Callout */}
+      <section className="py-16 px-4 sm:px-6 bg-raised border-y border-border-subtle">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-3 gap-8 text-center">
+          <div className="flex flex-col gap-1">
+            <span className="font-display font-bold text-[40px] text-text-primary">
+              $0
+            </span>
+            <span className="text-secondary text-text-muted">
+              Unauthorized transactions (Escrow hold)
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="font-display font-bold text-[40px] text-text-primary">
+              3.4
+            </span>
+            <span className="text-secondary text-text-muted">
+              Rounds average to bilateral agreement
+            </span>
+          </div>
+
+          <div className="flex flex-col gap-1">
+            <span className="font-display font-bold text-[40px] text-text-primary">
+              100%
+            </span>
+            <span className="text-secondary text-text-muted">
+              Account data ownership and isolation
+            </span>
           </div>
         </div>
       </section>
 
-      {/* Security & Architectural Invariants */}
-      <section className="py-20 border-t border-vyro-border/60 bg-vyro-surface/30">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-xl mx-auto mb-12 space-y-2">
-            <span className="text-xs font-mono uppercase tracking-wider text-vyro-accent font-semibold block">
-              Engineering Proof
-            </span>
-            <h2 className="text-2xl sm:text-3xl font-bold text-vyro-text tracking-tight font-mono">
-              Four Non-Negotiable Invariants
-            </h2>
-          </div>
+      {/* How It Works (4 Stepping Stones) */}
+      <section className="py-20 px-4 sm:px-6 max-w-5xl mx-auto flex flex-col gap-10">
+        <div className="flex flex-col items-center text-center gap-2">
+          <span className="text-secondary font-semibold text-text-primary">
+            The 4-Step Process
+          </span>
+          <h2 className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+            How autonomous procurement works
+          </h2>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-vyro-surface border border-vyro-border space-y-2">
-              <div className="w-7 h-7 rounded-lg bg-vyro-card border border-vyro-border flex items-center justify-center text-vyro-accent font-mono text-xs font-bold">
-                01
-              </div>
-              <h3 className="text-xs font-semibold text-vyro-text font-mono">Zero Budget Leaks</h3>
-              <p className="text-xs text-vyro-muted leading-relaxed font-sans">
-                Buyer ceilings and seller floor prices are never passed into counterparty prompts, logs, or APIs. Verified by automated canary tests.
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[
+            {
+              step: '01',
+              title: 'State what you need',
+              desc: 'Describe your requirements in plain language and set a strictly private ceiling budget.'
+            },
+            {
+              step: '02',
+              title: 'Agent discovery',
+              desc: 'Your buyer agent contacts verified sellers and evaluates proposals against your criteria.'
+            },
+            {
+              step: '03',
+              title: 'Autonomous bargaining',
+              desc: 'Agents negotiate terms, turnaround, and price until a mutually beneficial consensus is reached.'
+            },
+            {
+              step: '04',
+              title: 'Your OK & Escrow',
+              desc: 'Review the final agreed deal. Authorize payment through secure escrow.'
+            }
+          ].map((item) => (
+            <div key={item.step} className="flex flex-col gap-2 p-5 bg-surface rounded-control border border-border-subtle">
+              <span className="text-secondary font-bold text-volt">
+                {item.step}
+              </span>
+              <span className="font-semibold text-body text-text-primary">
+                {item.title}
+              </span>
+              <p className="text-secondary text-text-muted leading-relaxed">
+                {item.desc}
               </p>
             </div>
-
-            <div className="p-4 rounded-xl bg-vyro-surface border border-vyro-border space-y-2">
-              <div className="w-7 h-7 rounded-lg bg-vyro-card border border-vyro-border flex items-center justify-center text-vyro-accent font-mono text-xs font-bold">
-                02
-              </div>
-              <h3 className="text-xs font-semibold text-vyro-text font-mono">Untrusted Containment</h3>
-              <p className="text-xs text-vyro-muted leading-relaxed font-sans">
-                Counterparty messages are quarantined with boundary tags to neutralize prompt injection attacks.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-vyro-surface border border-vyro-border space-y-2">
-              <div className="w-7 h-7 rounded-lg bg-vyro-card border border-vyro-border flex items-center justify-center text-vyro-accent font-mono text-xs font-bold">
-                03
-              </div>
-              <h3 className="text-xs font-semibold text-vyro-text font-mono">Deterministic Signals</h3>
-              <p className="text-xs text-vyro-muted leading-relaxed font-sans">
-                Confidence is calculated mathematically from verified seller badges, ratings, and price delta—never self-reported by the model.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-xl bg-vyro-surface border border-vyro-border space-y-2">
-              <div className="w-7 h-7 rounded-lg bg-vyro-card border border-vyro-border flex items-center justify-center text-vyro-accent font-mono text-xs font-bold">
-                04
-              </div>
-              <h3 className="text-xs font-semibold text-vyro-text font-mono">Server Payment Gate</h3>
-              <p className="text-xs text-vyro-muted leading-relaxed font-sans">
-                PayPal Sandbox capture checks server decision status and daily spend caps independently. The client is never trusted with payment release.
-              </p>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
       {/* Final Call to Action */}
-      <section className="py-24 border-t border-vyro-border/60 text-center">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
-          <h2 className="text-3xl sm:text-4xl font-bold text-vyro-text tracking-tight font-mono">
-            Autonomous commerce is here.
+      <section className="py-20 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto p-10 sm:p-14 rounded-surface bg-surface border border-border-subtle text-center flex flex-col items-center gap-6">
+          <h2 className="font-display font-bold text-[32px] sm:text-[44px] text-text-primary tracking-tight">
+            Ready to let AI handle your commerce?
           </h2>
-          <p className="text-xs sm:text-sm text-vyro-muted leading-relaxed">
-            Open the app, delegate your first request, and let your agents handle the rest.
+          <p className="text-body text-text-muted max-w-xl leading-relaxed">
+            Create an empty account in seconds. Buy and sell with full isolation and guaranteed escrow protection.
           </p>
-          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-            <Link to="/app">
-              <Button size="lg" variant="primary" rightIcon={<ArrowRight className="w-4 h-4" />}>
-                Launch Workspace
-              </Button>
-            </Link>
-            <Link to="/onboarding">
-              <Button size="lg" variant="outline" className="text-xs font-mono">
-                Guided Setup (3 steps)
-              </Button>
-            </Link>
-          </div>
+          <Button
+            variant="volt"
+            size="lg"
+            onClick={() => navigate('/signup')}
+            rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+          >
+            Create free account
+          </Button>
         </div>
       </section>
 
-      <Footer />
+      {/* Footer */}
+      <footer className="py-12 px-4 sm:px-6 border-t border-border-subtle bg-surface">
+        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 text-secondary text-text-muted">
+          <div className="flex items-center gap-2">
+            <span className="font-display font-bold text-text-primary text-[18px]">
+              VYRO
+            </span>
+            <span>· Autonomous Commerce Network</span>
+          </div>
+
+          <div className="flex items-center gap-6">
+            <Link to="/marketplace" className="hover:text-text-primary transition-colors">
+              Marketplace
+            </Link>
+            <Link to="/terms" className="hover:text-text-primary transition-colors">
+              Terms of Service
+            </Link>
+            <Link to="/privacy" className="hover:text-text-primary transition-colors">
+              Privacy Policy
+            </Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };

@@ -2,38 +2,36 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
 import { toast } from 'sonner';
 import {
-  Sparkles,
   ArrowRight,
   ArrowLeft,
-  CheckCircle2,
-  Sliders,
-  DollarSign,
+  Check,
   ShieldCheck,
-  ShoppingBag,
-  Store,
-  Layers
+  DollarSign,
+  Sliders
 } from 'lucide-react';
 import { api } from '../../api/client';
+import { formatMoney } from '../../lib/present';
 
 export const OnboardingPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user, updateOnboarding, updateCapabilities, switchWorkspace } = useAuth();
+  const { user, updateOnboarding } = useAuth();
 
   const [step, setStep] = useState<number>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Step 1: Workspace Choice
+  // Step 1: Default Role Preference
   const [primaryMode, setPrimaryMode] = useState<'buyer' | 'seller'>('buyer');
 
-  // Step 2: Decision Thresholds
+  // Step 2: Financial Thresholds
   const [autoApprovalLimit, setAutoApprovalLimit] = useState<number>(200);
   const [dailyBudgetCap, setDailyBudgetCap] = useState<number>(500);
 
-  // Step 3: Agent Stance
-  const [strategy, setStrategy] = useState<'balanced' | 'aggressive_cost' | 'quality_first' | 'expedited'>('balanced');
+  // Step 3: Negotiation Strategy
+  const [strategy, setStrategy] = useState<'balanced' | 'aggressive_cost' | 'quality_first'>('balanced');
 
   const totalSteps = 3;
 
@@ -51,275 +49,280 @@ export const OnboardingPage: React.FC = () => {
     }
   };
 
-  const handleSkip = () => {
-    navigate('/app');
-  };
-
   const handleComplete = async () => {
     setIsSubmitting(true);
     try {
-      // 1. Update user workspace & capabilities
-      await updateCapabilities({
-        buying: primaryMode === 'buyer',
-        selling: primaryMode === 'seller'
-      });
-      await switchWorkspace(primaryMode);
-
-      // 2. Persist decision limits
-      await api.updateLimits(autoApprovalLimit, dailyBudgetCap);
-
-      // 3. Mark onboarding complete
       await updateOnboarding({
-        step: 3,
-        completed: true
+        completed: true,
+        primaryMode,
+        autoApprovalLimit,
+        dailyBudgetCap,
+        strategy
       });
-
-      toast.success('Setup complete. Welcome to VYRO.');
+      toast.success('Your workspace is configured.');
       navigate('/app');
     } catch (err: any) {
-      toast.error(err.message || 'Setup failed');
-      navigate('/app');
+      toast.error(err.message || 'Failed to complete setup');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-vyro-bg flex flex-col justify-between p-4 sm:p-8 selection:bg-vyro-accent/20">
-      {/* Top Bar */}
-      <div className="max-w-2xl w-full mx-auto flex items-center justify-between py-4">
-        <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[#4C7DF0] to-[#2B54C4] flex items-center justify-center shadow-xs">
-            <span className="text-white font-black text-xs font-mono">V</span>
+    <div className="min-h-screen bg-bg text-text-primary py-12 px-4 sm:px-6">
+      <div className="max-w-2xl mx-auto flex flex-col gap-8">
+        {/* Progress Bar */}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between text-secondary text-text-muted">
+            <span>Step {step} of {totalSteps}</span>
+            <button
+              type="button"
+              onClick={() => navigate('/app')}
+              className="text-text-muted hover:text-text-primary underline cursor-pointer"
+            >
+              Skip setup
+            </button>
           </div>
-          <span className="text-sm font-bold tracking-tight text-vyro-text font-mono">VYRO</span>
-        </div>
-
-        <button
-          onClick={handleSkip}
-          className="text-xs font-mono text-vyro-muted hover:text-vyro-text transition-colors"
-        >
-          Skip to app →
-        </button>
-      </div>
-
-      {/* Main Form Container */}
-      <div className="max-w-xl w-full mx-auto my-auto py-8">
-        {/* Step Indicator */}
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-2">
+          <div className="grid grid-cols-3 gap-2 w-full">
             {[1, 2, 3].map((s) => (
               <div
                 key={s}
-                className={`h-1.5 rounded-full transition-all ${
-                  s === step
-                    ? 'w-8 bg-vyro-accent'
-                    : s < step
-                    ? 'w-4 bg-emerald-500'
-                    : 'w-4 bg-vyro-border'
+                className={`h-1.5 rounded-full transition-colors ${
+                  s <= step ? 'bg-volt' : 'bg-border-subtle'
                 }`}
               />
             ))}
           </div>
-          <span className="text-xs font-mono text-vyro-muted">
-            Step {step} of {totalSteps}
-          </span>
         </div>
 
-        {/* Step 1: Choose Primary Workspace */}
+        {/* STEP 1: How will you use VYRO? */}
         {step === 1 && (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-lg font-bold text-vyro-text tracking-tight font-mono">
-                Choose your primary workspace
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h1 className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+                How will you primarily use VYRO?
               </h1>
-              <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                VYRO separates buying and selling into dedicated workspaces. You can switch between them anytime in your account menu.
+              <p className="text-body text-text-muted">
+                You can switch between Buying and Selling at any time from the top navigation.
               </p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <button
-                type="button"
+              <Card
+                interactive
                 onClick={() => setPrimaryMode('buyer')}
-                className={`p-5 rounded-xl border text-left transition-all ${
+                className={`p-6 flex flex-col gap-3 text-left transition-all ${
                   primaryMode === 'buyer'
-                    ? 'bg-vyro-surface border-vyro-accent shadow-sm ring-1 ring-vyro-accent/50'
-                    : 'bg-vyro-surface border-vyro-border hover:border-vyro-border-light'
+                    ? 'border-volt bg-surface'
+                    : 'border-border-subtle bg-surface'
                 }`}
               >
-                <div className="w-9 h-9 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center mb-3">
-                  <ShoppingBag className="w-5 h-5" />
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-body text-text-primary">
+                    I want to procure services
+                  </span>
+                  {primaryMode === 'buyer' && (
+                    <span className="w-5 h-5 rounded-full bg-volt text-[#0C0E0D] flex items-center justify-center">
+                      <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-xs font-semibold text-vyro-text">Buying Workspace</h3>
-                <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                  Post requirements, automate seller negotiations, compare proposals, and auto-approve deals.
+                <p className="text-secondary text-text-muted leading-relaxed">
+                  Delegate purchasing to a buyer agent who will find verified sellers, negotiate pricing, and bring you terms.
                 </p>
-              </button>
+              </Card>
 
-              <button
-                type="button"
+              <Card
+                interactive
                 onClick={() => setPrimaryMode('seller')}
-                className={`p-5 rounded-xl border text-left transition-all ${
+                className={`p-6 flex flex-col gap-3 text-left transition-all ${
                   primaryMode === 'seller'
-                    ? 'bg-vyro-surface border-vyro-accent shadow-sm ring-1 ring-vyro-accent/50'
-                    : 'bg-vyro-surface border-vyro-border hover:border-vyro-border-light'
+                    ? 'border-volt bg-surface'
+                    : 'border-border-subtle bg-surface'
                 }`}
               >
-                <div className="w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center mb-3">
-                  <Store className="w-5 h-5" />
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-body text-text-primary">
+                    I want to sell services
+                  </span>
+                  {primaryMode === 'seller' && (
+                    <span className="w-5 h-5 rounded-full bg-volt text-[#0C0E0D] flex items-center justify-center">
+                      <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                    </span>
+                  )}
                 </div>
-                <h3 className="text-xs font-semibold text-vyro-text">Selling Workspace</h3>
-                <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                  Publish commercial services and listings. Your seller agent negotiates against your floor price.
+                <p className="text-secondary text-text-muted leading-relaxed">
+                  Publish offerings and let a seller agent negotiate scope and turnaround while enforcing your private floor.
                 </p>
-              </button>
+              </Card>
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-border-subtle">
+              <Button
+                variant="volt"
+                size="md"
+                onClick={handleNext}
+                rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+              >
+                Continue
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Step 2: Decision Thresholds */}
+        {/* STEP 2: Autonomous Financial Limits */}
         {step === 2 && (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-lg font-bold text-vyro-text tracking-tight font-mono">
-                Set autonomous decision boundaries
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h1 className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+                Set your financial boundaries
               </h1>
-              <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                VYRO's AI operates autonomously within these limits. Anything higher escalates to your Needs-you review queue.
+              <p className="text-body text-text-muted">
+                Your agent cannot exceed these values without asking for your manual approval.
               </p>
             </div>
 
-            <div className="p-5 rounded-xl bg-vyro-surface border border-vyro-border space-y-4">
-              <div className="space-y-2">
-                <label className="text-xs font-mono text-vyro-text flex items-center justify-between">
-                  <span>Auto-Approval Ceiling:</span>
-                  <span className="font-bold tabular-nums text-vyro-accent">${autoApprovalLimit} USD</span>
+            <Card className="p-6 flex flex-col gap-5 bg-surface">
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  Auto-approval price ceiling
                 </label>
-                <input
-                  type="range"
-                  min="50"
-                  max="1000"
-                  step="25"
-                  value={autoApprovalLimit}
-                  onChange={(e) => setAutoApprovalLimit(Number(e.target.value))}
-                  className="w-full accent-vyro-accent"
-                />
-                <span className="text-[11px] text-vyro-muted block">
-                  Transactions under this amount will auto-approve when all policies hold.
+                <div className="relative">
+                  <DollarSign className="w-5 h-5 text-text-muted absolute left-4 top-3 pointer-events-none" />
+                  <input
+                    type="number"
+                    min={10}
+                    max={5000}
+                    value={autoApprovalLimit}
+                    onChange={(e) => setAutoApprovalLimit(Number(e.target.value))}
+                    className="w-full h-11 pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-secondary font-semibold text-text-primary focus:outline-none focus:border-volt transition-colors"
+                  />
+                </div>
+                <span className="text-secondary text-text-muted">
+                  Agreements at or under {formatMoney(autoApprovalLimit)} can settle automatically.
                 </span>
               </div>
 
-              <div className="pt-3 border-t border-vyro-border/60 space-y-2">
-                <label className="text-xs font-mono text-vyro-text flex items-center justify-between">
-                  <span>Daily Spend Cap:</span>
-                  <span className="font-bold tabular-nums text-emerald-400">${dailyBudgetCap} USD</span>
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  Daily cumulative spend cap
                 </label>
-                <input
-                  type="range"
-                  min="200"
-                  max="2500"
-                  step="50"
-                  value={dailyBudgetCap}
-                  onChange={(e) => setDailyBudgetCap(Number(e.target.value))}
-                  className="w-full accent-emerald-500"
-                />
-                <span className="text-[11px] text-vyro-muted block">
-                  Daily cumulative limit before routing all purchases to human sign-off.
+                <div className="relative">
+                  <DollarSign className="w-5 h-5 text-text-muted absolute left-4 top-3 pointer-events-none" />
+                  <input
+                    type="number"
+                    min={50}
+                    max={20000}
+                    value={dailyBudgetCap}
+                    onChange={(e) => setDailyBudgetCap(Number(e.target.value))}
+                    className="w-full h-11 pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-secondary font-semibold text-text-primary focus:outline-none focus:border-volt transition-colors"
+                  />
+                </div>
+                <span className="text-secondary text-text-muted">
+                  Maximum total payments authorized within any 24-hour period.
                 </span>
               </div>
+            </Card>
+
+            <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={handleBack}
+                leftIcon={<ArrowLeft className="w-4 h-4" strokeWidth={2} />}
+              >
+                Back
+              </Button>
+              <Button
+                variant="volt"
+                size="md"
+                onClick={handleNext}
+                rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+              >
+                Continue
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Step 3: Agent Negotiation Stance */}
+        {/* STEP 3: Agent Strategy */}
         {step === 3 && (
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-lg font-bold text-vyro-text tracking-tight font-mono">
-                Choose agent negotiation stance
+          <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-2">
+              <h1 className="font-display font-bold text-[32px] text-text-primary tracking-tight">
+                Select negotiation style
               </h1>
-              <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                How should your buyer agent make price concessions across rounds?
+              <p className="text-body text-text-muted">
+                Choose how your agent prioritizes price versus turnaround during bargaining rounds.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="flex flex-col gap-3">
               {[
                 {
                   id: 'balanced',
-                  title: 'Balanced',
-                  desc: 'Even trade-off between price and speed. Concedes incrementally across rounds.'
-                },
-                {
-                  id: 'quality_first',
-                  title: 'Quality First',
-                  desc: 'Prioritizes verified seller reputation and verified delivery history over discount.'
+                  title: 'Balanced negotiation',
+                  desc: 'Aims for fair market price while keeping standard delivery timelines.'
                 },
                 {
                   id: 'aggressive_cost',
-                  title: 'Cost Focused',
-                  desc: 'Opens low and makes small concessions, pushing counterparties toward their floor.'
+                  title: 'Cost minimization',
+                  desc: 'Pushes aggressively for price concessions in exchange for flexible delivery buffers.'
                 },
                 {
-                  id: 'expedited',
-                  title: 'Expedited',
-                  desc: 'Fast convergence within 2 rounds to lock in immediate turnaround.'
+                  id: 'quality_first',
+                  title: 'Fast turnaround & quality priority',
+                  desc: 'Prioritizes rapid delivery and verified deliverable packages over marginal discounts.'
                 }
-              ].map((opt) => (
-                <button
-                  key={opt.id}
-                  type="button"
-                  onClick={() => setStrategy(opt.id as any)}
-                  className={`p-4 rounded-xl border text-left transition-all ${
-                    strategy === opt.id
-                      ? 'bg-vyro-surface border-vyro-accent ring-1 ring-vyro-accent/50 shadow-xs'
-                      : 'bg-vyro-surface border-vyro-border hover:border-vyro-border-light'
+              ].map((strat) => (
+                <Card
+                  key={strat.id}
+                  interactive
+                  onClick={() => setStrategy(strat.id as any)}
+                  className={`p-5 flex items-center justify-between gap-4 text-left transition-all ${
+                    strategy === strat.id
+                      ? 'border-volt bg-surface'
+                      : 'border-border-subtle bg-surface'
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-semibold text-vyro-text font-mono">{opt.title}</span>
-                    {strategy === opt.id && <CheckCircle2 className="w-3.5 h-3.5 text-vyro-accent" />}
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-body text-text-primary">
+                      {strat.title}
+                    </span>
+                    <span className="text-secondary text-text-muted mt-0.5">
+                      {strat.desc}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-vyro-muted leading-relaxed font-sans">{opt.desc}</p>
-                </button>
+                  {strategy === strat.id && (
+                    <span className="w-5 h-5 rounded-full bg-volt text-[#0C0E0D] flex items-center justify-center shrink-0">
+                      <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                    </span>
+                  )}
+                </Card>
               ))}
+            </div>
+
+            <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={handleBack}
+                leftIcon={<ArrowLeft className="w-4 h-4" strokeWidth={2} />}
+              >
+                Back
+              </Button>
+              <Button
+                variant="volt"
+                size="lg"
+                isLoading={isSubmitting}
+                onClick={handleComplete}
+                rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+              >
+                Complete setup & enter app
+              </Button>
             </div>
           </div>
         )}
-
-        {/* Navigation Buttons */}
-        <div className="flex items-center justify-between pt-8 border-t border-vyro-border/60 mt-8">
-          {step > 1 ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleBack}
-              leftIcon={<ArrowLeft className="w-3.5 h-3.5" />}
-              className="text-xs"
-            >
-              Previous
-            </Button>
-          ) : (
-            <div />
-          )}
-
-          <Button
-            variant="primary"
-            size="sm"
-            isLoading={isSubmitting}
-            onClick={handleNext}
-            rightIcon={<ArrowRight className="w-3.5 h-3.5" />}
-            className="text-xs px-5"
-          >
-            {step === totalSteps ? 'Enter Workspace' : 'Continue'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="text-center py-4 text-[11px] font-mono text-vyro-subtle">
-        VYRO Autonomous Commerce · All data stored locally in SQLite
       </div>
     </div>
   );

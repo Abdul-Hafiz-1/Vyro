@@ -1,11 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { CreditCard, ShieldCheck, ArrowRight, Plus } from 'lucide-react';
+import { CreditCard, ShieldCheck, ChevronRight } from 'lucide-react';
 import { api } from '../../api/client';
-import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
+import { EmptyState } from '../../components/common/EmptyState';
+import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { formatMoney, formatName, formatDate } from '../../lib/present';
 
 export const TransactionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -18,109 +21,90 @@ export const TransactionsPage: React.FC = () => {
   });
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-8">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-vyro-line gap-4">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-xl sm:text-2xl font-bold text-vyro-text tracking-tight">
-              Receipts & Transactions
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
+              Receipts & Invoices
             </h1>
-            <Badge variant="default" size="sm">{transactions.length} Total</Badge>
+            <span className="text-secondary px-2.5 py-0.5 rounded-control bg-raised border border-border-subtle text-text-muted">
+              {transactions.length} total
+            </span>
           </div>
-          <p className="text-xs text-vyro-muted">
-            Official commercial receipts for completed deals, escrow holds, and settled orders.
+          <p className="text-secondary text-text-muted">
+            Official commercial receipts for settled transactions, escrow holds, and verified orders.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-mono text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1.5 rounded-control">
-          <ShieldCheck className="w-4 h-4" />
-          <span>Payment Verified & Held in Escrow</span>
+        <div className="flex items-center gap-2 text-secondary text-status-handled px-3 py-1.5 rounded-control bg-status-handled/10 border border-status-handled/30">
+          <ShieldCheck className="w-4 h-4 shrink-0" strokeWidth={2} />
+          <span>Platform Escrow Protected</span>
         </div>
       </div>
 
-      {/* Transactions Table */}
+      {/* Transactions List */}
       {isLoading ? (
-        <div className="space-y-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 rounded-control bg-vyro-surface border border-vyro-line animate-pulse" />
-          ))}
+        <div className="flex flex-col gap-4 animate-pulse">
+          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
+          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
         </div>
-      ) : transactions.length > 0 ? (
-        <div className="bg-vyro-surface border border-vyro-line rounded-control overflow-hidden shadow-xs">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs font-mono">
-              <thead>
-                <tr className="border-b border-vyro-line bg-vyro-card/60 text-vyro-muted text-[10px] uppercase">
-                  <th className="py-3 px-4 font-semibold">Service Description</th>
-                  <th className="py-3 px-4 font-semibold">Contracted Party</th>
-                  <th className="py-3 px-4 font-semibold">Amount</th>
-                  <th className="py-3 px-4 font-semibold">Capture ID</th>
-                  <th className="py-3 px-4 font-semibold">Status</th>
-                  <th className="py-3 px-4 text-right font-semibold">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-vyro-line text-vyro-text font-sans">
-                {transactions.map((tx) => (
-                  <tr
-                    key={tx.id}
-                    onClick={() => navigate(`/app/transactions/${tx.id}`)}
-                    className="hover:bg-vyro-surface-hover cursor-pointer transition-colors"
-                  >
-                    <td className="py-3 px-4 font-medium text-vyro-text">
-                      {tx.serviceTitle || tx.itemTitle || 'Commercial Service Package'}
-                    </td>
-                    <td className="py-3 px-4 text-vyro-muted">
-                      {tx.sellerBusinessName || 'Verified Supplier'}
-                    </td>
-                    <td className="py-3 px-4 font-bold text-vyro-text font-mono tabular-nums">
-                      ${tx.amount} <span className="text-vyro-muted text-[10px]">{tx.currency}</span>
-                    </td>
-                    <td className="py-3 px-4 text-vyro-muted text-xs font-mono truncate max-w-[160px]">
-                      {tx.paypalCaptureId || tx.paypalOrderId || tx.id}
-                    </td>
-                    <td className="py-3 px-4">
-                      <Badge variant={tx.status === 'settled' || tx.paymentStatus === 'completed' ? 'success' : 'warning'} size="sm">
-                        {(tx.status || tx.paymentStatus || 'settled').toUpperCase()}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4 text-right text-vyro-muted text-xs">
-                      {new Date(tx.createdAt).toLocaleDateString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      ) : transactions.length === 0 ? (
+        <EmptyState
+          title="No receipts recorded yet"
+          description="When deals are agreed and paid, official commercial receipts and settlement proofs will appear here."
+          actionLabel="Explore marketplace"
+          onAction={() => navigate('/app/listings')}
+        />
       ) : (
-        <div className="py-16 text-center text-xs text-vyro-muted bg-vyro-surface rounded-control border border-vyro-line space-y-3 p-6">
-          <CreditCard className="w-8 h-8 text-vyro-muted mx-auto mb-1" />
-          <h3 className="text-sm font-semibold text-vyro-text">No transactions recorded yet</h3>
-          <p className="max-w-sm mx-auto text-xs text-vyro-muted">
-            Once your agent negotiates an agreement and payment is approved, your itemized receipts will appear here.
-          </p>
-          <div className="pt-2">
-            {isBuyer ? (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/app/requests/new')}
-                leftIcon={<Plus className="w-3.5 h-3.5" />}
+        <div className="bg-surface border border-border-subtle rounded-surface divide-y divide-border-subtle overflow-hidden">
+          {transactions.map((tx) => {
+            const counterpart = tx.sellerBusinessName || tx.buyerAgentName || 'Verified Counterparty';
+            const title = tx.serviceTitle || tx.itemTitle || 'Commercial Service Package';
+
+            return (
+              <div
+                key={tx.id}
+                onClick={() => navigate(`/app/transactions/${tx.id}`)}
+                className="p-5 flex items-center justify-between gap-4 hover:bg-raised transition-colors cursor-pointer group"
               >
-                Post a Request
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => navigate('/app/listings/new')}
-                leftIcon={<Plus className="w-3.5 h-3.5" />}
-              >
-                Create a Listing
-              </Button>
-            )}
-          </div>
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <Avatar name={formatName(counterpart)} size="md" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="font-semibold text-body text-text-primary group-hover:text-volt transition-colors truncate">
+                      {title}
+                    </span>
+                    <div className="flex items-center gap-2 text-secondary text-text-muted mt-0.5">
+                      <span>With {formatName(counterpart)}</span>
+                      <span>·</span>
+                      <span>Captured via PayPal Escrow</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 shrink-0">
+                  <div className="text-right">
+                    <span className="font-display font-bold text-[18px] text-text-primary block">
+                      {formatMoney(tx.amount)}
+                    </span>
+                    {tx.createdAt && (
+                      <span className="text-secondary text-text-muted block">
+                        {formatDate(tx.createdAt)}
+                      </span>
+                    )}
+                  </div>
+
+                  <StatusChip label="Settled & Paid" role="handled" size="sm" />
+
+                  <ChevronRight
+                    className="w-5 h-5 text-text-muted group-hover:text-text-primary transition-colors hidden sm:block"
+                    strokeWidth={2}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

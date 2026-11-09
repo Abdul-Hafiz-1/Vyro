@@ -3,92 +3,55 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
-  Settings,
-  ShieldCheck,
   User,
-  RefreshCw,
-  CheckCircle2,
-  AlertTriangle,
-  Cpu,
-  Zap,
-  Lock,
-  ChevronDown,
-  ChevronRight,
+  ShieldCheck,
   CreditCard,
   Bell,
-  Mail,
   Pause,
   Play,
-  KeyRound,
+  Lock,
   LogOut,
-  Trash2,
-  HelpCircle
+  AlertTriangle,
+  Check
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
+import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { formatName } from '../../lib/present';
 
 export const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { user, isBuyerWorkspace, logout } = useAuth();
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const { user, logout } = useAuth();
 
   // Profile Form state
   const [displayName, setDisplayName] = useState(user?.displayName || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
 
-  // Pause switch state
-  const [isAutomationPaused, setIsAutomationPaused] = useState(user?.isAutomationPaused || false);
+  // Pause switch state & confirmation modal
+  const [isPaused, setIsPaused] = useState(user?.isAutomationPaused || false);
+  const [showPauseModal, setShowPauseModal] = useState(false);
   const [isUpdatingPause, setIsUpdatingPause] = useState(false);
 
-  // Notifications preferences
+  // Notification toggles
   const [emailAlerts, setEmailAlerts] = useState(true);
-  const [inAppAlerts, setInAppAlerts] = useState(true);
-  const [dailyDigest, setDailyDigest] = useState(false);
+  const [decisionAlerts, setDecisionAlerts] = useState(true);
+  const [dealUpdates, setDealUpdates] = useState(true);
 
   // Password state
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Delete modal state
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteConfirmationText, setDeleteConfirmationText] = useState('');
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-
-  // AI & Payments queries
-  const { data: aiStatus, refetch: refetchAI } = useQuery({
-    queryKey: ['aiStatusSettings'],
-    queryFn: api.getAIStatus,
-    refetchInterval: 12000
-  });
-
-  const { data: paymentsHealth, refetch: refetchPaymentsHealth, isFetching: isCheckingPayments } = useQuery({
+  // Payments health
+  const { data: paymentsHealth } = useQuery({
     queryKey: ['paymentsHealth'],
     queryFn: api.getPaymentsHealth,
     staleTime: 30000
-  });
-
-  const testMutation = useMutation({
-    mutationFn: () => api.testAI(),
-    onSuccess: (data) => {
-      refetchAI();
-      queryClient.invalidateQueries({ queryKey: ['aiStatus'] });
-      if (data.isLive) {
-        toast.success(`Gemini API connection verified (${data.latencyMs}ms)! Model: ${data.model}`);
-      } else if (data.status === 'rate_limited') {
-        toast.warning('Gemini Free Tier daily quota limit reached for this key. Autonomous fallback engine is active.');
-      } else {
-        toast.error(`Gemini API test failed: ${data.errorMessage || data.status}`);
-      }
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'API test request failed');
-    }
   });
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -96,7 +59,7 @@ export const SettingsPage: React.FC = () => {
     setIsSavingProfile(true);
     try {
       await api.updateProfile({ displayName, bio });
-      toast.success('Account profile updated successfully.');
+      toast.success('Profile updated.');
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
     } catch (err: any) {
       toast.error(err.message || 'Failed to update profile');
@@ -105,16 +68,21 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleTogglePause = async () => {
-    const nextState = !isAutomationPaused;
+  const handleConfirmTogglePause = async () => {
+    const nextState = !isPaused;
     setIsUpdatingPause(true);
     try {
-      await api.updateProfile({ isAutomationPaused: nextState });
-      setIsAutomationPaused(nextState);
-      toast.success(nextState ? 'Agents paused. Incoming offers will be held without auto-declining.' : 'Agents resumed active operations.');
+      await api.setAutomationPaused(nextState);
+      setIsPaused(nextState);
+      setShowPauseModal(false);
       queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast.success(
+        nextState
+          ? 'Automation paused. All actions now require manual human decision.'
+          : 'Automation resumed. Agents negotiate within authorized boundaries.'
+      );
     } catch (err: any) {
-      toast.error(err.message || 'Failed to update agent state');
+      toast.error(err.message || 'Failed to update automation state');
     } finally {
       setIsUpdatingPause(false);
     }
@@ -122,12 +90,8 @@ export const SettingsPage: React.FC = () => {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword !== confirmPassword) {
-      toast.error('New passwords do not match.');
-      return;
-    }
-    if (newPassword.length < 6) {
-      toast.error('New password must be at least 6 characters.');
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters.');
       return;
     }
     setIsChangingPassword(true);
@@ -136,7 +100,6 @@ export const SettingsPage: React.FC = () => {
       toast.success('Password changed successfully.');
       setCurrentPassword('');
       setNewPassword('');
-      setConfirmPassword('');
     } catch (err: any) {
       toast.error(err.message || 'Failed to change password');
     } finally {
@@ -144,502 +107,320 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleLogoutAll = async () => {
-    try {
-      await api.logoutAll();
-      toast.success('Signed out of all active sessions.');
-      await logout();
-      navigate('/login');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to sign out from all sessions');
-    }
-  };
-
-  const handleDeleteAccount = async () => {
-    if (deleteConfirmationText !== 'DELETE') {
-      toast.error('Please type DELETE to confirm account deletion.');
-      return;
-    }
-    setIsDeletingAccount(true);
-    try {
-      await api.deleteAccount();
-      toast.success('Account permanently deleted.');
-      await logout();
-      navigate('/');
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to delete account');
-      setIsDeletingAccount(false);
-    }
-  };
-
-  const getStatusBadge = () => {
-    if (!aiStatus) return <Badge variant="default" size="sm">Checking...</Badge>;
-    if (aiStatus.isLive) return <Badge variant="success" size="sm" dot>Connected ({aiStatus.latencyMs}ms)</Badge>;
-    if (aiStatus.status === 'auth_failed') return <Badge variant="error" size="sm">Auth Failed</Badge>;
-    if (aiStatus.status === 'rate_limited') return <Badge variant="error" size="sm">Rate Limited</Badge>;
-    return <Badge variant="warning" size="sm">Not Configured</Badge>;
-  };
-
   return (
-    <div className="max-w-3xl mx-auto space-y-6 pb-12">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-10">
       {/* Header */}
-      <div className="pb-4 border-b border-vyro-line">
-        <h1 className="text-xl font-bold text-vyro-text tracking-tight">
-          Account & Operations Settings
+      <div className="flex flex-col gap-1 pb-4 border-b border-border-subtle">
+        <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
+          Account Settings
         </h1>
-        <p className="text-xs text-vyro-muted mt-0.5">
-          Manage your account profile, autonomous agent pause controls, notifications, and security.
+        <p className="text-secondary text-text-muted">
+          Manage your profile, automated agent permissions, notifications, and security.
         </p>
       </div>
 
-      {/* Vacation Mode / Pause Switch */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-control border flex items-center justify-center ${
-              isAutomationPaused
-                ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'
-            }`}>
-              {isAutomationPaused ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+      {/* Global Automation Pause Card */}
+      <Card className="p-6 flex flex-col gap-5 border-border-subtle">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3.5">
+            <div
+              className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                isPaused
+                  ? 'bg-status-declined/15 text-status-declined'
+                  : 'bg-status-handled/15 text-status-handled'
+              }`}
+            >
+              {isPaused ? (
+                <Pause className="w-5 h-5" strokeWidth={2.5} />
+              ) : (
+                <Play className="w-5 h-5 ml-0.5" strokeWidth={2.5} />
+              )}
             </div>
-            <div>
+            <div className="flex flex-col">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-vyro-text">Agent Autonomous Operations</h2>
-                <Badge variant={isAutomationPaused ? 'warning' : 'success'} size="sm">
-                  {isAutomationPaused ? 'PAUSED' : 'ACTIVE'}
-                </Badge>
+                <span className="font-semibold text-body text-text-primary">
+                  Autonomous Agent Delegation
+                </span>
+                <StatusChip
+                  label={isPaused ? 'Paused' : 'Active'}
+                  role={isPaused ? 'declined' : 'handled'}
+                  size="sm"
+                />
               </div>
-              <p className="text-xs text-vyro-muted mt-0.5">
-                {isAutomationPaused
-                  ? 'All agents are paused. Incoming counteroffers are safely held without declining.'
-                  : 'Agents are actively searching, negotiating, and evaluating deals within your safety rules.'}
+              <p className="text-secondary text-text-muted mt-1 leading-relaxed">
+                {isPaused
+                  ? 'All autonomous bargaining is paused. Every proposal and agreement must be manually approved by you.'
+                  : 'Agents automatically negotiate pricing and terms within your ceilings and floors, stopping only for exceptions.'}
               </p>
             </div>
           </div>
+
           <Button
-            variant={isAutomationPaused ? 'primary' : 'outline'}
-            size="sm"
-            isLoading={isUpdatingPause}
-            onClick={handleTogglePause}
+            variant={isPaused ? 'volt' : 'outline'}
+            size="md"
+            onClick={() => setShowPauseModal(true)}
           >
-            {isAutomationPaused ? 'Resume Agents' : 'Pause All Agents'}
+            {isPaused ? 'Resume automation' : 'Pause automation'}
           </Button>
         </div>
+      </Card>
+
+      {/* Profile Section */}
+      <div className="flex flex-col gap-4">
+        <span className="font-display font-bold text-[20px] text-text-primary">
+          Profile Information
+        </span>
+
+        <Card className="p-6">
+          <form onSubmit={handleSaveProfile} className="flex flex-col gap-6">
+            <div className="flex items-center gap-4 pb-6 border-b border-border-subtle">
+              <Avatar name={formatName(user?.displayName)} size="lg" />
+              <div className="flex flex-col">
+                <span className="font-semibold text-body text-text-primary">
+                  {formatName(user?.displayName)}
+                </span>
+                <span className="text-secondary text-text-muted">{user?.email}</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  Display name
+                </label>
+                <input
+                  type="text"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full h-11 px-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt transition-colors"
+                />
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  Account email
+                </label>
+                <input
+                  type="email"
+                  disabled
+                  value={user?.email || ''}
+                  className="w-full h-11 px-4 bg-raised border border-border-subtle rounded-control text-secondary text-text-muted cursor-not-allowed opacity-75"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                Bio or studio summary
+              </label>
+              <textarea
+                rows={3}
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="Share your focus, specialties, or standard working hours…"
+                className="w-full p-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary placeholder-text-muted/60 focus:outline-none focus:border-volt transition-colors resize-none leading-relaxed"
+              />
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <Button
+                type="submit"
+                variant="volt"
+                size="md"
+                isLoading={isSavingProfile}
+              >
+                Save profile
+              </Button>
+            </div>
+          </form>
+        </Card>
       </div>
 
-      {/* Account Profile Card */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b border-vyro-line">
-          <div className="w-8 h-8 rounded-control bg-vyro-bg border border-vyro-line flex items-center justify-center text-vyro-accent">
-            <User className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-vyro-text">Account Profile</h2>
-            <p className="text-xs text-vyro-muted">Your public identity on agreements and receipts</p>
-          </div>
-        </div>
+      {/* Payment Gateway Section */}
+      <div className="flex flex-col gap-4">
+        <span className="font-display font-bold text-[20px] text-text-primary">
+          Payment & Escrow
+        </span>
 
-        <form onSubmit={handleSaveProfile} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">
-                Display Name
-              </label>
-              <input
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                required
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
+        <Card className="p-6 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CreditCard className="w-5 h-5 text-text-muted" strokeWidth={2} />
+              <div className="flex flex-col">
+                <span className="font-semibold text-body text-text-primary">
+                  PayPal Sandbox Escrow
+                </span>
+                <span className="text-secondary text-text-muted">
+                  Official payment gateway for contract authorization and settlement.
+                </span>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">
-                Account Email
-              </label>
-              <input
-                type="email"
-                value={user?.email || ''}
-                disabled
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg/50 border border-vyro-line text-vyro-muted cursor-not-allowed font-mono"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-vyro-text mb-1">
-              Bio / Business Description
-            </label>
-            <textarea
-              rows={2}
-              value={bio}
-              onChange={(e) => setBio(e.target.value)}
-              placeholder="Tell counterparties about your business capabilities or purchasing requirements..."
-              className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text focus:outline-none focus:border-vyro-accent"
+            <StatusChip
+              label={paymentsHealth?.connected ? 'Connected' : 'Active Sandbox'}
+              role="handled"
+              size="sm"
             />
           </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-xs text-vyro-muted">
-              Active Mode: <span className="text-vyro-text font-semibold capitalize">{isBuyerWorkspace ? 'Buyer' : 'Seller'}</span>
-            </div>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isSavingProfile}
-            >
-              Save Profile
-            </Button>
+          <div className="p-4 bg-raised rounded-control border border-border-subtle flex items-start gap-3">
+            <ShieldCheck className="w-5 h-5 text-status-handled shrink-0 mt-0.5" strokeWidth={2} />
+            <p className="text-secondary text-text-muted leading-relaxed">
+              All transactions are secured by PayPal Orders v2 Sandbox. Funds are held in escrow until scope deliverables are inspected and approved.
+            </p>
           </div>
-        </form>
+        </Card>
       </div>
 
       {/* Notifications Preferences */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b border-vyro-line">
-          <div className="w-8 h-8 rounded-control bg-vyro-bg border border-vyro-line flex items-center justify-center text-vyro-accent">
-            <Bell className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-vyro-text">Notification Preferences</h2>
-            <p className="text-xs text-vyro-muted">Choose how you are notified when deals require human approval or settlement</p>
-          </div>
-        </div>
+      <div className="flex flex-col gap-4">
+        <span className="font-display font-bold text-[20px] text-text-primary">
+          Notifications
+        </span>
 
-        <div className="space-y-3 text-xs">
-          <label className="flex items-center justify-between p-3 rounded-control bg-vyro-bg border border-vyro-line cursor-pointer">
-            <div>
-              <span className="font-medium text-vyro-text block">In-App Notifications</span>
-              <span className="text-vyro-muted text-[11px]">Badge alerts in the header for review items and messages</span>
+        <Card className="divide-y divide-border-subtle overflow-hidden">
+          <div className="p-5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="font-medium text-body text-text-primary">
+                Email alerts for decision requests
+              </span>
+              <span className="text-secondary text-text-muted">
+                Receive an email when your agent requires manual approval on a deal.
+              </span>
             </div>
             <input
               type="checkbox"
-              checked={inAppAlerts}
-              onChange={(e) => {
-                setInAppAlerts(e.target.checked);
-                toast.success('In-app notification preferences saved.');
-              }}
-              className="rounded border-vyro-line text-vyro-accent focus:ring-vyro-accent"
+              checked={decisionAlerts}
+              onChange={(e) => setDecisionAlerts(e.target.checked)}
+              className="w-5 h-5 accent-volt cursor-pointer"
             />
-          </label>
+          </div>
 
-          <label className="flex items-center justify-between p-3 rounded-control bg-vyro-bg border border-vyro-line cursor-pointer">
-            <div>
-              <span className="font-medium text-vyro-text block">Email Notifications</span>
-              <span className="text-vyro-muted text-[11px]">Immediate alert when a deal escalates for human approval</span>
+          <div className="p-5 flex items-center justify-between">
+            <div className="flex flex-col">
+              <span className="font-medium text-body text-text-primary">
+                Negotiation progress updates
+              </span>
+              <span className="text-secondary text-text-muted">
+                Get notified when rounds conclude or when agreements are formed.
+              </span>
             </div>
             <input
               type="checkbox"
-              checked={emailAlerts}
-              onChange={(e) => {
-                setEmailAlerts(e.target.checked);
-                toast.success('Email alert preferences saved.');
-              }}
-              className="rounded border-vyro-line text-vyro-accent focus:ring-vyro-accent"
+              checked={dealUpdates}
+              onChange={(e) => setDealUpdates(e.target.checked)}
+              className="w-5 h-5 accent-volt cursor-pointer"
             />
-          </label>
-
-          <label className="flex items-center justify-between p-3 rounded-control bg-vyro-bg border border-vyro-line cursor-pointer">
-            <div>
-              <span className="font-medium text-vyro-text block">Daily Operations Digest</span>
-              <span className="text-vyro-muted text-[11px]">Summary email of autonomous negotiations concluded that day</span>
-            </div>
-            <input
-              type="checkbox"
-              checked={dailyDigest}
-              onChange={(e) => {
-                setDailyDigest(e.target.checked);
-                toast.success('Daily digest preferences saved.');
-              }}
-              className="rounded border-vyro-line text-vyro-accent focus:ring-vyro-accent"
-            />
-          </label>
-        </div>
+          </div>
+        </Card>
       </div>
 
-      {/* Password & Security */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-4">
-        <div className="flex items-center gap-3 pb-3 border-b border-vyro-line">
-          <div className="w-8 h-8 rounded-control bg-vyro-bg border border-vyro-line flex items-center justify-center text-vyro-accent">
-            <KeyRound className="w-4 h-4" />
-          </div>
-          <div>
-            <h2 className="text-sm font-semibold text-vyro-text">Security & Password</h2>
-            <p className="text-xs text-vyro-muted">Change your account credentials or invalidate active sessions</p>
-          </div>
-        </div>
+      {/* Security & Password */}
+      <div className="flex flex-col gap-4">
+        <span className="font-display font-bold text-[20px] text-text-primary">
+          Security & Password
+        </span>
 
-        <form onSubmit={handleChangePassword} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">Current Password</label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">New Password</label>
-              <input
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-vyro-text mb-1">Confirm New Password</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                required
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text focus:outline-none focus:border-vyro-accent"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleLogoutAll}
-              leftIcon={<LogOut className="w-3.5 h-3.5" />}
-            >
-              Sign Out of All Sessions
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              isLoading={isChangingPassword}
-            >
-              Update Password
-            </Button>
-          </div>
-        </form>
-      </div>
-
-      {/* Commercial Safety Quick Summary */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-control bg-vyro-bg border border-vyro-line flex items-center justify-center text-emerald-400">
-              <ShieldCheck className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-vyro-text">Safety & Approval Guardrails</h2>
-              <p className="text-xs text-vyro-muted">
-                Auto-approval limit: <span className="font-semibold text-vyro-text">${user?.autoApprovalLimit ?? 200}</span> · Daily budget cap: <span className="font-semibold text-vyro-text">${user?.dailyBudgetCap ?? 500}</span>
-              </p>
-            </div>
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate('/app/rules')}
-          >
-            Edit in Rules →
-          </Button>
-        </div>
-      </div>
-
-      {/* Advanced Settings & Developer Diagnostics */}
-      <div className="p-5 rounded-control bg-vyro-surface border border-vyro-line space-y-4">
-        <button
-          type="button"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-          className="w-full flex items-center justify-between text-left focus:outline-none cursor-pointer"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-control bg-vyro-bg border border-vyro-line flex items-center justify-center text-vyro-muted">
-              <Settings className="w-4 h-4" />
-            </div>
-            <div>
-              <h2 className="text-sm font-semibold text-vyro-text">Advanced Developer Diagnostics</h2>
-              <p className="text-xs text-vyro-muted">AI engine connection probe, PayPal Sandbox status, and server posture</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 text-vyro-muted text-xs">
-            <span>{showAdvanced ? 'Hide' : 'Show'}</span>
-            {showAdvanced ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </div>
-        </button>
-
-        {showAdvanced && (
-          <div className="pt-4 border-t border-vyro-line space-y-4">
-            {/* AI Diagnostics Box */}
-            <div className="p-4 rounded-control bg-vyro-bg border border-vyro-line space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <Cpu className="w-4 h-4 text-vyro-accent" />
-                  <span className="text-xs font-semibold text-vyro-text">Google Gemini AI Engine</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {getStatusBadge()}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isLoading={testMutation.isPending}
-                    onClick={() => testMutation.mutate()}
-                    leftIcon={<Zap className="w-3.5 h-3.5 text-vyro-accent" />}
-                  >
-                    Test Probe
-                  </Button>
-                </div>
+        <Card className="p-6">
+          <form onSubmit={handleChangePassword} className="flex flex-col gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  Current password
+                </label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full h-11 px-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt transition-colors"
+                />
               </div>
 
-              {aiStatus?.isLive ? (
-                <div className="p-3 rounded-control bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  <span>
-                    Gemini API verified ({aiStatus.latencyMs}ms). Model: {aiStatus.model || 'gemini-1.5-flash'}.
-                  </span>
-                </div>
-              ) : (
-                <div className="p-3 rounded-control bg-amber-500/10 border border-amber-500/20 text-xs text-amber-400 space-y-1">
-                  <div className="flex items-center gap-2 font-semibold">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    <span>{aiStatus?.status === 'auth_failed' ? 'Invalid API Key' : 'Gemini Key Not Configured'}</span>
-                  </div>
-                  <p className="text-xs text-vyro-muted">
-                    {aiStatus?.errorMessage || 'Operating in deterministic baseline mode. Enter a Gemini API key in server/.env to activate live LLM negotiation.'}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* PayPal Sandbox Gateway Diagnostic */}
-            <div className="p-4 rounded-control bg-vyro-bg border border-vyro-line space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <CreditCard className="w-4 h-4 text-[#0070BA]" />
-                  <span className="text-xs font-semibold text-vyro-text">Payments Sandbox Connectivity</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  {paymentsHealth?.connected ? (
-                    <Badge variant="success" size="sm" dot>Sandbox Connected</Badge>
-                  ) : (
-                    <Badge variant="error" size="sm" dot>Not Connected</Badge>
-                  )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    isLoading={isCheckingPayments}
-                    onClick={async () => {
-                      const res = await refetchPaymentsHealth();
-                      if (res.data?.connected) {
-                        toast.success(`PayPal Sandbox OAuth verified! App: ${res.data.appId || 'Connected'}`);
-                      } else {
-                        toast.error(`PayPal Sandbox probe failed: ${res.data?.reason || 'Unknown error'}`);
-                      }
-                    }}
-                    leftIcon={<RefreshCw className={`w-3 h-3 ${isCheckingPayments ? 'animate-spin' : ''}`} />}
-                  >
-                    Check
-                  </Button>
-                </div>
-              </div>
-
-              <div className="text-xs text-vyro-muted space-y-1 font-mono">
-                <div>Environment: <span className="text-vyro-text">{paymentsHealth?.env || 'sandbox'}</span></div>
-                {paymentsHealth?.appId && (
-                  <div>Application ID: <span className="text-vyro-accent">{paymentsHealth.appId}</span></div>
-                )}
-                {paymentsHealth?.debugId && (
-                  <div>Last Debug ID: <span className="text-vyro-muted">{paymentsHealth.debugId}</span></div>
-                )}
+              <div className="flex flex-col gap-2">
+                <label className="text-secondary font-medium text-text-primary">
+                  New password
+                </label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="At least 8 characters"
+                  className="w-full h-11 px-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt transition-colors"
+                />
               </div>
             </div>
 
-            {/* Server-Side Only Notice */}
-            <div className="p-3.5 rounded-control bg-vyro-bg border border-vyro-line space-y-1 text-xs">
-              <div className="flex items-center gap-2 text-vyro-text font-semibold">
-                <Lock className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Server-Side Only Environment Security</span>
-              </div>
-              <p className="text-xs text-vyro-muted">
-                Secrets are strictly managed in the server environment and never exposed in the browser. To update credentials, edit <code className="text-vyro-accent bg-vyro-surface px-1 py-0.5 rounded font-mono">.env</code> in your server directory.
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Danger Zone: Delete Account */}
-      <div className="p-5 rounded-control bg-status-declined-bg/20 border border-status-declined/30 space-y-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-semibold text-status-declined flex items-center gap-2">
-              <Trash2 className="w-4 h-4" /> Delete Account Permanently
-            </h2>
-            <p className="text-xs text-vyro-muted mt-0.5 max-w-xl">
-              Permanently delete your profile, agent memory, rules, and active session tokens. Cannot be undone. If you have active in-flight deals, you must conclude or decline them first.
-            </p>
-          </div>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setShowDeleteModal(true)}
-          >
-            Delete Account
-          </Button>
-        </div>
-      </div>
-
-      {/* Confirmation Modal for Account Deletion */}
-      {showDeleteModal && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-vyro-surface border border-vyro-line rounded-surface max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-3 text-status-declined">
-              <AlertTriangle className="w-6 h-6 shrink-0" />
-              <h3 className="text-base font-bold text-vyro-text">Confirm Account Deletion</h3>
-            </div>
-            <p className="text-xs text-vyro-muted leading-relaxed">
-              This action is permanent and immediate. Your personal rules, agent models, and saved preferences will be erased.
-            </p>
-            <div className="space-y-1.5">
-              <label className="text-xs text-vyro-text block">
-                Type <strong className="text-status-declined font-mono">DELETE</strong> to confirm:
-              </label>
-              <input
-                type="text"
-                value={deleteConfirmationText}
-                onChange={(e) => setDeleteConfirmationText(e.target.value)}
-                placeholder="DELETE"
-                className="w-full px-3 py-2 text-xs rounded-control bg-vyro-bg border border-vyro-line text-vyro-text font-mono focus:outline-none focus:border-status-declined"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-2 pt-2">
+            <div className="flex items-center justify-between pt-2">
               <Button
                 variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setShowDeleteModal(false);
-                  setDeleteConfirmationText('');
-                }}
+                size="md"
+                onClick={() => logout()}
+                leftIcon={<LogOut className="w-4 h-4" strokeWidth={2} />}
+              >
+                Log out
+              </Button>
+
+              <Button
+                type="submit"
+                variant="secondary"
+                size="md"
+                disabled={!currentPassword || newPassword.length < 8}
+                isLoading={isChangingPassword}
+              >
+                Update password
+              </Button>
+            </div>
+          </form>
+        </Card>
+      </div>
+
+      {/* Confirmation Modal for Automation Pause */}
+      {showPauseModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <Card className="max-w-md w-full p-6 flex flex-col gap-5">
+            <div className="flex items-center gap-3">
+              <div
+                className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                  isPaused
+                    ? 'bg-status-handled/15 text-status-handled'
+                    : 'bg-status-declined/15 text-status-declined'
+                }`}
+              >
+                {isPaused ? (
+                  <Play className="w-5 h-5 ml-0.5" strokeWidth={2.5} />
+                ) : (
+                  <Pause className="w-5 h-5" strokeWidth={2.5} />
+                )}
+              </div>
+              <h3 className="font-display font-bold text-[20px] text-text-primary">
+                {isPaused ? 'Resume autonomous delegation?' : 'Pause all agent automation?'}
+              </h3>
+            </div>
+
+            <p className="text-secondary text-text-muted leading-relaxed">
+              {isPaused
+                ? 'Your buyer and seller agents will resume negotiating autonomously within your configured boundaries.'
+                : 'Your agents will stop making autonomous commitments. All proposals, price adjustments, and agreements will halt until you manually review them.'}
+            </p>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-border-subtle">
+              <Button
+                variant="ghost"
+                size="md"
+                onClick={() => setShowPauseModal(false)}
               >
                 Cancel
               </Button>
               <Button
-                variant="danger"
-                size="sm"
-                disabled={deleteConfirmationText !== 'DELETE'}
-                isLoading={isDeletingAccount}
-                onClick={handleDeleteAccount}
+                variant={isPaused ? 'volt' : 'destructive'}
+                size="md"
+                isLoading={isUpdatingPause}
+                onClick={handleConfirmTogglePause}
               >
-                Permanently Delete
+                {isPaused ? 'Yes, resume' : 'Yes, pause automation'}
               </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </div>

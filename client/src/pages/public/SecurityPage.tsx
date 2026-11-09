@@ -1,85 +1,104 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { Navbar } from '../../components/common/Navbar';
-import { Footer } from '../../components/common/Footer';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, ArrowRight, ShieldCheck, Lock, Key, AlertTriangle, Check } from 'lucide-react';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
-import { ShieldCheck, Lock, Key, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Card } from '../../components/common/Card';
+import { StatusChip } from '../../components/common/StatusChip';
 
 export const SecurityPage: React.FC = () => {
-  return (
-    <div className="min-h-screen bg-vyro-bg text-vyro-text">
-      <Navbar />
+  const navigate = useNavigate();
 
-      <main className="pt-32 pb-24 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="mb-14">
-          <Badge variant="success" size="sm" className="mb-3">
-            <ShieldCheck className="w-3.5 h-3.5 mr-1" /> Trust & Guardrails
-          </Badge>
-          <h1 className="text-3xl sm:text-5xl font-bold text-vyro-text tracking-tight mb-4">
+  const pillars = [
+    {
+      icon: <Lock className="w-5 h-5 text-volt" strokeWidth={2} />,
+      title: 'Deterministic Constraint Enforcement',
+      desc: 'Price constraints and budget boundaries are never left to LLM prompts alone. The server-side negotiation engine mathematically validates every proposal against configured buyer ceilings and seller floors.'
+    },
+    {
+      icon: <Key className="w-5 h-5 text-status-handled" strokeWidth={2} />,
+      title: 'Mandatory Human Authorization',
+      desc: 'Autonomous agents cannot authorize payments on their own. Escrow settlement can only proceed after an authenticated human approves the deal through the review queue.'
+    },
+    {
+      icon: <ShieldCheck className="w-5 h-5 text-volt" strokeWidth={2} />,
+      title: 'Server-Enforced Escrow Protection',
+      desc: 'Order amounts and merchant accounts are derived exclusively from the server-persisted agreement record. The client payload is never trusted for financial amounts or recipient IDs.'
+    },
+    {
+      icon: <AlertTriangle className="w-5 h-5 text-status-needs" strokeWidth={2} />,
+      title: 'Global Automation Kill-Switch',
+      desc: 'Users can pause all autonomous agent activity with one click from their settings or command palette. When paused, all actions halt immediately and route to the human review inbox.'
+    }
+  ];
+
+  return (
+    <div className="min-h-screen bg-bg text-text-primary py-12 px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto flex flex-col gap-10">
+        <div className="flex items-center justify-between pb-4 border-b border-border-subtle">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate(-1)}
+            leftIcon={<ArrowLeft className="w-4 h-4" strokeWidth={2} />}
+          >
+            Back
+          </Button>
+          <div className="flex items-center gap-2">
+            <Link to="/app">
+              <Button variant="volt" size="sm">
+                Open app
+              </Button>
+            </Link>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2">
+            <StatusChip label="Security & Governance" role="handled" size="sm" />
+          </div>
+          <h1 className="font-display font-bold text-[36px] sm:text-[44px] text-text-primary tracking-tight">
             Security & Authorization Model
           </h1>
-          <p className="text-base text-vyro-muted leading-relaxed max-w-2xl">
-            How VYRO enforces deterministic financial guardrails, human authorization, and secure payment processing.
+          <p className="text-body text-text-muted leading-relaxed max-w-2xl">
+            How VYRO enforces deterministic financial guardrails, private limits, and human authorization.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-6 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-            <div className="flex items-center gap-2.5 text-vyro-text font-semibold">
-              <Lock className="w-5 h-5 text-vyro-accent" />
-              <h3 className="text-base">Deterministic Constraint Enforcement</h3>
-            </div>
-            <p className="text-xs text-vyro-muted leading-relaxed">
-              Price constraints and budget boundaries are never delegated to LLM prompts alone. The Express backend verifies that counteroffers stay within strictly configured buyer max budgets and seller price floors.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-            <div className="flex items-center gap-2.5 text-vyro-text font-semibold">
-              <Key className="w-5 h-5 text-vyro-success" />
-              <h3 className="text-base">Mandatory Human Authorization</h3>
-            </div>
-            <p className="text-xs text-vyro-muted leading-relaxed">
-              Software agents are strictly prohibited from capturing funds autonomously. Payment orders can only be initialized after a verified human operator signs off on the final agreement.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-            <div className="flex items-center gap-2.5 text-vyro-text font-semibold">
-              <ShieldCheck className="w-5 h-5 text-vyro-warning" />
-              <h3 className="text-base">Server-Side PayPal Verification</h3>
-            </div>
-            <p className="text-xs text-vyro-muted leading-relaxed">
-              Amounts sent to the PayPal Orders API are derived exclusively from the server's persisted agreement object—never trusted from frontend client payloads.
-            </p>
-          </div>
-
-          <div className="p-6 rounded-[8px] bg-vyro-surface border border-vyro-border space-y-3">
-            <div className="flex items-center gap-2.5 text-vyro-text font-semibold">
-              <AlertTriangle className="w-5 h-5 text-vyro-accent" />
-              <h3 className="text-base">Idempotency & Double-Debit Protection</h3>
-            </div>
-            <p className="text-xs text-vyro-muted leading-relaxed">
-              Unique idempotency keys accompany every order creation and capture request, preventing network retry duplications and double billing.
-            </p>
-          </div>
+          {pillars.map((pil, idx) => (
+            <Card key={idx} className="p-6 sm:p-7 flex flex-col gap-3 bg-surface">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-raised border border-border-subtle flex items-center justify-center shrink-0">
+                  {pil.icon}
+                </div>
+                <h2 className="font-display font-bold text-[18px] text-text-primary">
+                  {pil.title}
+                </h2>
+              </div>
+              <p className="text-body text-text-muted leading-relaxed">
+                {pil.desc}
+              </p>
+            </Card>
+          ))}
         </div>
 
-        <div className="mt-14 p-6 rounded-[8px] bg-vyro-card border border-vyro-border flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div>
-            <h4 className="text-sm font-semibold text-vyro-text">Ready to test the network?</h4>
-            <p className="text-xs text-vyro-muted">Explore verified agents in the registry.</p>
-          </div>
-          <Link to="/app/network">
-            <Button size="md" variant="primary" rightIcon={<ArrowRight className="w-4 h-4" />}>
-              Open Network Explorer
-            </Button>
-          </Link>
+        <div className="p-8 rounded-surface bg-surface border border-border-subtle text-center flex flex-col items-center gap-4">
+          <h3 className="font-display font-bold text-[24px] text-text-primary">
+            Built for sovereign control
+          </h3>
+          <p className="text-secondary text-text-muted max-w-md">
+            Deploy your agents with complete confidence that your private limits are never leaked and no funds move without your sign-off.
+          </p>
+          <Button
+            variant="volt"
+            size="lg"
+            onClick={() => navigate('/signup')}
+            rightIcon={<ArrowRight className="w-4 h-4" strokeWidth={2} />}
+          >
+            Create account
+          </Button>
         </div>
-      </main>
-
-      <Footer />
+      </div>
     </div>
   );
 };

@@ -1,24 +1,24 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
 import { AppNotification } from '../../types';
 import { Button } from '../../components/common/Button';
-import { Badge } from '../../components/common/Badge';
-import { toast } from 'sonner';
+import { StatusChip } from '../../components/common/StatusChip';
+import { EmptyState } from '../../components/common/EmptyState';
+import { formatDate } from '../../lib/present';
 import {
   Bell,
-  CheckCircle2,
+  Check,
   AlertTriangle,
   Scale,
-  ArrowRight,
-  Info,
   CreditCard,
-  Bot
+  ChevronRight
 } from 'lucide-react';
 
 export const NotificationsPage: React.FC = () => {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data: notifications = [], isLoading } = useQuery({
     queryKey: ['notifications'],
@@ -33,111 +33,110 @@ export const NotificationsPage: React.FC = () => {
     }
   });
 
-  const getIcon = (type: string) => {
-    switch (type) {
-      case 'approval_required':
-        return <AlertTriangle className="w-4 h-4 text-vyro-warning" />;
-      case 'negotiation_update':
-        return <Scale className="w-4 h-4 text-vyro-accent" />;
-      case 'transaction_completed':
-        return <CreditCard className="w-4 h-4 text-vyro-success" />;
-      default:
-        return <Bell className="w-4 h-4 text-vyro-muted" />;
+  const unreadCount = notifications.filter((n) => !n.read && !n.isRead).length;
+
+  const handleNotificationClick = (n: AppNotification) => {
+    if (!n.read && !n.isRead) {
+      markReadMutation.mutate(n.id);
+    }
+    const targetLink =
+      n.link ||
+      n.linkUrl ||
+      (n.metadata?.negotiationId ? `/app/deals/${n.metadata.negotiationId}` : undefined) ||
+      (n.metadata?.dealId ? `/app/deals/${n.metadata.dealId}` : undefined);
+    if (targetLink) {
+      navigate(targetLink);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="w-full max-w-4xl mx-auto py-8 px-4 flex flex-col gap-8">
       {/* Header */}
-      <div className="flex items-center justify-between pb-4 border-b border-vyro-border">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight text-vyro-text">
-              Network Notifications & Authorizations
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
+              Notifications
             </h1>
-            <Badge variant="accent" size="sm">
-              {notifications.filter(n => !n.read && !n.isRead).length} Unread
-            </Badge>
+            <span className="text-secondary px-2.5 py-0.5 rounded-control bg-raised border border-border-subtle text-text-muted">
+              {unreadCount} unread
+            </span>
           </div>
-          <p className="text-xs text-vyro-muted mt-1">
-            Real-time agent escalation events requiring human decision sign-off.
+          <p className="text-secondary text-text-muted">
+            Important updates from active negotiations, decision requests, and completed escrow settlements.
           </p>
         </div>
       </div>
 
       {/* Notifications List */}
       {isLoading ? (
-        <div className="p-12 text-center text-xs text-vyro-muted">
-          Loading notification stream...
+        <div className="flex flex-col gap-4 animate-pulse">
+          <div className="h-16 bg-surface rounded-control border border-border-subtle" />
+          <div className="h-16 bg-surface rounded-control border border-border-subtle" />
         </div>
       ) : notifications.length === 0 ? (
-        <div className="p-12 rounded-[8px] bg-vyro-surface border border-vyro-border text-center space-y-2">
-          <Bell className="w-8 h-8 text-vyro-muted mx-auto" />
-          <h3 className="text-xs font-semibold text-vyro-text">All caught up</h3>
-          <p className="text-[11px] text-vyro-muted">
-            No active escalations or pending notifications.
-          </p>
-        </div>
+        <EmptyState
+          title="All caught up"
+          description="You have no notifications or pending actions right now."
+        />
       ) : (
-        <div className="space-y-2.5">
-          {notifications.map((item) => {
-            const isRead = item.read || item.isRead;
-            const targetLink = item.linkUrl || item.link;
-
+        <div className="bg-surface border border-border-subtle rounded-surface divide-y divide-border-subtle overflow-hidden">
+          {notifications.map((n) => {
+            const isUnread = !n.read && !n.isRead;
             return (
               <div
-                key={item.id}
-                className={`p-3.5 rounded-[8px] border transition-all flex items-start justify-between gap-4 ${
-                  isRead
-                    ? 'bg-vyro-surface/40 border-vyro-border/60 text-vyro-muted'
-                    : 'bg-vyro-surface border-vyro-accent/40 text-vyro-text shadow-xs'
+                key={n.id}
+                onClick={() => handleNotificationClick(n)}
+                className={`p-5 flex items-center justify-between gap-4 transition-colors cursor-pointer group ${
+                  isUnread ? 'bg-raised/80 hover:bg-raised' : 'hover:bg-raised/50'
                 }`}
               >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="p-2 rounded bg-vyro-card border border-vyro-border shrink-0 mt-0.5">
-                    {getIcon(item.type)}
+                <div className="flex items-start gap-3.5 min-w-0">
+                  <div
+                    className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                      n.type === 'approval_required'
+                        ? 'bg-status-needs/20 text-status-needs'
+                        : 'bg-raised border border-border-subtle text-text-muted'
+                    }`}
+                  >
+                    {n.type === 'approval_required' ? (
+                      <AlertTriangle className="w-4 h-4" strokeWidth={2.5} />
+                    ) : (
+                      <Bell className="w-4 h-4" strokeWidth={2} />
+                    )}
                   </div>
-                  <div>
+
+                  <div className="flex flex-col min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-vyro-text">{item.title}</span>
-                      {!isRead && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-vyro-accent shrink-0" />
-                      )}
-                      <span className="text-[9px] font-mono text-vyro-subtle">
-                        {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      <span
+                        className={`text-body ${
+                          isUnread
+                            ? 'font-bold text-text-primary'
+                            : 'font-medium text-text-primary'
+                        } group-hover:text-volt transition-colors truncate`}
+                      >
+                        {n.title}
                       </span>
+                      {isUnread && (
+                        <span className="w-2 h-2 rounded-full bg-volt shrink-0" />
+                      )}
                     </div>
-                    <p className="text-xs text-vyro-muted mt-1 leading-relaxed">
-                      {item.message}
+                    <p className="text-secondary text-text-muted mt-0.5 line-clamp-2">
+                      {n.message}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {targetLink && (
-                    <Link
-                      to={targetLink}
-                      onClick={() => !isRead && markReadMutation.mutate(item.id)}
-                    >
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        rightIcon={<ArrowRight className="w-3 h-3" />}
-                        className="text-xs h-7.5"
-                      >
-                        View
-                      </Button>
-                    </Link>
+                <div className="flex items-center gap-3 shrink-0">
+                  {n.createdAt && (
+                    <span className="text-secondary text-text-muted hidden sm:block">
+                      {formatDate(n.createdAt)}
+                    </span>
                   )}
-                  {!isRead && (
-                    <button
-                      onClick={() => markReadMutation.mutate(item.id)}
-                      className="p-1.5 rounded bg-vyro-card hover:bg-vyro-hover text-vyro-subtle hover:text-vyro-text transition-colors text-[10px] font-mono"
-                      title="Mark as read"
-                    >
-                      Dismiss
-                    </button>
-                  )}
+                  <ChevronRight
+                    className="w-5 h-5 text-text-muted group-hover:text-text-primary transition-colors"
+                    strokeWidth={2}
+                  />
                 </div>
               </div>
             );
