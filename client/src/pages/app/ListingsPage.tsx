@@ -322,8 +322,10 @@ export const ListingsPage: React.FC = () => {
         </div>
 
         {isListingsLoading ? (
-          <div className="py-12 text-center text-xs font-mono text-vyro-muted animate-pulse">
-            Loading catalog inventory...
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-44 rounded-xl bg-vyro-surface border border-vyro-border animate-pulse" />
+            ))}
           </div>
         ) : listings.length === 0 ? (
           <div className="p-12 rounded-xl bg-vyro-surface border border-vyro-border text-center space-y-4">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { OverviewSkeleton } from '../../components/common/Skeleton';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -232,11 +233,7 @@ export const OverviewPage: React.FC = () => {
   }, [needsItems, focusedIndex, handleApprove, handleDecline]);
 
   if (isLoading) {
-    return (
-      <div className="py-20 text-center text-vyro-subtle text-sm">
-        Checking autonomous commerce ledger...
-      </div>
-    );
+    return <OverviewSkeleton />;
   }
 
   if (error) {

@@ -57,8 +57,9 @@ Full policy: https://vyro.network/dispute-policy
 
   if (isLoading || !tx) {
     return (
-      <div className="py-20 text-center text-xs font-mono text-vyro-muted animate-pulse">
-        Loading official payment receipt...
+      <div className="max-w-3xl mx-auto space-y-6 animate-pulse">
+        <div className="h-12 w-full bg-vyro-surface border border-vyro-border rounded-[8px]" />
+        <div className="h-96 w-full bg-vyro-surface border border-vyro-border rounded-[8px]" />
       </div>
     );
   }

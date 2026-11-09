@@ -145,8 +145,12 @@ export const NegotiationDetailPage: React.FC = () => {
 
   if (isLoading || !negData) {
     return (
-      <div className="py-24 text-center text-xs font-mono text-vyro-muted animate-pulse">
-        Retrieving deal telemetry and convergence state...
+      <div className="space-y-6 animate-pulse max-w-6xl mx-auto">
+        <div className="h-14 w-full bg-vyro-surface border border-vyro-border rounded-xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-96 bg-vyro-surface border border-vyro-border rounded-xl" />
+          <div className="h-96 bg-vyro-surface border border-vyro-border rounded-xl" />
+        </div>
       </div>
     );
   }
