@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { store } from '../db/store.js';
+import { config } from '../config/index.js';
 import { negotiationOrchestrator } from '../services/negotiation/orchestrator.js';
+import { payoutService, PayoutGateError } from '../services/paypal/payoutService.js';
 import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
 import { broadcastEvent } from './events.js';
 
@@ -47,7 +49,13 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   // Seller NEVER sees buyer max budget ceiling.
   const serializedRequest = rawRequest ? {
     ...rawRequest,
-    maxBudget: isSeller ? undefined : rawRequest.maxBudget
+    maxBudget: isSeller ? undefined : rawRequest.maxBudget,
+    targetBudget: isSeller ? undefined : rawRequest.targetBudget,
+    hardCap: isSeller ? undefined : rawRequest.hardCap,
+    flexibility: isSeller ? undefined : rawRequest.flexibility,
+    budgetCents: isSeller ? undefined : rawRequest.budgetCents,
+    targetPriceCents: isSeller ? undefined : rawRequest.targetPriceCents,
+    hardCapCents: isSeller ? undefined : rawRequest.hardCapCents
   } : undefined;
 
   const sanitizedBuyerAgent = buyerAgent ? {
@@ -61,12 +69,31 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
 
   const sanitizedSellerAgent = sellerAgent ? {
     ...sellerAgent,
+    catalog: isBuyer
+      ? (sellerAgent.catalog || []).map(({ minPrice, ...pubCat }) => pubCat)
+      : sellerAgent.catalog,
     pricingConstraints: isBuyer ? {
       ...sellerAgent.pricingConstraints,
       minAcceptablePrice: undefined,
       flexibilityPercent: undefined
     } : sellerAgent.pricingConstraints
   } : undefined;
+
+  const sanitizePropForViewer = (p: any) => {
+    const isFromCounterparty = isBuyer ? p.senderAgentId === neg.sellerAgentId : p.senderAgentId === neg.buyerAgentId;
+    if (!isFromCounterparty) return p;
+    const { whyThisOffer, ...pubProp } = p;
+    return pubProp;
+  };
+
+  const sanitizedProposals = proposals.map(sanitizePropForViewer);
+  const sanitizedCurrentProp = neg.currentProposal ? sanitizePropForViewer(neg.currentProposal) : null;
+  const sanitizedMessages = (neg.messages || []).map(m => {
+    const isFromCounterparty = (isBuyer && m.senderRole === 'seller') || (isSeller && m.senderRole === 'buyer');
+    if (!isFromCounterparty || !m.payload) return m;
+    const { shortReasonForHuman, whyThisOffer, ...pubPayload } = m.payload;
+    return { ...m, payload: pubPayload };
+  });
 
   const sanitizedQueueItem = rawQueueItem ? {
     ...rawQueueItem,
@@ -91,15 +118,31 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
     ? sanitizedQueueItem
     : undefined;
 
+  const transaction = agreement ? store.getTransactionByAgreement(agreement.id) : null;
+  const payout = store.getPayoutByDeal(neg.id) || null;
+  const ledger = store.getLedgerEntriesForDeal(neg.id);
+  const sellerPayoutReady = payoutService.isSellerPayoutReady(neg.sellerUserId);
+  const sellerPayoutAccount = isSeller && neg.sellerUserId
+    ? payoutService.getSellerPayoutAccount(neg.sellerUserId)
+    : undefined;
+
   return res.json({
     success: true,
     data: {
       ...neg,
+      messages: sanitizedMessages,
+      currentProposal: sanitizedCurrentProp,
       buyerAgent: sanitizedBuyerAgent,
       sellerAgent: sanitizedSellerAgent,
       request: serializedRequest,
-      proposals,
+      proposals: sanitizedProposals,
       agreement,
+      transaction,
+      payout,
+      ledger,
+      platformFeePercent: config.platformFeePercent,
+      sellerPayoutReady,
+      sellerPayoutAccount,
       decision: decisionForUser,
       queueItem: queueItemForUser,
       userRole: isBuyer ? 'buyer' : 'seller'
@@ -195,18 +238,27 @@ router.post('/multi-agent', async (req: AuthenticatedRequest, res: Response) => 
       .split(/\s+/)
       .filter(t => t.length > 3 && !STOP_WORDS.has(t));
 
-    const matchedListings = otherUserListings.filter(l => {
-      const listCat = (l.category || '').toLowerCase();
-      if (listCat === reqCategory && reqCategory !== 'other') return true;
-      const listText = `${l.title} ${l.description} ${(l.tags || []).join(' ')}`.toLowerCase();
-      return reqTerms.some(term => listText.includes(term));
-    });
+    const scoredMatches = otherUserListings
+      .map(l => {
+        const listCat = (l.category || '').toLowerCase();
+        const catMatch = listCat === reqCategory && reqCategory !== 'other';
+        const listText = `${l.title} ${l.description} ${(l.tags || []).join(' ')}`.toLowerCase();
+        const termHits = reqTerms.filter(term => listText.includes(term)).length;
+        if (!catMatch && termHits === 0) return null;
+        return {
+          listing: l,
+          score: termHits * 10 + (catMatch ? 3 : 0),
+          createdAt: l.createdAt || ''
+        };
+      })
+      .filter((x): x is { listing: any; score: number; createdAt: string } => x !== null)
+      .sort((a, b) => (b.score - a.score) || b.createdAt.localeCompare(a.createdAt));
 
-    const matchedSellerAgentIds = matchedListings
-      .map(l => l.sellerAgentId)
-      .filter((id): id is string => Boolean(id) && !userAgentIds.includes(id));
+    const matchedSellerAgentIds = scoredMatches
+      .map(m => m.listing.sellerAgentId)
+      .filter((id): id is string => typeof id === 'string' && id.length > 0 && !userAgentIds.includes(id));
 
-    sellerIds = Array.from(new Set(matchedSellerAgentIds));
+    sellerIds = Array.from(new Set(matchedSellerAgentIds)).slice(0, 3);
   }
 
   if (!sellerIds || sellerIds.length === 0) {
@@ -244,6 +296,24 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
     return res.status(404).json({ success: false, error: 'Negotiation not found' });
   }
 
+  // Gate: Seller must have a Ready payout account before deal can be confirmed
+  if (neg.sellerUserId && !payoutService.isSellerPayoutReady(neg.sellerUserId)) {
+    store.addNotification({
+      userId: neg.sellerUserId,
+      title: 'Add where to send your earnings',
+      message: 'A buyer wants to confirm a deal, but your PayPal payout email is missing. Set it in Selling > Payments.',
+      type: 'payout_required',
+      linkUrl: `/app/deals/${neg.id}`
+    });
+    return res.status(409).json({
+      success: false,
+      code: 'SELLER_PAYOUT_NOT_READY',
+      error: neg.sellerUserId === user.id
+        ? 'Add where to send your earnings before confirming this deal.'
+        : 'Waiting for the seller to finish payout setup.'
+    });
+  }
+
   const now = new Date().toISOString();
   const note = req.body?.note || 'Manually approved by human buyer.';
 
@@ -259,7 +329,7 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
     if (agreement) {
       agreement.humanApprovalStatus = 'approved';
       agreement.humanApprovedAt = now;
-      agreement.rejectionReason = null;
+      agreement.rejectionReason = undefined;
       store.saveAgreement(agreement);
     }
   }
@@ -274,7 +344,7 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
     recipientAgentId: neg.sellerAgentId,
     senderRole: 'buyer',
     round: neg.currentRound,
-    messageType: 'agreement_accepted',
+    messageType: 'acceptance',
     content: `[Human Approval Confirmed] ${note}`,
     timestamp: now
   });
@@ -282,6 +352,49 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
 
   broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'approved' });
   return res.json({ success: true, message: 'Deal approved successfully.', data: neg });
+});
+
+// POST /api/v1/negotiations/:id/accept-work - Buyer accepts delivered work & releases seller payout
+router.post('/:id/accept-work', async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  try {
+    const result = await payoutService.acceptWorkAndReleasePayout(req.params.id, user.id);
+    return res.json({
+      success: true,
+      message: result.payout.status === 'failed'
+        ? `Work accepted, but payout failed: ${result.payout.failureReason}`
+        : 'Work accepted and seller payout released.',
+      data: result
+    });
+  } catch (err: any) {
+    if (err instanceof PayoutGateError) {
+      return res.status(err.status).json({
+        success: false,
+        error: err.message,
+        code: err.code,
+        nextStep: err.nextStep
+      });
+    }
+    return res.status(400).json({ success: false, error: err.message || 'Could not accept work' });
+  }
+});
+
+// POST /api/v1/negotiations/:id/report-problem - Buyer/Seller flags an issue holding payout
+router.post('/:id/report-problem', (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  try {
+    const agreement = payoutService.reportProblem(req.params.id, user.id, req.body?.reason || '');
+    return res.json({
+      success: true,
+      message: 'Problem reported. Held funds remain protected until resolved.',
+      data: agreement
+    });
+  } catch (err: any) {
+    if (err instanceof PayoutGateError) {
+      return res.status(err.status).json({ success: false, error: err.message, code: err.code });
+    }
+    return res.status(400).json({ success: false, error: err.message || 'Could not report problem' });
+  }
 });
 
 // POST /api/v1/negotiations/:id/decline - Direct Human Decline
@@ -303,13 +416,13 @@ router.post('/:id/decline', async (req: AuthenticatedRequest, res: Response) => 
   if (neg.agreementId) {
     const agreement = store.getAgreement(neg.agreementId);
     if (agreement) {
-      agreement.humanApprovalStatus = 'declined';
+      agreement.humanApprovalStatus = 'rejected';
       agreement.rejectionReason = reason;
       store.saveAgreement(agreement);
     }
   }
 
-  neg.status = 'declined';
+  neg.status = 'rejected';
   neg.updatedAt = now;
   neg.messages.push({
     id: `msg_dec_${Date.now().toString(36)}`,
@@ -318,7 +431,7 @@ router.post('/:id/decline', async (req: AuthenticatedRequest, res: Response) => 
     recipientAgentId: neg.sellerAgentId,
     senderRole: 'buyer',
     round: neg.currentRound,
-    messageType: 'proposal_rejected',
+    messageType: 'rejection',
     content: `[Human Declined] ${reason}`,
     timestamp: now
   });
@@ -357,8 +470,8 @@ router.post('/:id/appeal', async (req: AuthenticatedRequest, res: Response) => {
   if (neg.agreementId) {
     const agreement = store.getAgreement(neg.agreementId);
     if (agreement) {
-      agreement.humanApprovalStatus = 'pending_review';
-      agreement.rejectionReason = null;
+      agreement.humanApprovalStatus = 'pending';
+      agreement.rejectionReason = undefined;
       store.saveAgreement(agreement);
     }
   }
@@ -373,7 +486,7 @@ router.post('/:id/appeal', async (req: AuthenticatedRequest, res: Response) => {
     recipientAgentId: neg.sellerAgentId,
     senderRole: 'buyer',
     round: neg.currentRound,
-    messageType: 'appeal',
+    messageType: 'human_escalation',
     content: `[Human Appeal Submitted] ${appealNote}`,
     timestamp: now
   });

@@ -13,7 +13,9 @@ import {
   LogOut,
   AlertTriangle,
   Check,
-  ArrowLeft
+  ArrowLeft,
+  ChevronDown,
+  ChevronRight
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
@@ -21,12 +23,15 @@ import { Card } from '../../components/common/Card';
 import { StatusChip } from '../../components/common/StatusChip';
 import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { useMotionPreference, MotionPreferenceSetting } from '../../context/MotionContext';
 import { formatName } from '../../lib/present';
 
 export const SettingsPage: React.FC = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { preference, setPreference } = useMotionPreference();
+  const [showAdvancedDiagnostics, setShowAdvancedDiagnostics] = useState(false);
 
   // Profile Form state
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -48,12 +53,30 @@ export const SettingsPage: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
-  // Payments health
+  // Payments health & advanced diagnostics
   const { data: paymentsHealth } = useQuery({
     queryKey: ['paymentsHealth'],
     queryFn: api.getPaymentsHealth,
     staleTime: 30000
   });
+
+  const { data: paymentDiagnostics, refetch: refetchDiagnostics, isFetching: isFetchingDiag } = useQuery({
+    queryKey: ['paymentDiagnostics'],
+    queryFn: api.getPaymentDiagnostics,
+    enabled: showAdvancedDiagnostics,
+    staleTime: 10000
+  });
+
+  const handleMotionChange = async (nextPref: MotionPreferenceSetting) => {
+    setPreference(nextPref);
+    try {
+      await api.updateProfile({ motionPreference: nextPref });
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      toast.success(`Motion preference set to ${nextPref}.`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not save motion preference');
+    }
+  };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -163,7 +186,7 @@ export const SettingsPage: React.FC = () => {
               <p className="text-secondary text-text-muted mt-1 leading-relaxed">
                 {isPaused
                   ? 'All autonomous bargaining is paused. Every proposal and agreement must be manually approved by you.'
-                  : 'Agents automatically negotiate pricing and terms within your ceilings and floors, stopping only for exceptions.'}
+                  : 'Agents automatically negotiate pricing and terms within your budgets and limits, stopping only for exceptions.'}
               </p>
             </div>
           </div>
@@ -326,6 +349,132 @@ export const SettingsPage: React.FC = () => {
             />
           </div>
         </Card>
+      </div>
+
+      {/* Appearance & Motion Preference */}
+      <div className="flex flex-col gap-4">
+        <span className="font-display font-bold text-[20px] text-text-primary">
+          Appearance
+        </span>
+
+        <Card className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="font-medium text-body text-text-primary">
+              Motion
+            </span>
+            <span className="text-secondary text-text-muted">
+              Choose full calm transitions or reduced instant state changes.
+            </span>
+          </div>
+
+          <div className="inline-flex rounded-control border border-border-subtle bg-raised p-1 shrink-0" role="group" aria-label="Motion preference">
+            {([
+              { value: 'system', label: 'System' },
+              { value: 'full', label: 'Full' },
+              { value: 'reduced', label: 'Reduced' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => handleMotionChange(opt.value)}
+                className={`px-3 py-1.5 rounded-control text-secondary font-medium cursor-pointer transition-colors ${
+                  preference === opt.value
+                    ? 'bg-volt text-[#0C0E0D] font-semibold'
+                    : 'text-text-muted hover:text-text-primary'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      {/* Advanced: PayPal & Payouts Diagnostics (Part A4) */}
+      <div className="flex flex-col gap-4">
+        <button
+          type="button"
+          onClick={() => setShowAdvancedDiagnostics((v) => !v)}
+          className="flex items-center justify-between w-full text-left cursor-pointer group"
+        >
+          <span className="font-display font-bold text-[20px] text-text-primary">
+            Advanced
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-secondary text-text-muted group-hover:text-text-primary">
+            <span>Payments status</span>
+            {showAdvancedDiagnostics ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          </span>
+        </button>
+
+        {showAdvancedDiagnostics && (
+          <Card className="p-6 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <span className="font-semibold text-body text-text-primary">
+                  Payments status & PayPal diagnostics
+                </span>
+                <span className="text-secondary text-text-muted">
+                  Live capability check against configured merchant credentials.
+                </span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                isLoading={isFetchingDiag}
+                onClick={() => refetchDiagnostics()}
+              >
+                Recheck
+              </Button>
+            </div>
+
+            {paymentDiagnostics ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-secondary">
+                <div className="p-3 bg-raised rounded-control flex items-center justify-between">
+                  <span className="text-text-muted">PayPal OAuth token</span>
+                  <StatusChip
+                    label={paymentDiagnostics.tokenOk ? 'Connected' : 'Failed'}
+                    role={paymentDiagnostics.tokenOk ? 'handled' : 'declined'}
+                    size="sm"
+                  />
+                </div>
+                <div className="p-3 bg-raised rounded-control flex items-center justify-between">
+                  <span className="text-text-muted">Payouts API</span>
+                  <StatusChip
+                    label={paymentDiagnostics.payoutsEnabled ? 'Enabled' : 'Disabled'}
+                    role={paymentDiagnostics.payoutsEnabled ? 'handled' : 'needsYou'}
+                    size="sm"
+                  />
+                </div>
+                <div className="p-3 bg-raised rounded-control flex items-center justify-between">
+                  <span className="text-text-muted">Active provider</span>
+                  <span className="font-medium text-text-primary">
+                    {paymentDiagnostics.providerInUse === 'paypal' ? 'PayPal Payouts' : 'Test payout, simulated'}
+                  </span>
+                </div>
+                <div className="p-3 bg-raised rounded-control flex items-center justify-between">
+                  <span className="text-text-muted">Platform service fee</span>
+                  <span className="font-medium text-text-primary">{paymentDiagnostics.platformFeePercent}%</span>
+                </div>
+                <div className="p-3 bg-raised rounded-control flex items-center justify-between sm:col-span-2">
+                  <span className="text-text-muted">Last create-order check</span>
+                  <span className="font-medium text-text-primary">
+                    {paymentDiagnostics.lastCreateOrderResult
+                      ? `${paymentDiagnostics.lastCreateOrderResult.ok ? 'OK' : 'Failed'} · ${paymentDiagnostics.lastCreateOrderResult.status || 'Checked'}`
+                      : (paymentsHealth?.connected ? 'Ready' : 'Check configuration')}
+                  </span>
+                </div>
+                {paymentDiagnostics.tokenReason && (
+                  <div className="p-3 bg-status-declined/10 border border-status-declined/30 rounded-control text-status-declined sm:col-span-2">
+                    {paymentDiagnostics.tokenReason}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-secondary text-text-muted">Checking PayPal connection…</p>
+            )}
+          </Card>
+        )}
       </div>
 
       {/* Security & Password */}

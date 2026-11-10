@@ -461,6 +461,116 @@ export class SQLiteDatabase {
             db.exec(`ALTER TABLE agreements ADD COLUMN revisions INTEGER DEFAULT 2;`);
           } catch (e) {}
         }
+      },
+      {
+        name: '007_negotiable_budgets_and_cents',
+        up: (db) => {
+          const addCol = (sql: string) => {
+            try { db.exec(sql); } catch (e) {}
+          };
+          addCol(`ALTER TABLE requests ADD COLUMN flexibility TEXT NOT NULL DEFAULT 'flexible';`);
+          addCol(`ALTER TABLE requests ADD COLUMN hard_cap REAL;`);
+          addCol(`ALTER TABLE requests ADD COLUMN budget_cents INTEGER;`);
+          addCol(`ALTER TABLE requests ADD COLUMN target_price_cents INTEGER;`);
+          addCol(`ALTER TABLE requests ADD COLUMN hard_cap_cents INTEGER;`);
+          db.exec(`UPDATE requests SET flexibility = 'flexible' WHERE flexibility IS NULL;`);
+          db.exec(`UPDATE requests SET budget_cents = ROUND(max_budget * 100) WHERE budget_cents IS NULL;`);
+          db.exec(`UPDATE requests SET target_price_cents = ROUND(COALESCE(NULLIF(target_budget, 0), max_budget * 0.8) * 100) WHERE target_price_cents IS NULL;`);
+          db.exec(`UPDATE requests SET hard_cap = ROUND(max_budget * 1.1) WHERE hard_cap IS NULL;`);
+          db.exec(`UPDATE requests SET hard_cap_cents = ROUND(max_budget * 110) WHERE hard_cap_cents IS NULL;`);
+
+          addCol(`ALTER TABLE listings ADD COLUMN flexibility TEXT NOT NULL DEFAULT 'flexible';`);
+          addCol(`ALTER TABLE listings ADD COLUMN absolute_min_price REAL;`);
+          addCol(`ALTER TABLE listings ADD COLUMN asking_price_cents INTEGER;`);
+          addCol(`ALTER TABLE listings ADD COLUMN floor_price_cents INTEGER;`);
+          addCol(`ALTER TABLE listings ADD COLUMN absolute_min_cents INTEGER;`);
+          db.exec(`UPDATE listings SET flexibility = 'flexible' WHERE flexibility IS NULL;`);
+          db.exec(`UPDATE listings SET asking_price_cents = ROUND(asking_price * 100) WHERE asking_price_cents IS NULL;`);
+          db.exec(`UPDATE listings SET floor_price_cents = ROUND(floor_price * 100) WHERE floor_price_cents IS NULL;`);
+          db.exec(`UPDATE listings SET absolute_min_price = ROUND(floor_price * 0.9) WHERE absolute_min_price IS NULL;`);
+          db.exec(`UPDATE listings SET absolute_min_cents = ROUND(floor_price * 90) WHERE absolute_min_cents IS NULL;`);
+
+          addCol(`ALTER TABLE proposals ADD COLUMN price_cents INTEGER;`);
+          addCol(`ALTER TABLE proposals ADD COLUMN why_move TEXT;`);
+          db.exec(`UPDATE proposals SET price_cents = ROUND(price * 100) WHERE price_cents IS NULL;`);
+
+          addCol(`ALTER TABLE agreements ADD COLUMN final_price_cents INTEGER;`);
+          addCol(`ALTER TABLE agreements ADD COLUMN savings_vs_budget_cents INTEGER;`);
+          addCol(`ALTER TABLE agreements ADD COLUMN stretch_zone_side TEXT;`);
+          db.exec(`UPDATE agreements SET final_price_cents = ROUND(final_price * 100) WHERE final_price_cents IS NULL;`);
+        }
+      },
+      {
+        name: '008_seller_payouts_ledger_onboarding',
+        up: (db) => {
+          const addCol = (sql: string) => {
+            try { db.exec(sql); } catch (e) {}
+          };
+
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS seller_payout_accounts (
+              id TEXT PRIMARY KEY,
+              user_id TEXT NOT NULL UNIQUE,
+              provider TEXT NOT NULL DEFAULT 'paypal_email',
+              paypal_email TEXT,
+              status TEXT NOT NULL DEFAULT 'not_set',
+              verified_at TEXT,
+              last_error TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL,
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS payouts (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL UNIQUE,
+              agreement_id TEXT NOT NULL,
+              seller_user_id TEXT NOT NULL,
+              amount_cents INTEGER NOT NULL,
+              fee_cents INTEGER NOT NULL,
+              gross_amount_cents INTEGER NOT NULL,
+              currency TEXT NOT NULL DEFAULT 'USD',
+              status TEXT NOT NULL DEFAULT 'scheduled',
+              provider TEXT NOT NULL DEFAULT 'paypal',
+              provider_batch_id TEXT,
+              provider_item_id TEXT,
+              paypal_debug_id TEXT,
+              failure_reason TEXT,
+              retry_count INTEGER NOT NULL DEFAULT 0,
+              next_retry_at TEXT,
+              created_at TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS ledger_entries (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL,
+              type TEXT NOT NULL,
+              amount_cents INTEGER NOT NULL,
+              currency TEXT NOT NULL DEFAULT 'USD',
+              note TEXT,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ledger_deal ON ledger_entries(deal_id);
+          `);
+
+          addCol(`ALTER TABLE agreements ADD COLUMN work_acceptance_status TEXT NOT NULL DEFAULT 'pending';`);
+          addCol(`ALTER TABLE agreements ADD COLUMN work_accepted_at TEXT;`);
+          addCol(`ALTER TABLE agreements ADD COLUMN dispute_reason TEXT;`);
+          addCol(`ALTER TABLE agreements ADD COLUMN platform_fee_cents INTEGER;`);
+          addCol(`ALTER TABLE agreements ADD COLUMN seller_payout_cents INTEGER;`);
+
+          addCol(`ALTER TABLE transactions ADD COLUMN amount_cents INTEGER;`);
+          addCol(`ALTER TABLE transactions ADD COLUMN platform_fee_cents INTEGER;`);
+          addCol(`ALTER TABLE transactions ADD COLUMN seller_payout_cents INTEGER;`);
+          addCol(`ALTER TABLE transactions ADD COLUMN refund_id TEXT;`);
+          addCol(`ALTER TABLE transactions ADD COLUMN refunded_at TEXT;`);
+          addCol(`ALTER TABLE transactions ADD COLUMN refund_reason TEXT;`);
+          db.exec(`UPDATE transactions SET amount_cents = ROUND(amount * 100) WHERE amount_cents IS NULL;`);
+
+          addCol(`ALTER TABLE users ADD COLUMN motion_preference TEXT NOT NULL DEFAULT 'system';`);
+          addCol(`ALTER TABLE users ADD COLUMN coach_marks_dismissed TEXT NOT NULL DEFAULT '[]';`);
+        }
       }
     ];
 

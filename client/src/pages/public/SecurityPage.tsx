@@ -12,7 +12,7 @@ export const SecurityPage: React.FC = () => {
     {
       icon: <Lock className="w-5 h-5 text-volt" strokeWidth={2} />,
       title: 'Deterministic Constraint Enforcement',
-      desc: 'Price constraints and budget boundaries are never left to LLM prompts alone. The server-side negotiation engine mathematically validates every proposal against configured buyer ceilings and seller floors.'
+      desc: 'Price constraints and budget boundaries are never left to LLM prompts alone. The server-side negotiation engine mathematically validates every proposal against configured buyer budgets, stretch hard caps, and seller lowest limits.'
     },
     {
       icon: <Key className="w-5 h-5 text-status-handled" strokeWidth={2} />,

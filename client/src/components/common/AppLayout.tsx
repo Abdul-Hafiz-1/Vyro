@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useNavigate, useLocation, Outlet } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../context/AuthContext';
+import { EASE_STANDARD } from '../../lib/motion';
 import { Avatar } from './Avatar';
 import { ModeSwitch } from './ModeSwitch';
 import { CommandPalette } from './CommandPalette';
@@ -35,6 +37,13 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
   });
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Redirect newly created accounts through first-run onboarding once
+  useEffect(() => {
+    if (user && user.onboardingCompleted === false && location.pathname.startsWith('/app')) {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [user, location.pathname, navigate]);
 
   // Close avatar menu when clicking outside
   useEffect(() => {
@@ -159,7 +168,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
           {/* Center: Labeled Tabs (Desktop) */}
           <nav className="hidden md:flex items-center gap-1">
             {desktopTabs.map((tab) => {
-              const isActive = tab.exact 
+              const isActive = tab.exact
                 ? location.pathname === tab.to
                 : location.pathname.startsWith(tab.to);
 
@@ -167,15 +176,22 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                 <NavLink
                   key={tab.to}
                   to={tab.to}
-                  className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-all flex items-center gap-1.5 relative ${
-                    isActive 
-                      ? 'bg-raised text-text-primary border border-border-subtle shadow-sm font-semibold' 
+                  className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-colors flex items-center gap-1.5 relative ${
+                    isActive
+                      ? 'text-text-primary font-semibold'
                       : 'text-text-muted hover:text-text-primary hover:bg-raised/50'
                   }`}
                 >
+                  {isActive && (
+                    <motion.span
+                      layoutId="vyro-nav-indicator"
+                      transition={{ duration: 0.2, ease: EASE_STANDARD }}
+                      className="absolute inset-0 rounded-control bg-raised border border-border-subtle shadow-sm -z-10"
+                    />
+                  )}
                   <span>{tab.label}</span>
                   {tab.badge !== null && tab.badge !== undefined && (
-                    <span className="px-1.5 py-0.2 rounded-chip text-[11px] font-bold bg-volt text-[#0C0E0D] ml-0.5 animate-pulse">
+                    <span className="px-1.5 py-0.2 rounded-chip text-[11px] font-bold bg-volt text-[#0C0E0D] ml-0.5">
                       {tab.badge}
                     </span>
                   )}
@@ -344,7 +360,14 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
 
       {/* 2. MAIN CONTENT (MAX ~1120px) */}
       <main className="flex-1 w-full max-w-[1120px] mx-auto px-4 sm:px-6 py-8 pb-24 md:pb-12">
-        {children || <Outlet />}
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: EASE_STANDARD }}
+        >
+          {children || <Outlet />}
+        </motion.div>
       </main>
 
       {/* 3. MOBILE BOTTOM BAR (MAX 5 LABELED TABS, ICON + WORD, CENTER PRIMARY BUTTON) */}
@@ -363,7 +386,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                 <div className="w-11 h-11 rounded-full bg-volt text-[#0C0E0D] flex items-center justify-center shadow-md">
                   <Icon className="w-5 h-5" strokeWidth={2.5} />
                 </div>
-                <span className="text-[11px] font-semibold text-text-primary mt-0.5 leading-tight">
+                <span className="text-secondary font-semibold text-text-primary mt-0.5 leading-tight">
                   {item.label}
                 </span>
               </button>
@@ -392,7 +415,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
                   </span>
                 )}
               </div>
-              <span className="text-[11px] leading-tight mt-1">{item.label}</span>
+              <span className="text-secondary leading-tight mt-0.5">{item.label}</span>
             </NavLink>
           );
         })}

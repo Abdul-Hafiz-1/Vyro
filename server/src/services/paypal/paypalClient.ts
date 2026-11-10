@@ -2,6 +2,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { config } from '../../config/index.js';
 import { store } from '../../db/store.js';
 import { Agreement, Transaction } from '../../types/index.js';
+import { dollarsToCents, centsToDollars, computeFeeAndPayoutCents, formatCents } from '../negotiation/money.js';
+import { paypalPayoutsProvider } from './payoutProvider.js';
 
 export interface PayPalErrorDetails {
   status: number;
@@ -27,6 +29,14 @@ interface PayPalAccessToken {
 }
 
 let cachedToken: PayPalAccessToken | null = null;
+let lastCreateOrderDiag: {
+  ok: boolean;
+  status: string;
+  orderId?: string;
+  debugId?: string;
+  reason?: string;
+  timestamp: string;
+} | null = null;
 
 export function mapPayPalError(status: number, errorData: any, debugId?: string | null): PayPalErrorDetails {
   const issue = errorData?.details?.[0]?.issue || errorData?.name || '';
@@ -220,6 +230,38 @@ export class PayPalService {
     }
   }
 
+  public async getDiagnostics(): Promise<{
+    tokenOk: boolean;
+    tokenDebugId?: string;
+    tokenReason?: string;
+    payoutsEnabled: boolean;
+    payoutsDebugId?: string;
+    payoutsReason?: string;
+    providerInUse: string;
+    platformFeePercent: number;
+    merchantEmailConfigured: boolean;
+    lastCreateOrderResult: typeof lastCreateOrderDiag;
+    env: string;
+  }> {
+    const health = await this.checkHealth();
+    const payoutsCap = health.ok
+      ? await paypalPayoutsProvider.checkPayoutsCapability()
+      : { enabled: false, reason: health.reason };
+    return {
+      tokenOk: health.ok,
+      tokenDebugId: health.debugId,
+      tokenReason: health.reason,
+      payoutsEnabled: payoutsCap.enabled,
+      payoutsDebugId: payoutsCap.debugId,
+      payoutsReason: payoutsCap.reason,
+      providerInUse: config.paypal.payoutProvider,
+      platformFeePercent: config.platformFeePercent,
+      merchantEmailConfigured: Boolean(config.paypal.merchantEmail),
+      lastCreateOrderResult: lastCreateOrderDiag,
+      env: config.paypal.env
+    };
+  }
+
   /**
    * Creates a PayPal Order based STRICTLY on an authorized Agreement.
    */
@@ -282,8 +324,23 @@ export class PayPalService {
       });
     }
 
-    const amountFormatted = agreement.finalPrice.toFixed(2);
+    const grossCents = agreement.finalPriceCents ?? dollarsToCents(agreement.finalPrice);
+    const { feeCents, payoutCents } = computeFeeAndPayoutCents(grossCents, config.platformFeePercent);
+    const amountFormatted = (grossCents / 100).toFixed(2);
     const currency = 'USD';
+
+    // Never allow checkout if seller payout account is not Ready
+    if (agreement.sellerUserId) {
+      const sellerAcct = store.getSellerPayoutAccount(agreement.sellerUserId);
+      if (!sellerAcct || sellerAcct.status !== 'ready') {
+        throw new PayPalApiException({
+          status: 409,
+          code: 'SELLER_PAYOUT_NOT_READY',
+          message: 'Waiting for the seller to finish payout setup before payment can begin.',
+          nextStep: 'The seller has been notified to add their PayPal payout email in Selling > Payments.'
+        });
+      }
+    }
 
     // Live PayPal Sandbox API Call
     if (this.isConfigured()) {
@@ -357,13 +414,27 @@ export class PayPalService {
           errJson = { message: await response.text() };
         }
         console.error(`[PayPal Create Order Error] Status: ${response.status}, Debug-ID: ${debugId || 'none'}`);
+        lastCreateOrderDiag = {
+          ok: false,
+          status: `HTTP_${response.status}`,
+          debugId: debugId || undefined,
+          reason: errJson?.message || 'Create order failed',
+          timestamp: new Date().toISOString()
+        };
         throw new PayPalApiException(mapPayPalError(response.status, errJson, debugId));
       }
 
       const data = await response.json() as any;
       const approveLink = data.links?.find((l: any) => l.rel === 'approve')?.href;
+      lastCreateOrderDiag = {
+        ok: true,
+        status: data.status || 'CREATED',
+        orderId: data.id,
+        debugId: debugId || undefined,
+        timestamp: new Date().toISOString()
+      };
 
-      // Record pending transaction
+      // Record pending transaction (held amount computed in integer cents)
       const tx: Transaction = {
         id: `tx_${uuidv4().substring(0, 8)}`,
         agreementId: agreement.id,
@@ -375,12 +446,15 @@ export class PayPalService {
         sellerAgentId: agreement.sellerAgentId,
         sellerBusinessName: agreement.sellerBusinessName,
         serviceTitle: 'Commercial Agreement Contract',
-        amount: agreement.finalPrice,
+        amount: centsToDollars(grossCents),
+        amountCents: grossCents,
+        platformFeeCents: feeCents,
+        sellerPayoutCents: payoutCents,
         currency,
         paypalOrderId: data.id,
         paymentStatus: 'awaiting_paypal',
         idempotencyKey,
-        sellerShareHeld: agreement.finalPrice,
+        sellerShareHeld: centsToDollars(payoutCents),
         sellerPayoutStatus: 'held',
         isSandbox: true,
         createdAt: new Date().toISOString()
@@ -407,29 +481,37 @@ export class PayPalService {
       };
     }
 
-    // High-Fidelity Sandbox Simulator (when credentials unset or in offline test mode)
-    const simulatedOrderId = `PAYID-SANDBOX-${uuidv4().substring(0, 12).toUpperCase()}`;
-    const tx: Transaction = {
-      id: `tx_${uuidv4().substring(0, 8)}`,
-      agreementId: agreement.id,
-      negotiationId: agreement.negotiationId,
-      requestId: agreement.requestId,
-      buyerUserId: agreement.buyerUserId,
-      sellerUserId: agreement.sellerUserId,
-      buyerAgentName: 'Buyer Agent',
-      sellerAgentId: agreement.sellerAgentId,
-      sellerBusinessName: agreement.sellerBusinessName,
-      serviceTitle: 'Commercial Agreement Contract',
-      amount: agreement.finalPrice,
-      currency,
-      paypalOrderId: simulatedOrderId,
-      paymentStatus: 'awaiting_paypal',
-      idempotencyKey,
-      sellerShareHeld: agreement.finalPrice,
-      sellerPayoutStatus: 'held',
-      isSandbox: true,
-      createdAt: new Date().toISOString()
-    };
+      const simulatedOrderId = `PAYID-SANDBOX-${uuidv4().substring(0, 12).toUpperCase()}`;
+      lastCreateOrderDiag = {
+        ok: true,
+        status: 'CREATED_SIMULATED',
+        orderId: simulatedOrderId,
+        timestamp: new Date().toISOString()
+      };
+      const tx: Transaction = {
+        id: `tx_${uuidv4().substring(0, 8)}`,
+        agreementId: agreement.id,
+        negotiationId: agreement.negotiationId,
+        requestId: agreement.requestId,
+        buyerUserId: agreement.buyerUserId,
+        sellerUserId: agreement.sellerUserId,
+        buyerAgentName: 'Buyer Agent',
+        sellerAgentId: agreement.sellerAgentId,
+        sellerBusinessName: agreement.sellerBusinessName,
+        serviceTitle: 'Commercial Agreement Contract',
+        amount: centsToDollars(grossCents),
+        amountCents: grossCents,
+        platformFeeCents: feeCents,
+        sellerPayoutCents: payoutCents,
+        currency,
+        paypalOrderId: simulatedOrderId,
+        paymentStatus: 'awaiting_paypal',
+        idempotencyKey,
+        sellerShareHeld: centsToDollars(payoutCents),
+        sellerPayoutStatus: 'held',
+        isSandbox: true,
+        createdAt: new Date().toISOString()
+      };
     store.saveTransaction(tx);
 
     return {
@@ -530,6 +612,8 @@ export class PayPalService {
 
       const captureData = await response.json() as any;
       const captureDetails = captureData.purchase_units?.[0]?.payments?.captures?.[0];
+      const grossCents = tx.amountCents ?? agreement.finalPriceCents ?? dollarsToCents(tx.amount);
+      const { feeCents, payoutCents } = computeFeeAndPayoutCents(grossCents, config.platformFeePercent);
 
       tx.paypalCaptureId = captureDetails?.id || `CAP-${uuidv4().substring(0, 10).toUpperCase()}`;
       tx.paymentStatus = 'completed';
@@ -537,15 +621,26 @@ export class PayPalService {
       tx.paypalPayerEmail = captureData.payer?.email_address || 'buyer@sandbox.vyro.network';
       tx.paypalPayerName = `${captureData.payer?.name?.given_name || 'Autonomous'} ${captureData.payer?.name?.surname || 'Buyer'}`;
       
-      // Ledger: Funds held for platform, simulate payout to seller
+      // Ledger: Buyer paid platform merchant; platform holds seller's net share until buyer accepts work
       tx.sellerUserId = agreement.sellerUserId;
-      tx.sellerShareHeld = tx.amount;
-      tx.sellerPayoutStatus = 'simulated_paid';
-      tx.sellerPayoutAt = new Date().toISOString();
+      tx.amountCents = grossCents;
+      tx.platformFeeCents = feeCents;
+      tx.sellerPayoutCents = payoutCents;
+      tx.sellerShareHeld = centsToDollars(payoutCents);
+      tx.sellerPayoutStatus = 'held';
+      tx.sellerPayoutAt = undefined;
 
       store.saveTransaction(tx);
+
+      agreement.platformFeeCents = feeCents;
+      agreement.sellerPayoutCents = payoutCents;
+      agreement.workAcceptanceStatus = agreement.workAcceptanceStatus || 'pending';
+      store.saveAgreement(agreement);
+      this.recordEscrowHoldLedger(tx.negotiationId, grossCents, feeCents, payoutCents, tx.currency);
     } else {
       // Deterministic Sandbox Capture
+      const grossCents = tx.amountCents ?? agreement.finalPriceCents ?? dollarsToCents(tx.amount);
+      const { feeCents, payoutCents } = computeFeeAndPayoutCents(grossCents, config.platformFeePercent);
       const simulatedCaptureId = `CAP-SANDBOX-${uuidv4().substring(0, 10).toUpperCase()}`;
       tx.paypalCaptureId = simulatedCaptureId;
       tx.paymentStatus = 'completed';
@@ -553,13 +648,22 @@ export class PayPalService {
       tx.paypalPayerEmail = 'studio.buyer@sandbox.vyro.network';
       tx.paypalPayerName = 'Studio Procurement Officer';
 
-      // Ledger
+      // Ledger: held until buyer accepts work
       tx.sellerUserId = agreement.sellerUserId;
-      tx.sellerShareHeld = tx.amount;
-      tx.sellerPayoutStatus = 'simulated_paid';
-      tx.sellerPayoutAt = new Date().toISOString();
+      tx.amountCents = grossCents;
+      tx.platformFeeCents = feeCents;
+      tx.sellerPayoutCents = payoutCents;
+      tx.sellerShareHeld = centsToDollars(payoutCents);
+      tx.sellerPayoutStatus = 'held';
+      tx.sellerPayoutAt = undefined;
 
       store.saveTransaction(tx);
+
+      agreement.platformFeeCents = feeCents;
+      agreement.sellerPayoutCents = payoutCents;
+      agreement.workAcceptanceStatus = agreement.workAcceptanceStatus || 'pending';
+      store.saveAgreement(agreement);
+      this.recordEscrowHoldLedger(tx.negotiationId, grossCents, feeCents, payoutCents, tx.currency);
     }
 
     // Update Negotiation and Request statuses
@@ -579,8 +683,8 @@ export class PayPalService {
 
     store.logActivity({
       type: 'paypal_payment_completed',
-      title: `PayPal Sandbox Payment Captured: $${tx.amount} ${tx.currency}`,
-      description: `Commercial agreement ${tx.agreementId} fully settled with ${tx.sellerBusinessName}. Capture ID: ${tx.paypalCaptureId}. Seller payout simulated.`,
+      title: `PayPal Sandbox Payment Captured: ${formatCents(tx.amountCents ?? dollarsToCents(tx.amount))} ${tx.currency}`,
+      description: `Held in escrow for ${tx.sellerBusinessName}. Service fee: ${formatCents(tx.platformFeeCents || 0)}. Seller receives ${formatCents(tx.sellerPayoutCents || 0)} after buyer accepts work.`,
       transactionId: tx.id,
       negotiationId: tx.negotiationId,
       amount: tx.amount,
@@ -591,11 +695,38 @@ export class PayPalService {
     return tx;
   }
 
+  private recordEscrowHoldLedger(
+    dealId: string,
+    grossCents: number,
+    feeCents: number,
+    payoutCents: number,
+    currency: string
+  ) {
+    const existing = store.getLedgerEntriesForDeal(dealId);
+    if (!existing.some(e => e.type === 'buyer_paid')) {
+      store.addLedgerEntry({ dealId, type: 'buyer_paid', amountCents: grossCents, currency, note: 'Buyer payment captured by platform merchant' });
+    }
+    if (!existing.some(e => e.type === 'platform_fee')) {
+      store.addLedgerEntry({ dealId, type: 'platform_fee', amountCents: feeCents, currency, note: `Platform service fee (${config.platformFeePercent}%)` });
+    }
+    if (!existing.some(e => e.type === 'held_for_seller')) {
+      store.addLedgerEntry({ dealId, type: 'held_for_seller', amountCents: payoutCents, currency, note: 'Net seller share held pending buyer work acceptance' });
+    }
+  }
+
   /**
    * Settles an authorized agreement using simulated instant platform escrow.
    * Useful for development, end-to-end integration testing, or offline sandbox tests.
    */
   async settleMockOrder(agreementId: string, requestingUserId?: string): Promise<Transaction> {
+    if (config.nodeEnv === 'production') {
+      throw new PayPalApiException({
+        status: 403,
+        code: 'SIMULATED_DISABLED_IN_PROD',
+        message: 'Simulated settlement is disabled in production.',
+        nextStep: 'Use the official PayPal checkout button.'
+      });
+    }
     const agreement = store.getAgreement(agreementId);
     if (!agreement || (requestingUserId && agreement.buyerUserId !== requestingUserId)) {
       throw new PayPalApiException({
@@ -626,37 +757,47 @@ export class PayPalService {
     }
 
     const currency = 'USD';
+    const grossCents = agreement.finalPriceCents ?? dollarsToCents(agreement.finalPrice);
+    const { feeCents, payoutCents } = computeFeeAndPayoutCents(grossCents, config.platformFeePercent);
     const simulatedOrderId = `PAYID-MOCK-${uuidv4().substring(0, 10).toUpperCase()}`;
     const simulatedCaptureId = `CAP-MOCK-${uuidv4().substring(0, 10).toUpperCase()}`;
 
     const tx: Transaction = {
-      id: `tx_${uuidv4().substring(0, 8)}`,
+      id: existingTx ? existingTx.id : `tx_${uuidv4().substring(0, 8)}`,
       agreementId: agreement.id,
       negotiationId: agreement.negotiationId,
       requestId: agreement.requestId,
       buyerUserId: agreement.buyerUserId,
       sellerUserId: agreement.sellerUserId,
-      buyerAgentName: 'Buyer Agent',
+      buyerAgentName: existingTx?.buyerAgentName || 'Buyer Agent',
       sellerAgentId: agreement.sellerAgentId,
       sellerBusinessName: agreement.sellerBusinessName,
-      serviceTitle: 'Commercial Agreement Contract',
-      amount: agreement.finalPrice,
+      serviceTitle: existingTx?.serviceTitle || 'Commercial Agreement Contract',
+      amount: centsToDollars(grossCents),
+      amountCents: grossCents,
+      platformFeeCents: feeCents,
+      sellerPayoutCents: payoutCents,
       currency,
       paypalOrderId: simulatedOrderId,
       paypalCaptureId: simulatedCaptureId,
       paypalPayerEmail: 'buyer.studio@sandbox.vyro.network',
       paypalPayerName: 'Platform Escrow Buyer',
       paymentStatus: 'completed',
-      idempotencyKey: `mock_idem_${uuidv4().substring(0, 10)}`,
-      sellerShareHeld: agreement.finalPrice,
-      sellerPayoutStatus: 'simulated_paid',
-      sellerPayoutAt: new Date().toISOString(),
+      idempotencyKey: existingTx?.idempotencyKey || `mock_idem_${uuidv4().substring(0, 10)}`,
+      sellerShareHeld: centsToDollars(payoutCents),
+      sellerPayoutStatus: 'held',
       isSandbox: true,
-      createdAt: new Date().toISOString(),
+      createdAt: existingTx?.createdAt || new Date().toISOString(),
       completedAt: new Date().toISOString()
     };
 
     store.saveTransaction(tx);
+
+    agreement.platformFeeCents = feeCents;
+    agreement.sellerPayoutCents = payoutCents;
+    agreement.workAcceptanceStatus = agreement.workAcceptanceStatus || 'pending';
+    store.saveAgreement(agreement);
+    this.recordEscrowHoldLedger(tx.negotiationId, grossCents, feeCents, payoutCents, currency);
 
     const negotiation = store.getNegotiation(tx.negotiationId);
     if (negotiation) {
@@ -674,13 +815,126 @@ export class PayPalService {
 
     store.logActivity({
       type: 'paypal_payment_completed',
-      title: `Platform Escrow Payment Settled: $${tx.amount} ${tx.currency}`,
-      description: `Commercial agreement ${tx.agreementId} fully settled with ${tx.sellerBusinessName}. Capture ID: ${tx.paypalCaptureId}.`,
+      title: `Platform Escrow Payment Settled: ${formatCents(grossCents)} ${tx.currency}`,
+      description: `Held in escrow for ${tx.sellerBusinessName}. Service fee: ${formatCents(feeCents)}. Seller receives ${formatCents(payoutCents)} after buyer accepts work.`,
       transactionId: tx.id,
       negotiationId: tx.negotiationId,
       amount: tx.amount,
       currency: tx.currency,
       severity: 'success'
+    });
+
+    return tx;
+  }
+
+  /**
+   * Refunds a captured payment back to the buyer before payout is completed.
+   */
+  async refundPayment(agreementId: string, reason: string, requestingUserId?: string): Promise<Transaction> {
+    const agreement = store.getAgreement(agreementId);
+    if (!agreement || (requestingUserId && agreement.buyerUserId !== requestingUserId && agreement.sellerUserId !== requestingUserId)) {
+      throw new PayPalApiException({
+        status: 404,
+        code: 'AGREEMENT_NOT_FOUND',
+        message: 'Agreement not found or access denied.',
+        nextStep: 'Ensure you are authorized on this deal.'
+      });
+    }
+
+    const tx = store.getTransactionByAgreement(agreementId);
+    if (!tx) {
+      throw new PayPalApiException({
+        status: 404,
+        code: 'TRANSACTION_NOT_FOUND',
+        message: 'No payment transaction found for this deal.',
+        nextStep: 'Verify payment was completed.'
+      });
+    }
+
+    if (tx.paymentStatus === 'refunded') {
+      return tx; // Idempotent
+    }
+    if (tx.paymentStatus !== 'completed') {
+      throw new PayPalApiException({
+        status: 409,
+        code: 'NOT_REFUNDABLE',
+        message: 'Only completed payments can be refunded.',
+        nextStep: 'Check payment status first.'
+      });
+    }
+    if (tx.sellerPayoutStatus === 'paid' || tx.sellerPayoutStatus === 'simulated_paid') {
+      throw new PayPalApiException({
+        status: 409,
+        code: 'PAYOUT_ALREADY_RELEASED',
+        message: 'Cannot refund because seller payout has already been released.',
+        nextStep: 'Open a dispute ticket if work was misrepresented.'
+      });
+    }
+
+    const cleanReason = (reason || 'Refund requested by parties').trim();
+    const isRealCapture = Boolean(
+      tx.paypalCaptureId &&
+      this.isConfigured() &&
+      !tx.paypalCaptureId.startsWith('CAP-SANDBOX-') &&
+      !tx.paypalCaptureId.startsWith('CAP-MOCK-') &&
+      !tx.paypalCaptureId.startsWith('CAPTURE-')
+    );
+
+    let refundId = `REF-${uuidv4().substring(0, 10).toUpperCase()}`;
+    if (isRealCapture) {
+      const token = await this.getAccessToken();
+      const res = await fetch(`${this.baseUrl}/v2/payments/captures/${tx.paypalCaptureId}/refund`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'PayPal-Request-Id': `ref_${tx.id}`
+        },
+        body: JSON.stringify({ note_to_payer: cleanReason.slice(0, 255) })
+      });
+      const debugId = res.headers.get('paypal-debug-id');
+      if (!res.ok) {
+        let errJson: any;
+        try { errJson = await res.json(); } catch { errJson = { message: await res.text() }; }
+        throw new PayPalApiException(mapPayPalError(res.status, errJson, debugId));
+      }
+      const json = await res.json() as any;
+      refundId = json.id || refundId;
+    }
+
+    const now = new Date().toISOString();
+    tx.paymentStatus = 'refunded';
+    tx.sellerPayoutStatus = 'refunded';
+    tx.refundId = refundId;
+    tx.refundedAt = now;
+    tx.refundReason = cleanReason;
+    store.saveTransaction(tx);
+
+    agreement.workAcceptanceStatus = 'refunded';
+    agreement.disputeReason = cleanReason;
+    store.saveAgreement(agreement);
+
+    const grossCents = tx.amountCents ?? dollarsToCents(tx.amount);
+    const hasRefundLedger = store.getLedgerEntriesForDeal(tx.negotiationId).some(e => e.type === 'refund');
+    if (!hasRefundLedger) {
+      store.addLedgerEntry({
+        dealId: tx.negotiationId,
+        type: 'refund',
+        amountCents: grossCents,
+        currency: tx.currency,
+        note: `Refund ${refundId}: ${cleanReason}`
+      });
+    }
+
+    store.logActivity({
+      type: 'paypal_refund_completed',
+      title: `Refund processed: ${formatCents(grossCents)}`,
+      description: `Refund ID ${refundId} issued to buyer. Reason: ${cleanReason}`,
+      transactionId: tx.id,
+      negotiationId: tx.negotiationId,
+      amount: tx.amount,
+      currency: tx.currency,
+      severity: 'info'
     });
 
     return tx;

@@ -2,7 +2,9 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { MotionProvider } from './context/MotionContext';
+import { RouteProgressBar } from './components/common/RouteProgressBar';
 
 // Public Pages
 import { LandingPage } from './pages/public/LandingPage';
@@ -44,26 +46,27 @@ const RedirectDealParam: React.FC = () => {
   return <Navigate to={`/app/deals/${id}`} replace />;
 };
 
-export const App: React.FC = () => {
+const AppShell: React.FC = () => {
+  const { user } = useAuth();
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <Toaster
-          position="bottom-right"
-          toastOptions={{
-            style: {
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border-subtle)',
-              color: 'var(--color-text-primary)',
-              fontSize: '14px',
-              fontWeight: '500',
-              borderRadius: '10px',
-              fontFamily: '"Hanken Grotesk", sans-serif'
-            }
-          }}
-        />
-        <BrowserRouter>
-          <Routes>
+    <MotionProvider userPreference={user?.motionPreference}>
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          style: {
+            background: 'var(--color-surface)',
+            border: '1px solid var(--color-border-subtle)',
+            color: 'var(--color-text-primary)',
+            fontSize: '14px',
+            fontWeight: '500',
+            borderRadius: '10px',
+            fontFamily: '"Hanken Grotesk", sans-serif',
+          },
+        }}
+      />
+      <BrowserRouter>
+        <RouteProgressBar />
+        <Routes>
             {/* Public Routes */}
             <Route path="/" element={<LandingPage />} />
             <Route path="/styleguide" element={<StyleguidePage />} />
@@ -121,6 +124,15 @@ export const App: React.FC = () => {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </BrowserRouter>
+    </MotionProvider>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <AppShell />
       </AuthProvider>
     </QueryClientProvider>
   );

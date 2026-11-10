@@ -1,3 +1,5 @@
+import { FlexibilityTier } from './money.js';
+
 export type PaymentTerm = 'upfront' | 'escrow_milestone' | 'net_30';
 
 export interface ScopeItem {
@@ -32,8 +34,12 @@ export interface SellerProfile {
   businessName: string;
   listPrice: number;
   standardFloor: number;
-  stretchPct: number; // default 0.12 (12% stretch below standard floor)
-  hardFloor: number; // calculated: standardFloor * (1 - stretchPct), never below
+  stretchPct: number; // 0.0 (strict), 0.10 (flexible), 0.20 (very_flexible)
+  flexibility?: FlexibilityTier;
+  hardFloor: number; // calculated: standardFloor * (1 - stretchPct), absolute minimum
+  listPriceCents?: number;
+  standardFloorCents?: number;
+  hardFloorCents?: number;
   capacity: number; // 1 (overloaded) to 10 (wide open capacity)
   minDeliveryDays: number;
   standardDeliveryDays: number;
@@ -49,7 +55,13 @@ export interface BuyerProfile {
   agentId: string;
   displayName: string;
   targetPrice: number;
-  maxBudget: number; // hard ceiling, never above
+  maxBudget: number; // buyer comfortable budget ("My budget")
+  flexibility?: FlexibilityTier;
+  stretchPct?: number; // 0.0, 0.10, 0.20
+  hardCap?: number; // calculated: budget * (1 + stretchPct)
+  targetPriceCents?: number;
+  budgetCents?: number;
+  hardCapCents?: number;
   idealDeliveryDays: number;
   latestDeliveryDays: number; // hard deadline
   scopeItems: ScopeItem[];

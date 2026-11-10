@@ -1,5 +1,8 @@
 import React from 'react';
+import { motion } from 'framer-motion';
 import { Button } from './Button';
+import { useMotionPreference } from '../../context/MotionContext';
+import { MOTION_DURATION, MOTION_EASE } from '../../lib/motion';
 
 export interface EmptyStateProps {
   type?: 'inbox' | 'deals' | 'listings' | 'search';
@@ -18,12 +21,19 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   onAction,
   className = '',
 }) => {
+  const { isReduced } = useMotionPreference();
+
   return (
     <div
       className={`w-full bg-surface border border-border-subtle rounded-surface p-10 flex flex-col items-center text-center gap-4 text-text-primary ${className}`}
     >
-      {/* Subject-specific Flat Geometric Spot Art */}
-      <div className="w-24 h-24 rounded-surface bg-raised border border-border-subtle flex items-center justify-center p-4">
+      {/* Subject-specific Flat Geometric Spot Art (one-time <= 320ms entrance) */}
+      <motion.div
+        initial={isReduced ? { opacity: 0 } : { opacity: 0, scale: 0.94, y: 6 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: MOTION_DURATION.emphasis, ease: MOTION_EASE.standard }}
+        className="w-24 h-24 rounded-surface bg-raised border border-border-subtle flex items-center justify-center p-4"
+      >
         {type === 'inbox' && (
           <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="12" y="18" width="40" height="32" rx="6" fill="var(--surface)" stroke="var(--border-subtle)" strokeWidth="2" />
@@ -50,7 +60,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
             <line x1="38" y1="38" x2="50" y2="50" stroke="var(--volt)" strokeWidth="3" strokeLinecap="round" />
           </svg>
         )}
-      </div>
+      </motion.div>
 
       <div className="max-w-[420px] flex flex-col gap-1.5">
         <h3 className="font-display font-semibold text-section text-text-primary">

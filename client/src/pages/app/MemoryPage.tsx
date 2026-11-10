@@ -197,7 +197,7 @@ export const MemoryPage: React.FC = () => {
                 />
               </div>
               <span className="text-secondary text-text-muted">
-                Maximum total transactions authorized within a 24-hour window.
+                Daily total transactions authorized within a 24-hour window.
               </span>
             </div>
           </div>
@@ -242,7 +242,7 @@ export const MemoryPage: React.FC = () => {
                 <label className="text-secondary text-text-muted">Rule title or subject</label>
                 <input
                   type="text"
-                  placeholder="e.g. Turnaround ceiling"
+                  placeholder="e.g. Delivery limit"
                   value={newKey}
                   onChange={(e) => setNewKey(e.target.value)}
                   className="w-full h-11 px-4 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt"

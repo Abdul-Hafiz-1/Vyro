@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../api/client';
-import { ListingCategory } from '../../types';
+import { ListingCategory, FlexibilityTier } from '../../types';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { StatusChip } from '../../components/common/StatusChip';
@@ -37,6 +37,7 @@ export const ListingEditorPage: React.FC = () => {
   const [category, setCategory] = useState<ListingCategory>('Design');
   const [price, setPrice] = useState<number | ''>(350);
   const [minAcceptablePrice, setMinAcceptablePrice] = useState<number | ''>(280);
+  const [flexibility, setFlexibility] = useState<FlexibilityTier>('flexible');
   const [deliveryDays, setDeliveryDays] = useState<number | ''>(5);
   const [deliverables, setDeliverables] = useState<string[]>([
     'Complete primary deliverable package',
@@ -44,6 +45,9 @@ export const ListingEditorPage: React.FC = () => {
     'Quality verification checklist'
   ]);
   const [newDeliverableText, setNewDeliverableText] = useState('');
+
+  const sellerStretchFactor = flexibility === 'strict' ? 1 : flexibility === 'very_flexible' ? 0.8 : 0.9;
+  const computedHardMin = Math.round((Number(minAcceptablePrice) || 0) * sellerStretchFactor);
 
   const { data: existingListing } = useQuery({
     queryKey: ['listing', id],
@@ -58,6 +62,7 @@ export const ListingEditorPage: React.FC = () => {
       setCategory(existingListing.category || 'Design');
       setPrice(existingListing.price || 350);
       setMinAcceptablePrice(existingListing.minAcceptablePrice || 280);
+      if (existingListing.flexibility) setFlexibility(existingListing.flexibility);
       setDeliveryDays(existingListing.deliveryDays || 5);
       if (existingListing.deliverables?.length) {
         setDeliverables(existingListing.deliverables);
@@ -74,6 +79,7 @@ export const ListingEditorPage: React.FC = () => {
         type: 'service' as const,
         price: Number(price) || 350,
         minAcceptablePrice: Number(minAcceptablePrice) || Math.round(Number(price) * 0.8),
+        flexibility,
         deliveryDays: Number(deliveryDays) || 5,
         deliverables,
         isNegotiable: true,
@@ -344,23 +350,23 @@ export const ListingEditorPage: React.FC = () => {
         </div>
       )}
 
-      {/* STEP 3: Price & floor */}
+      {/* STEP 3: Price & lowest */}
       {step === 3 && (
         <div className="flex flex-col gap-8">
           <div className="flex flex-col gap-2">
             <h1 className="font-display font-bold text-[32px] text-text-primary tracking-tight">
-              Pricing and floor limit
+              Pricing and flexibility
             </h1>
             <p className="text-body text-text-muted">
-              Set your public asking price and your private minimum floor for autonomous negotiations.
+              Set your list price, the lowest price you’d normally take, and whether your agent can stretch for trade-offs.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {/* Public Asking Price */}
+            {/* Public List Price */}
             <div className="flex flex-col gap-2">
               <label className="text-secondary font-medium text-text-primary">
-                Public asking price
+                List price
               </label>
               <div className="relative">
                 <DollarSign className="w-5 h-5 text-text-muted absolute left-4 top-3.5 pointer-events-none" />
@@ -379,15 +385,15 @@ export const ListingEditorPage: React.FC = () => {
               </span>
             </div>
 
-            {/* Private Floor Price */}
+            {/* Standard Lowest Price */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <label className="text-secondary font-medium text-text-primary">
-                  Private floor price
+                  Lowest price I’d normally take
                 </label>
                 <div className="flex items-center gap-1 text-secondary text-status-handled">
                   <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>Strictly private</span>
+                  <span>Private</span>
                 </div>
               </div>
               <div className="relative">
@@ -405,20 +411,46 @@ export const ListingEditorPage: React.FC = () => {
                 />
               </div>
               <span className="text-secondary text-text-muted">
-                Lowest price your agent can accept without asking you.
+                Lowest rate your agent can accept automatically.
               </span>
             </div>
           </div>
 
-          {/* Visual Corridor Explainer */}
-          <Card className="p-5 flex flex-col gap-3 bg-raised">
-            <span className="text-secondary font-semibold text-text-primary">
-              How your seller agent negotiates
-            </span>
-            <p className="text-secondary text-text-muted leading-relaxed">
-              When a buyer makes an offer, your agent starts at {formatMoney(Number(price) || 0)}. If the buyer pushes for concessions, your agent can negotiate down to your private floor of {formatMoney(Number(minAcceptablePrice) || 0)} in exchange for favorable delivery turnaround or reduced scope.
+          {/* Seller Flexibility Segmented Control + Live Calculated Sentence */}
+          <div className="flex flex-col gap-3 p-4 rounded-surface bg-surface border border-border-subtle">
+            <span className="text-secondary font-medium text-text-primary">Flexibility</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {([
+                { id: 'strict', label: 'Hold firm' },
+                { id: 'flexible', label: 'Flexible, down to −10%' },
+                { id: 'very_flexible', label: 'Very flexible, down to −20%' }
+              ] as const).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFlexibility(opt.id)}
+                  className={`h-11 px-3 rounded-[10px] text-secondary font-medium transition-colors cursor-pointer ${
+                    flexibility === opt.id
+                      ? 'bg-volt text-[#0C0E0D] font-bold'
+                      : 'bg-raised border border-border-subtle text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-secondary text-text-muted">
+              {(() => {
+                const std = Number(minAcceptablePrice) || 0;
+                const pct = flexibility === 'strict' ? 0 : flexibility === 'very_flexible' ? 0.2 : 0.1;
+                const absMin = Math.round(std * (1 - pct));
+                const flexWord = flexibility === 'strict' ? 'Hold firm' : flexibility === 'very_flexible' ? 'Very flexible' : 'Flexible';
+                return flexibility === 'strict'
+                  ? `With ${formatMoney(std)} lowest and Hold firm, I will never accept below ${formatMoney(std)}.`
+                  : `With ${formatMoney(std)} lowest and ${flexWord}, I can negotiate trades (more days, smaller scope, or upfront pay) and ask your OK down to ${formatMoney(absMin)}.`;
+              })()}
             </p>
-          </Card>
+          </div>
 
           <div className="flex items-center justify-between pt-4 border-t border-border-subtle">
             <Button
@@ -475,13 +507,13 @@ export const ListingEditorPage: React.FC = () => {
               </div>
 
               <div className="p-4 bg-raised rounded-control flex flex-col gap-1">
-                <span className="text-secondary text-text-muted">Private floor price</span>
+                <span className="text-secondary text-text-muted">Standard lowest price</span>
                 <span className="font-display font-bold text-[28px] text-text-primary">
                   {formatMoney(Number(minAcceptablePrice))}
                 </span>
                 <span className="text-secondary text-status-handled flex items-center gap-1">
                   <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>Hidden from buyers</span>
+                  <span>Hidden from buyers ({flexibility === 'strict' ? 'Stick to lowest' : flexibility === 'very_flexible' ? `up to -20% (${formatMoney(computedHardMin)})` : `up to -10% (${formatMoney(computedHardMin)})`})</span>
                 </span>
               </div>
             </div>

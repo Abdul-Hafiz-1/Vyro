@@ -13,6 +13,9 @@ export function seedDatabase(force: boolean = false): void {
   // Clear tables if force seeding
   if (force) {
     db.exec(`
+      DELETE FROM ledger_entries;
+      DELETE FROM payouts;
+      DELETE FROM seller_payout_accounts;
       DELETE FROM audit_logs;
       DELETE FROM tuning_overrides;
       DELETE FROM review_queue;
@@ -968,6 +971,31 @@ export function seedDatabase(force: boolean = false): void {
     'warning',
     now
   );
+
+  // 11. Seller Payout Accounts for canonical specialists (sandbox emails)
+  const insertPayoutAccount = db.prepare(`
+    INSERT OR REPLACE INTO seller_payout_accounts (
+      id, user_id, provider, paypal_email, status, verified_at, last_error, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  const seededSellers: Array<[string, string]> = [
+    ['usr_marcus_vance', 'sb-marcus-vance@personal.example.com'],
+    ['usr_elena_rostova', 'sb-elena-rostova@personal.example.com'],
+    ['usr_chen_wei', 'sb-chen-wei@personal.example.com'],
+    ['usr_sophia_martinez', 'sb-sophia-martinez@personal.example.com'],
+  ];
+  for (const [uid, email] of seededSellers) {
+    insertPayoutAccount.run(`spa_${uid}`, uid, 'paypal_email', email, 'ready', now, null, now, now);
+  }
+
+  // Ledger entries for seeded completed tx_seed_001 ($160)
+  const insertLedger = db.prepare(`
+    INSERT OR IGNORE INTO ledger_entries (id, deal_id, type, amount_cents, currency, note, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+  insertLedger.run('led_seed_01', 'neg_auto_001', 'buyer_paid', 16000, 'USD', 'Seeded PayPal capture', pastDay);
+  insertLedger.run('led_seed_02', 'neg_auto_001', 'platform_fee', 800, 'USD', 'Platform service fee (5%)', pastDay);
+  insertLedger.run('led_seed_03', 'neg_auto_001', 'held_for_seller', 15200, 'USD', 'Held for Marcus Vance Studio pending buyer acceptance', pastDay);
 
   console.log('[DB] Canonical SQLite database seeded successfully.');
   try {

@@ -231,6 +231,19 @@ export async function seedDemoAccounts(): Promise<{ buyer: User; seller: User }>
   };
   store.saveMemoryItem(sellerRule);
 
+  // Ready sandbox payout account for demo seller
+  store.saveSellerPayoutAccount({
+    id: 'spa_usr_demo_seller',
+    userId: sellerId,
+    provider: 'paypal_email',
+    paypalEmail: 'sb-demo-seller@personal.example.com',
+    status: 'ready',
+    verifiedAt: now,
+    lastError: null,
+    createdAt: now,
+    updatedAt: now
+  });
+
   console.log('[DB] Demo accounts created successfully:');
   console.log('     Buyer:  demo.buyer@example.com  / password123');
   console.log('     Seller: demo.seller@example.com / password123');

@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import { store } from '../db/store.js';
+import { config } from '../config/index.js';
 import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
 
 const router = Router();
@@ -10,7 +11,15 @@ router.use(authenticateUser);
 // Strictly scoped to caller as buyer or seller
 router.get('/', (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  const transactions = store.getTransactions(user.id);
+  const transactions = store.getTransactions(user.id).map(tx => {
+    const payout = store.getPayoutByDeal(tx.negotiationId) || null;
+    return {
+      ...tx,
+      payout,
+      platformFeePercent: config.platformFeePercent,
+      viewerRole: tx.buyerUserId === user.id ? 'buyer' : 'seller'
+    };
+  });
   return res.json({ success: true, count: transactions.length, data: transactions });
 });
 
@@ -26,6 +35,10 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   const agreement = store.getAgreement(tx.agreementId);
   const negotiation = store.getNegotiation(tx.negotiationId);
   const sellerAgent = store.getAgent(tx.sellerAgentId);
+  const payout = store.getPayoutByDeal(tx.negotiationId) || null;
+  const ledger = store.getLedgerEntriesForDeal(tx.negotiationId);
+  const isSeller = tx.sellerUserId === user.id;
+  const payoutAccount = isSeller ? store.getSellerPayoutAccount(user.id) : undefined;
 
   return res.json({
     success: true,
@@ -33,7 +46,12 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
       ...tx,
       agreement,
       negotiation,
-      sellerAgent
+      sellerAgent,
+      payout,
+      ledger,
+      platformFeePercent: config.platformFeePercent,
+      viewerRole: isSeller ? 'seller' : 'buyer',
+      sellerPayoutEmail: isSeller ? payoutAccount?.paypalEmail : undefined
     }
   });
 });

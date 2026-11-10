@@ -101,7 +101,7 @@ export const InspectDetailsDrawer: React.FC<InspectDetailsDrawerProps> = ({
                   All counterparty messages are quarantined within strict containment tags (&lt;&lt;&lt;UNTRUSTED_COUNTERPARTY_MESSAGE&gt;&gt;&gt;) to neutralize prompt injections.
                 </p>
                 <div className="pt-2 border-t border-emerald-500/20 text-[11px] flex justify-between">
-                  <span>Buyer Ceiling & Seller Floor:</span>
+                  <span>Buyer Budget & Seller Lowest:</span>
                   <span className="text-emerald-300 font-bold">100% Isolated / Never Leaked</span>
                 </div>
               </div>

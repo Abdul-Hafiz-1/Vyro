@@ -14,7 +14,10 @@ import {
   UserCapabilities,
   WorkspaceType,
   HomePayload,
-  Proposal
+  Proposal,
+  PayoutRecord,
+  LedgerEntry,
+  SellerPayoutAccount
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -99,6 +102,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ action, note, suggestRule })
     }),
+  undoReviewItem: (id: string) =>
+    fetchJson<{ success: boolean; data: any }>(`${API_BASE}/home/review/${id}/undo`, {
+      method: 'POST'
+    }),
   setAutomationPaused: (isPaused: boolean) =>
     fetchJson<{ success: boolean; data: { isAutomationPaused: boolean } }>(`${API_BASE}/home/automation-pause`, {
       method: 'PATCH',
@@ -123,8 +130,17 @@ export const api = {
     fetchJson<User>(`${API_BASE}/auth/capabilities`, { method: 'PATCH', body: JSON.stringify(capabilities) }),
   updateWorkspace: (workspace: WorkspaceType) =>
     fetchJson<User>(`${API_BASE}/auth/workspace`, { method: 'PATCH', body: JSON.stringify({ workspace }) }),
-  updateProfile: (payload: { displayName?: string; bio?: string; avatarUrl?: string; activeWorkspace?: WorkspaceType; isAutomationPaused?: boolean; buyerPreferences?: any; sellerProfile?: any }) =>
-    fetchJson<User>(`${API_BASE}/auth/profile`, { method: 'PATCH', body: JSON.stringify(payload) }),
+  updateProfile: (payload: {
+    displayName?: string;
+    bio?: string;
+    avatarUrl?: string;
+    activeWorkspace?: WorkspaceType;
+    isAutomationPaused?: boolean;
+    buyerPreferences?: any;
+    sellerProfile?: any;
+    motionPreference?: 'full' | 'reduced' | 'system';
+    coachMarksDismissed?: string[];
+  }) => fetchJson<User>(`${API_BASE}/auth/profile`, { method: 'PATCH', body: JSON.stringify(payload) }),
   changePassword: (payload: { currentPassword: string; newPassword: string }) =>
     fetchJson<{ success: boolean; message: string }>(`${API_BASE}/auth/change-password`, {
       method: 'POST',
@@ -214,6 +230,13 @@ export const api = {
     decision?: any;
     queueItem?: any;
     proposals?: Proposal[];
+    transaction?: Transaction | null;
+    payout?: PayoutRecord | null;
+    ledger?: LedgerEntry[];
+    platformFeePercent?: number;
+    sellerPayoutReady?: boolean;
+    sellerPayoutAccount?: SellerPayoutAccount | null;
+    userRole?: 'buyer' | 'seller';
   }>(`${API_BASE}/negotiations/${id}`),
   initiateNegotiation: (requestId: string, sellerAgentId: string) => fetchJson<Negotiation>(`${API_BASE}/negotiations/initiate`, { method: 'POST', body: JSON.stringify({ requestId, sellerAgentId }) }),
   stepNegotiation: (id: string) => fetchJson<Negotiation>(`${API_BASE}/negotiations/${id}/step`, { method: 'POST' }),
@@ -243,11 +266,34 @@ export const api = {
   sellerAcceptAgreement: (id: string) => fetchJson<Agreement>(`${API_BASE}/agreements/${id}/seller-accept`, { method: 'POST' }),
 
   // Payments & PayPal Sandbox
-  getPayPalConfig: () => fetchJson<{ clientId: string; env: string; mode: string; isConfigured: boolean }>(`${API_BASE}/payments/config`),
+  getPayPalConfig: () => fetchJson<{ clientId: string; env: string; mode: string; isConfigured: boolean; platformFeePercent?: number; payoutProvider?: string }>(`${API_BASE}/payments/config`),
   getPaymentsHealth: () => fetchJson<{ ok: boolean; connected: boolean; env: string; appId?: string; debugId?: string; reason?: string }>(`${API_BASE}/payments/health`),
+  getPaymentDiagnostics: () => fetchJson<{
+    tokenOk: boolean;
+    tokenDebugId?: string;
+    tokenReason?: string;
+    payoutsEnabled: boolean;
+    payoutsDebugId?: string;
+    payoutsReason?: string;
+    providerInUse: string;
+    platformFeePercent: number;
+    merchantEmailConfigured: boolean;
+    lastCreateOrderResult: any;
+    env: string;
+  }>(`${API_BASE}/payments/diagnostics`),
   createPayPalOrder: (agreementId: string, idempotencyKey?: string) => fetchJson<{ orderId: string; approvalUrl?: string; amount: number; currency: string; status: string; isSimulated: boolean }>(`${API_BASE}/payments/create-order`, { method: 'POST', body: JSON.stringify({ agreementId, idempotencyKey }) }),
   capturePayPalOrder: (orderId: string, idempotencyKey?: string) => fetchJson<Transaction>(`${API_BASE}/payments/capture-order`, { method: 'POST', body: JSON.stringify({ orderId, idempotencyKey }) }),
   settlePaymentMock: (agreementId: string) => fetchJson<Transaction>(`${API_BASE}/payments/mock-settle`, { method: 'POST', body: JSON.stringify({ agreementId }) }),
+  refundPayment: (agreementId: string, reason?: string) => fetchJson<Transaction>(`${API_BASE}/payments/refund`, { method: 'POST', body: JSON.stringify({ agreementId, reason }) }),
+
+  // Seller Payouts & Work Acceptance
+  getSellerPayoutAccount: () => fetchJson<{ account: any; platformFeePercent: number; providerInUse: string; isSandbox: boolean }>(`${API_BASE}/payouts/account`),
+  saveSellerPayoutAccount: (paypalEmail: string) => fetchJson<{ account: any; platformFeePercent: number; providerInUse: string; isSandbox: boolean }>(`${API_BASE}/payouts/account`, { method: 'PUT', body: JSON.stringify({ paypalEmail }) }),
+  getPayouts: () => fetchJson<any[]>(`${API_BASE}/payouts`),
+  acceptDealWork: (dealId: string) => fetchJson<{ payout: any; ledger: any[] }>(`${API_BASE}/negotiations/${dealId}/accept-work`, { method: 'POST' }),
+  reportDealProblem: (dealId: string, reason: string) => fetchJson<Agreement>(`${API_BASE}/negotiations/${dealId}/report-problem`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  retryPayout: (payoutId: string) => fetchJson<any>(`${API_BASE}/payouts/${payoutId}/retry`, { method: 'POST' }),
+  refreshPayoutStatus: (payoutId: string) => fetchJson<any>(`${API_BASE}/payouts/${payoutId}/refresh`, { method: 'POST' }),
 
   // Transactions
   getTransactions: () => fetchJson<Transaction[]>(`${API_BASE}/transactions`),

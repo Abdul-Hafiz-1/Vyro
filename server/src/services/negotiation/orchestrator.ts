@@ -1,7 +1,9 @@
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../../db/store.js';
+import { config } from '../../config/index.js';
 import { geminiService } from '../ai/gemini.js';
-import { decisionEngine } from '../decision/engine.js';
+import { decisionEngine, PROHIBITED_CATEGORIES } from '../decision/engine.js';
+import { payoutService } from '../paypal/payoutService.js';
 import { broadcastEvent } from '../../routes/events.js';
 import {
   Negotiation,
@@ -18,17 +20,45 @@ import {
   PackageOffer,
   PaymentTerm
 } from './types.js';
-import { negotiationEngine } from './engine.js';
-import { calculateBuyerUtility, calculateSellerUtility, analyzeTrade } from './utility.js';
+import {
+  FlexibilityTier,
+  FLEXIBILITY_PCT,
+  dollarsToCents,
+  centsToDollars,
+  formatCents,
+  computeBuyerHardCapCents,
+  computeSellerAbsoluteMinCents,
+  computeFeeAndPayoutCents,
+} from './money.js';
+import {
+  OfferSnapshot,
+  DeterministicBuyerInput,
+  DeterministicSellerInput,
+  computeDeterministicSellerTurn,
+  computeDeterministicBuyerTurn,
+  validateOfferSanity,
+  checkOverlap,
+} from './algorithm.js';
+import { calculateBuyerUtility, calculateSellerUtility } from './utility.js';
 
-export function buildSellerProfile(seller: Agent, request: CommerceRequest): SellerProfile {
+export function buildSellerProfile(seller: Agent, request?: CommerceRequest): SellerProfile {
+  const listings = store.getListings({ sellerId: seller.ownerId, status: 'active' });
+  const matchedListing = request
+    ? listings.find(l => l.sellerAgentId === seller.id && l.category.toLowerCase() === request.category.toLowerCase()) ||
+      listings.find(l => l.sellerAgentId === seller.id)
+    : listings.find(l => l.sellerAgentId === seller.id);
+
   const catalogItem = seller.catalog[0];
-  const listPrice = seller.pricingConstraints?.startingPrice || catalogItem?.startingPrice || 180;
-  const standardFloor = seller.pricingConstraints?.minAcceptablePrice || catalogItem?.minPrice || 145;
-  const stretchPct = 0.12;
-  const hardFloor = Math.round(standardFloor * (1 - stretchPct));
-  const capacity = seller.reputationScore ? Math.round(seller.reputationScore * 10) : 7;
-  const standardDeliveryDays = catalogItem?.deliveryDays || 5;
+  const listPrice = matchedListing?.price || seller.pricingConstraints?.startingPrice || catalogItem?.startingPrice || 180;
+  const standardFloor = matchedListing?.minAcceptablePrice || seller.pricingConstraints?.minAcceptablePrice || catalogItem?.minPrice || 145;
+  const flexibility: FlexibilityTier = matchedListing?.flexibility || 'flexible';
+  const stretchPct = FLEXIBILITY_PCT[flexibility] ?? 0.10;
+  const listPriceCents = matchedListing?.askingPriceCents ?? dollarsToCents(listPrice);
+  const standardFloorCents = matchedListing?.floorPriceCents ?? dollarsToCents(standardFloor);
+  const hardFloorCents = matchedListing?.absoluteMinCents ?? computeSellerAbsoluteMinCents(standardFloorCents, flexibility);
+  const hardFloor = centsToDollars(hardFloorCents);
+  const capacity = (seller as any).reputationScore ? Math.round((seller as any).reputationScore * 10) : 7;
+  const standardDeliveryDays = matchedListing?.deliveryDays || catalogItem?.deliveryDays || 5;
   const minDeliveryDays = 2;
 
   return {
@@ -38,8 +68,12 @@ export function buildSellerProfile(seller: Agent, request: CommerceRequest): Sel
     businessName: seller.businessName,
     listPrice,
     standardFloor,
+    flexibility,
     stretchPct,
     hardFloor,
+    listPriceCents,
+    standardFloorCents,
+    hardFloorCents,
     capacity,
     minDeliveryDays,
     standardDeliveryDays,
@@ -57,9 +91,16 @@ export function buildSellerProfile(seller: Agent, request: CommerceRequest): Sel
 }
 
 export function buildBuyerProfile(buyer: Agent, request: CommerceRequest): BuyerProfile {
-  const maxBudget = request.maxBudget || 150;
-  const targetPrice = Math.round(maxBudget * 0.75);
-  const idealDeliveryDays = Math.max(2, request.deadlineDays - 2);
+  const budgetDollars = request.maxBudget || 150;
+  const budgetCents = request.budgetCents ?? dollarsToCents(budgetDollars);
+  const targetDollars = request.targetBudget ?? Math.round(budgetDollars * 0.8);
+  const targetPriceCents = request.targetPriceCents ?? dollarsToCents(targetDollars);
+  const flexibility: FlexibilityTier = request.flexibility || 'flexible';
+  const stretchPct = FLEXIBILITY_PCT[flexibility] ?? 0.10;
+  const hardCapCents = request.hardCapCents ?? computeBuyerHardCapCents(budgetCents, flexibility);
+  const hardCap = centsToDollars(hardCapCents);
+
+  const idealDeliveryDays = Math.max(2, (request.deadlineDays || 5) - 2);
   const latestDeliveryDays = request.deadlineDays || 5;
 
   const scopeItems = request.deliverables.map((d, i) => ({
@@ -73,8 +114,14 @@ export function buildBuyerProfile(buyer: Agent, request: CommerceRequest): Buyer
     userId: request.userId,
     agentId: buyer.id,
     displayName: buyer.name,
-    targetPrice,
-    maxBudget,
+    targetPrice: centsToDollars(targetPriceCents),
+    maxBudget: budgetDollars,
+    flexibility,
+    stretchPct,
+    hardCap,
+    targetPriceCents,
+    budgetCents,
+    hardCapCents,
     idealDeliveryDays,
     latestDeliveryDays,
     scopeItems,
@@ -85,9 +132,52 @@ export function buildBuyerProfile(buyer: Agent, request: CommerceRequest): Buyer
   };
 }
 
+function toAlgorithmBuyer(bp: BuyerProfile): DeterministicBuyerInput {
+  const mustHaves = bp.scopeItems.filter(s => s.priority === 'must-have').map(s => s.name);
+  const niceToHaves = bp.scopeItems.filter(s => s.priority === 'nice-to-have').map(s => s.name);
+  const budgetCents = bp.budgetCents ?? dollarsToCents(bp.maxBudget);
+  return {
+    targetCents: bp.targetPriceCents ?? dollarsToCents(bp.targetPrice),
+    budgetCents,
+    flexibility: bp.flexibility || 'flexible',
+    hardCapCents: bp.hardCapCents ?? computeBuyerHardCapCents(budgetCents, bp.flexibility || 'flexible'),
+    idealDeliveryDays: bp.idealDeliveryDays,
+    latestDeliveryDays: bp.latestDeliveryDays,
+    mustHaves,
+    niceToHaves,
+    strategy: bp.strategy,
+  };
+}
+
+function toAlgorithmSeller(sp: SellerProfile): DeterministicSellerInput {
+  const stdCents = sp.standardFloorCents ?? dollarsToCents(sp.standardFloor);
+  return {
+    listPriceCents: sp.listPriceCents ?? dollarsToCents(sp.listPrice),
+    standardLowestCents: stdCents,
+    flexibility: sp.flexibility || 'flexible',
+    absoluteMinCents: sp.hardFloorCents ?? computeSellerAbsoluteMinCents(stdCents, sp.flexibility || 'flexible'),
+    minDeliveryDays: sp.minDeliveryDays,
+    standardDeliveryDays: sp.standardDeliveryDays,
+    capacity: sp.capacity,
+    strategy: sp.strategy,
+  };
+}
+
 export class NegotiationOrchestrator {
+  private buildOfferSnapshots(negotiation: Negotiation, proposals: Proposal[]): OfferSnapshot[] {
+    return proposals.map(p => ({
+      round: p.round,
+      senderRole: p.senderAgentId === negotiation.sellerAgentId ? 'seller' : 'buyer',
+      priceCents: p.priceCents ?? dollarsToCents(p.price),
+      deliveryDays: p.deliveryDays,
+      scope: p.deliverables,
+      revisions: p.revisions ?? 2,
+      paymentTerms: (p.paymentTerms as PaymentTerm) || 'escrow_milestone',
+    }));
+  }
+
   /**
-   * Initializes a multi-issue negotiation between a buyer and a seller for a specific commerce request.
+   * Initializes a multi-issue negotiation between a buyer and a seller.
    */
   async initiateNegotiation(requestId: string, sellerAgentId: string): Promise<Negotiation> {
     const request = store.getRequest(requestId);
@@ -125,7 +215,7 @@ export class NegotiationOrchestrator {
       sellerUserId: seller.ownerId,
       status: 'initiated',
       currentRound: 1,
-      maxRounds: 4,
+      maxRounds: 8,
       currentProposal: null,
       messages: [],
       agreementId: null,
@@ -133,7 +223,7 @@ export class NegotiationOrchestrator {
       updatedAt: now
     };
 
-    // 1. Initial Request Discovery Message from Buyer Agent to Seller Agent
+    // 1. Initial Request Discovery Message from Buyer Agent (NO private budget/target leaked)
     const buyerIntroMsg: NegotiationMessage = {
       id: `msg_${uuidv4().substring(0, 8)}`,
       negotiationId,
@@ -142,7 +232,7 @@ export class NegotiationOrchestrator {
       senderRole: 'buyer',
       round: 1,
       messageType: 'request',
-      content: `Hello ${seller.businessName}. On behalf of our team, we are requesting a commercial proposal for "${request.title}". Target turnaround: ${buyerProfile.idealDeliveryDays}-${buyerProfile.latestDeliveryDays} days. Deliverables: ${request.deliverables.join(', ')}.`,
+      content: `Hello ${seller.businessName}. On behalf of ${buyer.name}, we are requesting a commercial proposal for "${request.title}". Target turnaround: ${buyerProfile.idealDeliveryDays}–${buyerProfile.latestDeliveryDays} days covering: ${request.deliverables.join(', ')}.`,
       payload: {
         deadlineDays: request.deadlineDays,
         deliverables: request.deliverables
@@ -159,38 +249,123 @@ export class NegotiationOrchestrator {
     };
     negotiation.messages.push(buyerIntroMsg);
 
-    // 2. Seller Agent calculates Opening Multi-Issue Package Offer
-    const engineOffer = negotiationEngine.generateOpeningSellerOffer(sellerProfile, buyerProfile);
-    const validation = negotiationEngine.validateAndClampProposal(engineOffer, buyerProfile, sellerProfile);
-    const validOffer = validation.clampedOffer;
+    // 2. Prohibited category policy gate before seller engages
+    const categoryLower = (request.category || '').toLowerCase();
+    if (PROHIBITED_CATEGORIES.some(cat => categoryLower.includes(cat))) {
+      negotiation.status = 'rejected';
+      negotiation.messages.push({
+        id: `msg_${uuidv4().substring(0, 8)}`,
+        negotiationId,
+        senderAgentId: buyer.id,
+        recipientAgentId: seller.id,
+        senderRole: 'system',
+        round: 1,
+        messageType: 'rejection',
+        content: `Category "${request.category}" violates network acceptable commerce policy.`,
+        timestamp: now
+      });
+      store.saveNegotiation(negotiation);
+      return negotiation;
+    }
+
+    // 3. Deterministic Seller Opening Quote (95-100% of list price, zero buyer info revealed)
+    const sellerCanary = `canary_seller_${uuidv4().substring(0, 8)}`;
+    const sellerDecision = computeDeterministicSellerTurn({
+      seller: toAlgorithmSeller(sellerProfile),
+      round: 1,
+      history: [],
+      availableDeliverables: request.deliverables,
+      requestedDeadlineDays: request.deadlineDays,
+    });
+
+    const sanity = validateOfferSanity({
+      role: 'seller',
+      proposedPriceInput: centsToDollars(sellerDecision.priceCents),
+      priorOffersCents: [],
+      sellerAbsoluteMinCents: sellerProfile.hardFloorCents,
+    });
+    if (!sanity.valid) {
+      store.logAudit({
+        entityType: 'deal',
+        entityId: negotiationId,
+        action: 'sanity_guard_rejected',
+        policyMatched: 'offer_sanity_guard',
+        decision: 'auto_declined',
+        actor: 'ai_engine',
+        confidence: 1,
+        reasons: [sanity.reason || 'Sanity check failed'],
+        metadata: {},
+      });
+    }
+
+    const phrased = await geminiService.phraseDeterministicTurn({
+      role: 'seller',
+      partyName: seller.businessName,
+      counterpartyName: buyer.name,
+      requestTitle: request.title,
+      round: 1,
+      action: 'counter',
+      priceCents: sellerDecision.priceCents,
+      deliveryDays: sellerDecision.deliveryDays,
+      scope: sellerDecision.scope,
+      paymentTerms: sellerDecision.paymentTerms,
+      whyMove: sellerDecision.whyMove,
+      tradesMade: sellerDecision.tradesMade,
+      counterpartyMessage: buyerIntroMsg.content,
+      canaryToken: sellerCanary,
+      privateNumbersToGuard: [sellerProfile.standardFloor, sellerProfile.hardFloor],
+    });
+
+    const openingPriceDollars = centsToDollars(sellerDecision.priceCents);
+    const openingOfferObj: PackageOffer = {
+      id: `prop_${uuidv4().substring(0, 8)}`,
+      round: 1,
+      senderRole: 'seller',
+      senderAgentId: seller.id,
+      price: openingPriceDollars,
+      deliveryDays: sellerDecision.deliveryDays,
+      scopeItems: sellerDecision.scope,
+      revisions: sellerDecision.revisions,
+      paymentTerms: sellerDecision.paymentTerms,
+      validUntil: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+      tradesMade: sellerDecision.tradesMade,
+      rationale: sellerDecision.whyMove,
+    };
 
     const openingProposal: Proposal = {
-      id: `prop_${uuidv4().substring(0, 8)}`,
+      id: openingOfferObj.id,
       negotiationId,
       senderAgentId: seller.id,
       round: 1,
-      price: validOffer.price,
+      price: openingPriceDollars,
+      priceCents: sellerDecision.priceCents,
       currency: 'USD',
-      deliverables: validOffer.scopeItems,
-      deliveryDays: validOffer.deliveryDays,
-      terms: validOffer.paymentTerms === 'upfront' ? 'Instant upfront settlement' : 'Verified milestone escrow via PayPal Sandbox',
-      validUntil: validOffer.validUntil,
+      deliverables: sellerDecision.scope,
+      deliveryDays: sellerDecision.deliveryDays,
+      terms: sellerDecision.paymentTerms === 'upfront' ? 'Instant upfront settlement' : 'Verified milestone escrow via PayPal Sandbox',
+      validUntil: openingOfferObj.validUntil,
       status: 'pending',
-      revisions: validOffer.revisions,
-      paymentTerms: validOffer.paymentTerms,
-      tradesMade: validOffer.tradesMade,
-      utilityScore: validOffer.utilitySeller,
-      whyThisOffer: `Opening catalogue quote with standard turnaround (${validOffer.deliveryDays}d) and full scope.`,
+      revisions: sellerDecision.revisions,
+      paymentTerms: sellerDecision.paymentTerms,
+      tradesMade: sellerDecision.tradesMade,
+      utilityScore: calculateSellerUtility(openingOfferObj, sellerProfile),
+      whyThisOffer: sellerDecision.whyMove,
+      whyMove: sellerDecision.whyMove,
       createdAt: now
     };
 
     negotiation.currentProposal = openingProposal;
+    if (phrased.llmUnavailable) {
+      negotiation.status = 'waiting_retry';
+      store.saveNegotiation(negotiation);
+      store.saveProposal(openingProposal);
+      broadcastEvent('deal_updated', { negotiationId, status: 'waiting_retry' });
+      return negotiation;
+    }
+
     negotiation.status = 'in_negotiation';
     store.saveNegotiation(negotiation);
     store.saveProposal(openingProposal);
-
-    // Natural message text generated or synthesized
-    const messageContent = `${seller.businessName} submits formal proposal: $${openingProposal.price} with ${openingProposal.deliveryDays}-day delivery and ${openingProposal.revisions || 2} revisions.`;
 
     const sellerProposalMsg: NegotiationMessage = {
       id: `msg_${uuidv4().substring(0, 8)}`,
@@ -200,40 +375,26 @@ export class NegotiationOrchestrator {
       senderRole: 'seller',
       round: 1,
       messageType: 'proposal',
-      content: messageContent,
+      content: phrased.messageToCounterparty,
       payload: {
         proposalId: openingProposal.id,
         price: openingProposal.price,
+        priceCents: openingProposal.priceCents,
         deliveryDays: openingProposal.deliveryDays,
         deliverables: openingProposal.deliverables,
         revisions: openingProposal.revisions,
         paymentTerms: openingProposal.paymentTerms,
         tradesMade: openingProposal.tradesMade,
         utilityScore: openingProposal.utilityScore,
-        whyThisOffer: openingProposal.whyThisOffer
+        whyThisOffer: openingProposal.whyThisOffer,
+        whyMove: openingProposal.whyMove,
+        isAiGenerated: phrased.isAiGenerated,
+        canaryChecked: phrased.canaryChecked,
+        canaryLeaked: phrased.canaryLeaked
       },
       timestamp: now
     };
     negotiation.messages.push(sellerProposalMsg);
-
-    // 3. Autonomous Decision Evaluation
-    const buyerUser = store.getUser(request.userId) || store.getUsers()[0];
-    const sellerFloor = sellerProfile.standardFloor;
-    const evalResult = decisionEngine.evaluateProposal({
-      proposal: openingProposal,
-      request,
-      buyerAgent: buyer,
-      sellerAgent: seller,
-      buyerUser,
-      sellerFloorPrice: sellerFloor,
-      untrustedMessages: [messageContent]
-    });
-
-    if (evalResult.outcome === 'auto_declined') {
-      negotiation.status = 'rejected';
-    } else if (evalResult.outcome === 'needs_review') {
-      negotiation.status = 'escalated';
-    }
 
     store.saveNegotiation(negotiation);
     broadcastEvent('deal_updated', { negotiationId, status: negotiation.status });
@@ -241,7 +402,7 @@ export class NegotiationOrchestrator {
     store.logActivity({
       type: 'negotiation_started',
       title: `Negotiation Initiated: ${buyer.name} ↔ ${seller.businessName}`,
-      description: `Opening proposal submitted at $${openingProposal.price} with ${openingProposal.deliveryDays}-day turnaround. Package utility: ${(validOffer.utilitySeller || 0) * 100}%.`,
+      description: `Opening proposal submitted at ${formatCents(sellerDecision.priceCents)} with ${openingProposal.deliveryDays}-day turnaround.`,
       agentId: seller.id,
       negotiationId,
       amount: openingProposal.price,
@@ -253,13 +414,18 @@ export class NegotiationOrchestrator {
   }
 
   /**
-   * Advances a negotiation by one conversational turn with multi-issue packages and concessions.
+   * Advances a negotiation by one turn using deterministic integer-cents algorithm + LLM phrasing.
    */
   async stepNegotiation(negotiationId: string): Promise<Negotiation> {
     const negotiation = store.getNegotiation(negotiationId);
     if (!negotiation) throw new Error(`Negotiation "${negotiationId}" not found`);
 
-    if (negotiation.status === 'agreement_reached' || negotiation.status === 'completed' || negotiation.status === 'rejected') {
+    if (
+      negotiation.status === 'agreement_reached' ||
+      negotiation.status === 'completed' ||
+      negotiation.status === 'rejected' ||
+      negotiation.status === 'escalated'
+    ) {
       return negotiation;
     }
 
@@ -273,36 +439,141 @@ export class NegotiationOrchestrator {
 
     const sellerProfile = buildSellerProfile(seller, request);
     const buyerProfile = buildBuyerProfile(buyer, request);
+    const algBuyer = toAlgorithmBuyer(buyerProfile);
+    const algSeller = toAlgorithmSeller(sellerProfile);
+
+    const proposals = store.getProposals(negotiationId);
+    const history = this.buildOfferSnapshots(negotiation, proposals);
+    const priorPricesCents = history.map(h => h.priceCents);
 
     const lastMsg = negotiation.messages[negotiation.messages.length - 1];
     const now = new Date().toISOString();
 
-    // Turn A: Last message was from Seller -> Buyer takes action
+    // Early Exit Check (Rule 7): Only allowed before Round 5 if NO overlap exists even within stretch limits!
+    const overlap = checkOverlap(
+      algBuyer.hardCapCents,
+      algSeller.absoluteMinCents,
+      algBuyer.latestDeliveryDays,
+      algSeller.minDeliveryDays
+    );
+    if (!overlap.hasOverlap && proposals.length >= 2) {
+      negotiation.status = 'rejected';
+      negotiation.updatedAt = now;
+      negotiation.messages.push({
+        id: `msg_${uuidv4().substring(0, 8)}`,
+        negotiationId,
+        senderAgentId: buyer.id,
+        recipientAgentId: seller.id,
+        senderRole: 'system',
+        round: negotiation.currentRound,
+        messageType: 'rejection',
+        content: overlap.reason || 'No overlap exists within configured stretch limits.',
+        payload: { reason: overlap.reason, earlyExit: true },
+        timestamp: now
+      });
+      store.saveNegotiation(negotiation);
+      broadcastEvent('deal_updated', { negotiationId, status: 'rejected' });
+      return negotiation;
+    }
+
+    // Turn A: Last message was from Seller -> Buyer responds deterministically + LLM prose
     if (lastMsg.senderRole === 'seller') {
       const currentProp = negotiation.currentProposal;
       if (!currentProp) throw new Error('No active proposal to evaluate');
 
-      const currentOffer: PackageOffer = {
-        id: currentProp.id,
+      const sellerSnapshot: OfferSnapshot = {
         round: currentProp.round,
         senderRole: 'seller',
-        senderAgentId: seller.id,
-        price: currentProp.price,
+        priceCents: currentProp.priceCents ?? dollarsToCents(currentProp.price),
         deliveryDays: currentProp.deliveryDays,
-        scopeItems: currentProp.deliverables,
-        revisions: currentProp.revisions || 2,
+        scope: currentProp.deliverables,
+        revisions: currentProp.revisions ?? 2,
         paymentTerms: (currentProp.paymentTerms as PaymentTerm) || 'escrow_milestone',
-        validUntil: currentProp.validUntil
       };
 
-      const response = negotiationEngine.generateBuyerResponse(
-        buyerProfile,
-        sellerProfile,
-        currentOffer,
-        negotiation.currentRound
-      );
+      // If no overlap even within stretch limits, early exit cleanly right after seller opening
+      if (!overlap.hasOverlap) {
+        negotiation.status = 'rejected';
+        negotiation.updatedAt = now;
+        negotiation.messages.push({
+          id: `msg_${uuidv4().substring(0, 8)}`,
+          negotiationId,
+          senderAgentId: buyer.id,
+          recipientAgentId: seller.id,
+          senderRole: 'buyer',
+          round: negotiation.currentRound,
+          messageType: 'rejection',
+          content: overlap.reason!,
+          payload: { reason: overlap.reason, earlyExit: true },
+          timestamp: now
+        });
+        store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'rejected' });
+        return negotiation;
+      }
 
-      if (response.action === 'acceptance') {
+      const buyerDecision = computeDeterministicBuyerTurn({
+        buyer: algBuyer,
+        round: negotiation.currentRound,
+        history,
+        sellerLastOffer: sellerSnapshot,
+      });
+
+      const sanity = validateOfferSanity({
+        role: 'buyer',
+        proposedPriceInput: centsToDollars(buyerDecision.priceCents),
+        counterpartyCurrentPriceCents: sellerSnapshot.priceCents,
+        priorOffersCents: priorPricesCents,
+        buyerHardCapCents: algBuyer.hardCapCents,
+      });
+      if (!sanity.valid) {
+        store.logAudit({
+          entityType: 'deal',
+          entityId: negotiationId,
+          action: 'sanity_guard_rejected',
+          policyMatched: 'offer_sanity_guard',
+          decision: 'auto_declined',
+          actor: 'ai_engine',
+          confidence: 1,
+          reasons: [sanity.reason || 'Buyer sanity failure'],
+          metadata: {},
+        });
+        throw new Error(`Buyer offer violated sanity guard: ${sanity.reason}`);
+      }
+
+      const buyerCanary = `canary_buyer_${uuidv4().substring(0, 8)}`;
+      const phrased = await geminiService.phraseDeterministicTurn({
+        role: 'buyer',
+        partyName: buyer.name,
+        counterpartyName: seller.businessName,
+        requestTitle: request.title,
+        round: negotiation.currentRound,
+        action: buyerDecision.action,
+        priceCents: buyerDecision.priceCents,
+        deliveryDays: buyerDecision.deliveryDays,
+        scope: buyerDecision.scope,
+        paymentTerms: buyerDecision.paymentTerms,
+        whyMove: buyerDecision.whyMove,
+        tradesMade: buyerDecision.tradesMade,
+        counterpartyMessage: lastMsg.content,
+        canaryToken: buyerCanary,
+        privateNumbersToGuard: [
+          buyerProfile.targetPrice,
+          buyerProfile.maxBudget,
+          buyerProfile.hardCap || buyerProfile.maxBudget,
+        ],
+        noOverlapReason: buyerDecision.noOverlapReason,
+      });
+
+      if (phrased.llmUnavailable) {
+        negotiation.status = 'waiting_retry';
+        negotiation.updatedAt = now;
+        store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'waiting_retry' });
+        return negotiation;
+      }
+
+      if (buyerDecision.action === 'accept') {
         currentProp.status = 'accepted';
         store.saveProposal(currentProp);
 
@@ -314,26 +585,48 @@ export class NegotiationOrchestrator {
           senderRole: 'buyer',
           round: negotiation.currentRound,
           messageType: 'acceptance',
-          content: `${buyer.name} accepts the terms: $${currentProp.price} with ${currentProp.deliveryDays}-day delivery. Terms finalized.`,
-          payload: { agreedPrice: currentProp.price, deliverables: currentProp.deliverables, deliveryDays: currentProp.deliveryDays },
+          content: phrased.messageToCounterparty,
+          payload: {
+            agreedPrice: currentProp.price,
+            priceCents: currentProp.priceCents,
+            deliverables: currentProp.deliverables,
+            deliveryDays: currentProp.deliveryDays,
+            paymentTerms: currentProp.paymentTerms,
+            shortReasonForHuman: buyerDecision.shortReasonForHuman,
+            whyMove: buyerDecision.whyMove,
+            tradesMade: buyerDecision.tradesMade,
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
+          },
           timestamp: now
         };
         negotiation.messages.push(buyerAcceptMsg);
 
-        const agreement = this.createAgreement(negotiation, request, buyer, seller, currentProp, [
-          `Settled at $${currentProp.price} (${currentProp.deliveryDays}d delivery)`
-        ]);
+        const agreement = this.createAgreement(
+          negotiation,
+          request,
+          buyer,
+          seller,
+          currentProp,
+          buyerDecision.tradesMade,
+          sellerProfile.hardFloor,
+          buyerDecision.stretchSide
+        );
         negotiation.agreementId = agreement.id;
         negotiation.status = 'agreement_reached';
         negotiation.updatedAt = now;
 
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: negotiation.status, agreementId: agreement.id });
         return negotiation;
-      } else if (response.action === 'rejection') {
+      }
+
+      if (buyerDecision.action === 'decline') {
         negotiation.status = 'rejected';
         negotiation.updatedAt = now;
 
-        const rejectMsg: NegotiationMessage = {
+        negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: buyer.id,
@@ -341,122 +634,239 @@ export class NegotiationOrchestrator {
           senderRole: 'buyer',
           round: negotiation.currentRound,
           messageType: 'rejection',
-          content: response.reason || 'Negotiation declined due to irreconcilable constraints.',
-          payload: { reason: response.reason },
+          content: buyerDecision.noOverlapReason || phrased.messageToCounterparty,
+          payload: {
+            reason: buyerDecision.shortReasonForHuman,
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
+          },
           timestamp: now
-        };
-        negotiation.messages.push(rejectMsg);
+        });
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'rejected' });
         return negotiation;
-      } else {
-        // Buyer counteroffers
-        currentProp.status = 'countered';
-        store.saveProposal(currentProp);
+      }
 
-        const validation = negotiationEngine.validateAndClampProposal(response.offer!, buyerProfile, sellerProfile);
-        const validCounter = validation.clampedOffer;
+      if (buyerDecision.action === 'escalate') {
+        negotiation.status = 'escalated';
+        negotiation.updatedAt = now;
 
-        const counterProp: Proposal = {
-          id: validCounter.id,
-          negotiationId,
-          senderAgentId: buyer.id,
-          round: negotiation.currentRound,
-          price: validCounter.price,
-          currency: 'USD',
-          deliverables: validCounter.scopeItems,
-          deliveryDays: validCounter.deliveryDays,
-          terms: validCounter.paymentTerms,
-          validUntil: validCounter.validUntil,
-          status: 'pending',
-          revisions: validCounter.revisions,
-          paymentTerms: validCounter.paymentTerms,
-          tradesMade: validCounter.tradesMade,
-          utilityScore: validCounter.utilityBuyer,
-          whyThisOffer: validCounter.rationale,
-          createdAt: now
-        };
-        store.saveProposal(counterProp);
-        negotiation.currentProposal = counterProp;
-
-        const tradeAnalysis = analyzeTrade(currentOffer, validCounter);
-
-        const buyerCounterMsg: NegotiationMessage = {
+        negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: buyer.id,
           recipientAgentId: seller.id,
           senderRole: 'buyer',
           round: negotiation.currentRound,
-          messageType: 'counteroffer',
-          content: `${buyer.name} counters with package: $${validCounter.price} (${validCounter.deliveryDays}d delivery, ${validCounter.scopeItems.length} deliverables). Trades: ${validCounter.tradesMade?.join(', ') || 'rebalanced terms'}.`,
+          messageType: 'human_escalation',
+          requiresHumanResponse: true,
+          content: phrased.messageToCounterparty,
           payload: {
-            counterPrice: validCounter.price,
-            deliveryDays: validCounter.deliveryDays,
-            deliverables: validCounter.scopeItems,
-            tradesMade: validCounter.tradesMade,
-            tradeSummary: tradeAnalysis.summary,
-            utilityScore: validCounter.utilityBuyer,
-            whyThisOffer: validCounter.rationale
+            reason: buyerDecision.shortReasonForHuman,
+            whyMove: buyerDecision.whyMove,
+            proposedPrice: centsToDollars(buyerDecision.priceCents),
+            priceCents: buyerDecision.priceCents,
+            deliveryDays: buyerDecision.deliveryDays,
+            inStretchZone: true,
+            stretchSide: buyerDecision.stretchSide,
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
           },
           timestamp: now
-        };
-        negotiation.messages.push(buyerCounterMsg);
-        negotiation.updatedAt = now;
+        });
 
+        this.recordHumanEscalation(
+          negotiation,
+          request,
+          buyer,
+          seller,
+          currentProp,
+          sellerProfile.hardFloor,
+          buyerDecision.shortReasonForHuman,
+          'buyer'
+        );
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'escalated' });
         return negotiation;
       }
+
+      // Buyer counteroffer
+      currentProp.status = 'countered';
+      store.saveProposal(currentProp);
+
+      const counterDollars = centsToDollars(buyerDecision.priceCents);
+      const offerObj: PackageOffer = {
+        id: `prop_${uuidv4().substring(0, 8)}`,
+        round: negotiation.currentRound,
+        senderRole: 'buyer',
+        senderAgentId: buyer.id,
+        price: counterDollars,
+        deliveryDays: buyerDecision.deliveryDays,
+        scopeItems: buyerDecision.scope,
+        revisions: buyerDecision.revisions,
+        paymentTerms: buyerDecision.paymentTerms,
+        validUntil: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        tradesMade: buyerDecision.tradesMade,
+        rationale: buyerDecision.whyMove,
+      };
+
+      const counterProp: Proposal = {
+        id: offerObj.id,
+        negotiationId,
+        senderAgentId: buyer.id,
+        round: negotiation.currentRound,
+        price: counterDollars,
+        priceCents: buyerDecision.priceCents,
+        currency: 'USD',
+        deliverables: buyerDecision.scope,
+        deliveryDays: buyerDecision.deliveryDays,
+        terms: buyerDecision.paymentTerms,
+        validUntil: offerObj.validUntil,
+        status: 'pending',
+        revisions: buyerDecision.revisions,
+        paymentTerms: buyerDecision.paymentTerms,
+        tradesMade: buyerDecision.tradesMade,
+        utilityScore: calculateBuyerUtility(offerObj, buyerProfile),
+        whyThisOffer: buyerDecision.shortReasonForHuman,
+        whyMove: buyerDecision.whyMove,
+        createdAt: now
+      };
+      store.saveProposal(counterProp);
+      negotiation.currentProposal = counterProp;
+
+      negotiation.messages.push({
+        id: `msg_${uuidv4().substring(0, 8)}`,
+        negotiationId,
+        senderAgentId: buyer.id,
+        recipientAgentId: seller.id,
+        senderRole: 'buyer',
+        round: negotiation.currentRound,
+        messageType: 'counteroffer',
+        content: phrased.messageToCounterparty,
+        payload: {
+          counterPrice: counterDollars,
+          priceCents: buyerDecision.priceCents,
+          deliveryDays: buyerDecision.deliveryDays,
+          deliverables: buyerDecision.scope,
+          paymentTerms: buyerDecision.paymentTerms,
+          tradesMade: buyerDecision.tradesMade,
+          whyThisOffer: buyerDecision.shortReasonForHuman,
+          whyMove: buyerDecision.whyMove,
+          isAiGenerated: phrased.isAiGenerated,
+          canaryChecked: phrased.canaryChecked,
+          canaryLeaked: phrased.canaryLeaked,
+        },
+        timestamp: now
+      });
+      negotiation.updatedAt = now;
+      store.saveNegotiation(negotiation);
+      broadcastEvent('deal_updated', { negotiationId, status: negotiation.status });
+      return negotiation;
     }
 
-    // Turn B: Last message was from Buyer (counteroffer) -> Seller responds
-    if (lastMsg.senderRole === 'buyer' && lastMsg.messageType === 'counteroffer') {
+    // Turn B: Last message was from Buyer -> Seller responds deterministically + LLM prose
+    if (lastMsg.senderRole === 'buyer' && (lastMsg.messageType === 'counteroffer' || lastMsg.messageType === 'request' || lastMsg.messageType === 'clarification')) {
       negotiation.currentRound += 1;
       const currentProp = negotiation.currentProposal;
       if (!currentProp) throw new Error('No active proposal to evaluate');
 
-      const buyerOffer: PackageOffer = {
-        id: currentProp.id,
-        round: negotiation.currentRound - 1,
+      const buyerSnapshot: OfferSnapshot = {
+        round: currentProp.round,
         senderRole: 'buyer',
-        senderAgentId: buyer.id,
-        price: currentProp.price,
+        priceCents: currentProp.priceCents ?? dollarsToCents(currentProp.price),
         deliveryDays: currentProp.deliveryDays,
-        scopeItems: currentProp.deliverables,
-        revisions: currentProp.revisions || 2,
+        scope: currentProp.deliverables,
+        revisions: currentProp.revisions ?? 2,
         paymentTerms: (currentProp.paymentTerms as PaymentTerm) || 'escrow_milestone',
-        validUntil: currentProp.validUntil
       };
 
-      const response = negotiationEngine.generateSellerResponse(
-        sellerProfile,
-        buyerProfile,
-        buyerOffer,
-        negotiation.currentRound
-      );
+      const sellerDecision = computeDeterministicSellerTurn({
+        seller: algSeller,
+        round: negotiation.currentRound,
+        history,
+        buyerLastOffer: buyerSnapshot,
+        availableDeliverables: request.deliverables,
+        requestedDeadlineDays: request.deadlineDays,
+      });
 
-      if (response.action === 'acceptance') {
+      const sanity = validateOfferSanity({
+        role: 'seller',
+        proposedPriceInput: centsToDollars(sellerDecision.priceCents),
+        counterpartyCurrentPriceCents: buyerSnapshot.priceCents,
+        priorOffersCents: priorPricesCents,
+        sellerAbsoluteMinCents: algSeller.absoluteMinCents,
+      });
+      if (!sanity.valid) {
+        store.logAudit({
+          entityType: 'deal',
+          entityId: negotiationId,
+          action: 'sanity_guard_rejected',
+          policyMatched: 'offer_sanity_guard',
+          decision: 'auto_declined',
+          actor: 'ai_engine',
+          confidence: 1,
+          reasons: [sanity.reason || 'Seller sanity failure'],
+          metadata: {},
+        });
+        throw new Error(`Seller offer violated sanity guard: ${sanity.reason}`);
+      }
+
+      const sellerCanary = `canary_seller_${uuidv4().substring(0, 8)}`;
+      const phrased = await geminiService.phraseDeterministicTurn({
+        role: 'seller',
+        partyName: seller.businessName,
+        counterpartyName: buyer.name,
+        requestTitle: request.title,
+        round: negotiation.currentRound,
+        action: sellerDecision.action,
+        priceCents: sellerDecision.priceCents,
+        deliveryDays: sellerDecision.deliveryDays,
+        scope: sellerDecision.scope,
+        paymentTerms: sellerDecision.paymentTerms,
+        whyMove: sellerDecision.whyMove,
+        tradesMade: sellerDecision.tradesMade,
+        counterpartyMessage: lastMsg.content,
+        canaryToken: sellerCanary,
+        privateNumbersToGuard: [sellerProfile.standardFloor, sellerProfile.hardFloor],
+        noOverlapReason: sellerDecision.noOverlapReason,
+      });
+
+      if (phrased.llmUnavailable) {
+        negotiation.status = 'waiting_retry';
+        negotiation.updatedAt = now;
+        store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'waiting_retry' });
+        return negotiation;
+      }
+
+      if (sellerDecision.action === 'accept') {
+        const agreedDollars = centsToDollars(sellerDecision.priceCents);
         const agreedProposal: Proposal = {
           id: `prop_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: seller.id,
           round: negotiation.currentRound,
-          price: buyerOffer.price,
+          price: agreedDollars,
+          priceCents: sellerDecision.priceCents,
           currency: 'USD',
-          deliverables: buyerOffer.scopeItems,
-          deliveryDays: buyerOffer.deliveryDays,
-          terms: 'Standard Verified Escrow via PayPal Sandbox',
+          deliverables: sellerDecision.scope,
+          deliveryDays: sellerDecision.deliveryDays,
+          terms: sellerDecision.paymentTerms === 'upfront' ? 'Instant upfront settlement' : 'Standard Verified Escrow via PayPal Sandbox',
           validUntil: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
           status: 'accepted',
-          revisions: buyerOffer.revisions,
-          paymentTerms: buyerOffer.paymentTerms,
-          tradesMade: ['Seller confirmed consensus on buyer package'],
-          utilityScore: calculateSellerUtility(buyerOffer, sellerProfile),
+          revisions: sellerDecision.revisions,
+          paymentTerms: sellerDecision.paymentTerms,
+          tradesMade: sellerDecision.tradesMade,
+          whyThisOffer: sellerDecision.shortReasonForHuman,
+          whyMove: sellerDecision.whyMove,
           createdAt: now
         };
         store.saveProposal(agreedProposal);
         negotiation.currentProposal = agreedProposal;
 
-        const sellerAcceptMsg: NegotiationMessage = {
+        negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: seller.id,
@@ -464,24 +874,47 @@ export class NegotiationOrchestrator {
           senderRole: 'seller',
           round: negotiation.currentRound,
           messageType: 'acceptance',
-          content: `${seller.businessName} accepts counteroffer at $${agreedProposal.price} with ${agreedProposal.deliveryDays}-day turnaround. Agreement ready for authorization.`,
-          payload: { agreedPrice: agreedProposal.price, deliveryDays: agreedProposal.deliveryDays },
+          content: phrased.messageToCounterparty,
+          payload: {
+            agreedPrice: agreedDollars,
+            priceCents: sellerDecision.priceCents,
+            deliveryDays: sellerDecision.deliveryDays,
+            deliverables: sellerDecision.scope,
+            paymentTerms: sellerDecision.paymentTerms,
+            shortReasonForHuman: sellerDecision.shortReasonForHuman,
+            whyMove: sellerDecision.whyMove,
+            tradesMade: sellerDecision.tradesMade,
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
+          },
           timestamp: now
-        };
-        negotiation.messages.push(sellerAcceptMsg);
+        });
 
-        const agreement = this.createAgreement(negotiation, request, buyer, seller, agreedProposal, agreedProposal.tradesMade);
+        const agreement = this.createAgreement(
+          negotiation,
+          request,
+          buyer,
+          seller,
+          agreedProposal,
+          sellerDecision.tradesMade,
+          sellerProfile.hardFloor,
+          sellerDecision.stretchSide
+        );
         negotiation.agreementId = agreement.id;
         negotiation.status = 'agreement_reached';
         negotiation.updatedAt = now;
 
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: negotiation.status, agreementId: agreement.id });
         return negotiation;
-      } else if (response.action === 'rejection') {
+      }
+
+      if (sellerDecision.action === 'decline') {
         negotiation.status = 'rejected';
         negotiation.updatedAt = now;
 
-        const rejectMsg: NegotiationMessage = {
+        negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: seller.id,
@@ -489,71 +922,228 @@ export class NegotiationOrchestrator {
           senderRole: 'seller',
           round: negotiation.currentRound,
           messageType: 'rejection',
-          content: response.reason || 'Negotiation ended without consensus.',
-          payload: { reason: response.reason },
+          content: sellerDecision.noOverlapReason || phrased.messageToCounterparty,
+          payload: {
+            reason: sellerDecision.shortReasonForHuman,
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
+          },
           timestamp: now
-        };
-        negotiation.messages.push(rejectMsg);
+        });
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'rejected' });
         return negotiation;
-      } else {
-        // Seller counters with adjusted package
-        const validation = negotiationEngine.validateAndClampProposal(response.offer!, buyerProfile, sellerProfile);
-        const validCounter = validation.clampedOffer;
+      }
 
-        const counterProp: Proposal = {
-          id: validCounter.id,
-          negotiationId,
-          senderAgentId: seller.id,
-          round: negotiation.currentRound,
-          price: validCounter.price,
-          currency: 'USD',
-          deliverables: validCounter.scopeItems,
-          deliveryDays: validCounter.deliveryDays,
-          terms: 'Standard Verified Escrow via PayPal Sandbox',
-          validUntil: validCounter.validUntil,
-          status: 'pending',
-          revisions: validCounter.revisions,
-          paymentTerms: validCounter.paymentTerms,
-          tradesMade: validCounter.tradesMade,
-          utilityScore: validCounter.utilitySeller,
-          whyThisOffer: validCounter.rationale,
-          createdAt: now
-        };
-        store.saveProposal(counterProp);
-        negotiation.currentProposal = counterProp;
+      if (sellerDecision.action === 'escalate') {
+        negotiation.status = 'escalated';
+        negotiation.updatedAt = now;
 
-        const tradeAnalysis = analyzeTrade(buyerOffer, validCounter);
-
-        const sellerCounterMsg: NegotiationMessage = {
+        negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
           negotiationId,
           senderAgentId: seller.id,
           recipientAgentId: buyer.id,
           senderRole: 'seller',
           round: negotiation.currentRound,
-          messageType: 'counteroffer',
-          content: `${seller.businessName} proposes adjusted package: $${validCounter.price} with ${validCounter.deliveryDays}-day delivery. Trades: ${validCounter.tradesMade?.join(', ') || 'value rebalanced'}.`,
+          messageType: 'human_escalation',
+          requiresHumanResponse: true,
+          content: phrased.messageToCounterparty,
           payload: {
-            counterPrice: validCounter.price,
-            deliveryDays: validCounter.deliveryDays,
-            deliverables: validCounter.scopeItems,
-            tradesMade: validCounter.tradesMade,
-            tradeSummary: tradeAnalysis.summary,
-            utilityScore: validCounter.utilitySeller,
-            whyThisOffer: validCounter.rationale
+            reason: sellerDecision.shortReasonForHuman,
+            whyMove: sellerDecision.whyMove,
+            proposedPrice: centsToDollars(sellerDecision.priceCents),
+            priceCents: sellerDecision.priceCents,
+            deliveryDays: sellerDecision.deliveryDays,
+            inStretchZone: true,
+            stretchSide: sellerDecision.stretchSide || 'seller',
+            isAiGenerated: phrased.isAiGenerated,
+            canaryChecked: phrased.canaryChecked,
+            canaryLeaked: phrased.canaryLeaked,
           },
           timestamp: now
-        };
-        negotiation.messages.push(sellerCounterMsg);
-        negotiation.updatedAt = now;
+        });
 
+        this.recordHumanEscalation(
+          negotiation,
+          request,
+          buyer,
+          seller,
+          currentProp,
+          sellerProfile.hardFloor,
+          sellerDecision.shortReasonForHuman,
+          'seller'
+        );
         store.saveNegotiation(negotiation);
+        broadcastEvent('deal_updated', { negotiationId, status: 'escalated' });
         return negotiation;
       }
+
+      // Seller counteroffer
+      currentProp.status = 'countered';
+      store.saveProposal(currentProp);
+
+      const counterDollars = centsToDollars(sellerDecision.priceCents);
+      const offerObj: PackageOffer = {
+        id: `prop_${uuidv4().substring(0, 8)}`,
+        round: negotiation.currentRound,
+        senderRole: 'seller',
+        senderAgentId: seller.id,
+        price: counterDollars,
+        deliveryDays: sellerDecision.deliveryDays,
+        scopeItems: sellerDecision.scope,
+        revisions: sellerDecision.revisions,
+        paymentTerms: sellerDecision.paymentTerms,
+        validUntil: new Date(Date.now() + 48 * 3600 * 1000).toISOString(),
+        tradesMade: sellerDecision.tradesMade,
+        rationale: sellerDecision.whyMove,
+      };
+
+      const counterProp: Proposal = {
+        id: offerObj.id,
+        negotiationId,
+        senderAgentId: seller.id,
+        round: negotiation.currentRound,
+        price: counterDollars,
+        priceCents: sellerDecision.priceCents,
+        currency: 'USD',
+        deliverables: sellerDecision.scope,
+        deliveryDays: sellerDecision.deliveryDays,
+        terms: sellerDecision.paymentTerms === 'upfront' ? 'Instant upfront settlement' : 'Standard Verified Escrow via PayPal Sandbox',
+        validUntil: offerObj.validUntil,
+        status: 'pending',
+        revisions: sellerDecision.revisions,
+        paymentTerms: sellerDecision.paymentTerms,
+        tradesMade: sellerDecision.tradesMade,
+        utilityScore: calculateSellerUtility(offerObj, sellerProfile),
+        whyThisOffer: sellerDecision.shortReasonForHuman,
+        whyMove: sellerDecision.whyMove,
+        createdAt: now
+      };
+      store.saveProposal(counterProp);
+      negotiation.currentProposal = counterProp;
+
+      negotiation.messages.push({
+        id: `msg_${uuidv4().substring(0, 8)}`,
+        negotiationId,
+        senderAgentId: seller.id,
+        recipientAgentId: buyer.id,
+        senderRole: 'seller',
+        round: negotiation.currentRound,
+        messageType: 'counteroffer',
+        content: phrased.messageToCounterparty,
+        payload: {
+          counterPrice: counterDollars,
+          priceCents: sellerDecision.priceCents,
+          deliveryDays: sellerDecision.deliveryDays,
+          deliverables: sellerDecision.scope,
+          paymentTerms: sellerDecision.paymentTerms,
+          tradesMade: sellerDecision.tradesMade,
+          whyThisOffer: sellerDecision.shortReasonForHuman,
+          whyMove: sellerDecision.whyMove,
+          isAiGenerated: phrased.isAiGenerated,
+          canaryChecked: phrased.canaryChecked,
+          canaryLeaked: phrased.canaryLeaked,
+        },
+        timestamp: now
+      });
+      negotiation.updatedAt = now;
+
+      // Max rounds (8) guardrail: escalate if inside stretch zone, else decline
+      if (negotiation.currentRound >= negotiation.maxRounds) {
+        if (sellerDecision.priceCents <= algBuyer.hardCapCents) {
+          negotiation.status = 'escalated';
+          this.recordHumanEscalation(
+            negotiation,
+            request,
+            buyer,
+            seller,
+            counterProp,
+            sellerProfile.hardFloor,
+            `Reached round ${negotiation.currentRound} with seller at ${formatCents(sellerDecision.priceCents)} (inside your ${formatCents(algBuyer.hardCapCents)} stretch cap). Needs your OK.`,
+            'buyer'
+          );
+        } else {
+          negotiation.status = 'rejected';
+        }
+      }
+
+      store.saveNegotiation(negotiation);
+      broadcastEvent('deal_updated', { negotiationId, status: negotiation.status });
+      return negotiation;
     }
 
     return negotiation;
+  }
+
+  private recordHumanEscalation(
+    negotiation: Negotiation,
+    request: CommerceRequest,
+    buyer: Agent,
+    seller: Agent,
+    proposal: Proposal,
+    sellerFloorPrice: number,
+    customReason?: string,
+    stretchSide: 'buyer' | 'seller' = 'buyer'
+  ): void {
+    const buyerUser = store.getUser(request.userId) || store.getUsers()[0];
+    const evalResult = decisionEngine.evaluateProposal({
+      proposal,
+      request,
+      buyerAgent: buyer,
+      sellerAgent: seller,
+      buyerUser,
+      sellerFloorPrice,
+      untrustedMessages: negotiation.messages.map(m => m.content)
+    });
+
+    const isVerifiedSeller = seller.verificationStatus === 'verified';
+    const baseReasons: string[] = [];
+    if (isVerifiedSeller) {
+      baseReasons.push(`${seller.businessName} is verified and offers ${proposal.revisions || 2} revisions.`);
+    }
+    if (customReason) baseReasons.push(customReason);
+    else if (evalResult.decision.reasons.length > 0) baseReasons.push(...evalResult.decision.reasons);
+
+    const now = new Date().toISOString();
+    const reasons = baseReasons.length > 0 ? baseReasons : ['Negotiation reached your stretch zone and wants your decision.'];
+    store.saveDecision({
+      ...evalResult.decision,
+      status: 'needs_review',
+      reasons,
+      recommendation: stretchSide === 'buyer'
+        ? `Approve ${formatCents(proposal.priceCents ?? dollarsToCents(proposal.price))} or counter toward ${formatCents(dollarsToCents(request.maxBudget))}.`
+        : `Approve ${formatCents(proposal.priceCents ?? dollarsToCents(proposal.price))} with adjusted terms or counter higher.`,
+      updatedAt: now
+    });
+    store.saveReviewQueueItem({
+      id: `rq_${negotiation.id}`,
+      negotiationId: negotiation.id,
+      requestId: request.id,
+      sellerId: seller.ownerId || seller.id,
+      buyerId: buyerUser.id,
+      urgency: 'medium',
+      urgencyScore: 0.7,
+      aiRecommendation: (proposal.priceCents ?? dollarsToCents(proposal.price)) <= (request.hardCapCents ?? dollarsToCents(request.maxBudget) * 1.1) ? 'approve' : 'adjust_price',
+      confidence: evalResult.decision.confidence,
+      reasons,
+      proposedPrice: proposal.price,
+      buyerMaxBudget: request.maxBudget,
+      sellerFloorPrice,
+      status: 'pending',
+      createdAt: now
+    });
+    store.saveNotification({
+      id: `notif_${uuidv4().substring(0, 8)}`,
+      userId: buyerUser.id,
+      title: 'Action Needed: Deal Needs Your OK',
+      message: reasons.join(' '),
+      type: 'action_required',
+      linkUrl: `/app/deals/${negotiation.id}`,
+      read: false,
+      createdAt: now
+    });
   }
 
   /**
@@ -581,7 +1171,7 @@ export class NegotiationOrchestrator {
       let neg = await this.initiateNegotiation(requestId, sellerId);
       
       let turns = 0;
-      while (neg.status === 'in_negotiation' && turns < 6) {
+      while (neg.status === 'in_negotiation' && turns < 18) {
         neg = await this.stepNegotiation(neg.id);
         turns++;
       }
@@ -636,13 +1226,47 @@ export class NegotiationOrchestrator {
     buyer: Agent,
     seller: Agent,
     proposal: Proposal,
-    tradesSummary?: string[]
+    tradesSummary?: string[],
+    sellerHardFloor?: number,
+    stretchSide?: 'buyer' | 'seller' | null
   ): Agreement {
     const agreementId = `agr_${uuidv4().substring(0, 8)}`;
     const now = new Date().toISOString();
 
-    const decision = store.getDecisionByEntity('deal', negotiation.id);
-    const isAutoApproved = decision?.status === 'auto_approved';
+    const buyerUser = store.getUser(request.userId) || store.getUsers()[0];
+    const finalCents = proposal.priceCents ?? dollarsToCents(proposal.price);
+    const buyerBudgetCents = request.budgetCents ?? dollarsToCents(request.maxBudget);
+    const savingsVsBudgetCents = Math.max(0, buyerBudgetCents - finalCents);
+    const inBuyerStretch = finalCents > buyerBudgetCents;
+    const effectiveStretchSide = stretchSide || (inBuyerStretch ? 'buyer' : null);
+    const { feeCents, payoutCents } = computeFeeAndPayoutCents(finalCents, config.platformFeePercent);
+
+    let decision = store.getDecisionByEntity('deal', negotiation.id);
+    if (!decision) {
+      const evalRes = decisionEngine.evaluateProposal({
+        proposal,
+        request,
+        buyerAgent: buyer,
+        sellerAgent: seller,
+        buyerUser,
+        sellerFloorPrice: sellerHardFloor ?? Math.min(proposal.price, request.maxBudget),
+        untrustedMessages: negotiation.messages.map(m => m.content)
+      });
+      decision = evalRes.decision;
+    }
+    const sellerOwnerUser = seller.ownerId ? store.getUser(seller.ownerId) : undefined;
+    const sellerPayoutReady = !sellerOwnerUser || payoutService.isSellerPayoutReady(seller.ownerId);
+    const isAutoApproved = decision.status === 'auto_approved' && !effectiveStretchSide && sellerPayoutReady;
+
+    if (!sellerPayoutReady && seller.ownerId) {
+      store.addNotification({
+        userId: seller.ownerId,
+        title: 'Add where to send your earnings',
+        message: `You reached agreement on "${request.title}", but it cannot be confirmed until you add your PayPal email in Selling > Payments.`,
+        type: 'payout_required',
+        linkUrl: `/app/deals/${negotiation.id}`
+      });
+    }
 
     const agreement: Agreement = {
       id: agreementId,
@@ -654,6 +1278,11 @@ export class NegotiationOrchestrator {
       sellerUserId: seller.ownerId,
       sellerBusinessName: seller.businessName,
       finalPrice: proposal.price,
+      finalPriceCents: finalCents,
+      savingsVsBudgetCents,
+      stretchZoneSide: effectiveStretchSide,
+      platformFeeCents: feeCents,
+      sellerPayoutCents: payoutCents,
       currency: proposal.currency || 'USD',
       finalDeliverables: proposal.deliverables,
       deliveryDays: proposal.deliveryDays,
@@ -672,8 +1301,8 @@ export class NegotiationOrchestrator {
     if (isAutoApproved) {
       store.logActivity({
         type: 'approval_granted',
-        title: `Deal Auto-Approved by Policy: $${agreement.finalPrice}`,
-        description: `Autonomous decision policy verified price, verified seller ${seller.businessName}, and budget limits. Cleared for PayPal Sandbox capture.`,
+        title: `Deal Auto-Approved by Policy: ${formatCents(finalCents)}`,
+        description: `Verified seller ${seller.businessName} within budget (${formatCents(buyerBudgetCents)}). Cleared for PayPal Checkout.`,
         negotiationId: negotiation.id,
         amount: agreement.finalPrice,
         currency: agreement.currency,
@@ -682,8 +1311,8 @@ export class NegotiationOrchestrator {
     } else {
       store.logActivity({
         type: 'approval_requested',
-        title: `Deal Escalated to Review Queue: $${agreement.finalPrice}`,
-        description: `${buyer.name} and ${seller.businessName} reached agreement. Routed to human review queue under policy exception rule.`,
+        title: `Deal Escalated to Review Queue: ${formatCents(finalCents)}`,
+        description: `${buyer.name} and ${seller.businessName} reached terms needing human review.`,
         negotiationId: negotiation.id,
         amount: agreement.finalPrice,
         currency: agreement.currency,
@@ -717,7 +1346,7 @@ export class NegotiationOrchestrator {
     store.logActivity({
       type: 'approval_granted',
       title: `Human Authorization Granted for Agreement ${agreement.id}`,
-      description: `Buyer confirmed final terms ($${agreement.finalPrice} ${agreement.currency}). Transaction is now cleared for PayPal Sandbox processing.`,
+      description: `Buyer confirmed final terms (${formatCents(agreement.finalPriceCents ?? dollarsToCents(agreement.finalPrice))}). Cleared for PayPal processing.`,
       negotiationId: agreement.negotiationId,
       amount: agreement.finalPrice,
       currency: agreement.currency,

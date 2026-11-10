@@ -83,7 +83,7 @@ export const NotificationsPage: React.FC = () => {
 
       {/* Notifications List */}
       {isLoading ? (
-        <div className="flex flex-col gap-4 animate-pulse">
+        <div className="flex flex-col gap-4 opacity-70">
           <div className="h-16 bg-surface rounded-control border border-border-subtle" />
           <div className="h-16 bg-surface rounded-control border border-border-subtle" />
         </div>

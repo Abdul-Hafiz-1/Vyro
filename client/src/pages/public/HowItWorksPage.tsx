@@ -12,8 +12,8 @@ export const HowItWorksPage: React.FC = () => {
     {
       num: '01',
       title: 'Conversational brief & private boundaries',
-      desc: 'Buyers specify requirements in plain language and define a strictly private budget ceiling. Sellers author offerings with a private minimum acceptable floor. These limits never cross the network boundary.',
-      example: 'Buyer sets $250 maximum ceiling. Seller sets $160 minimum floor. Neither agent knows the other party’s limit.'
+      desc: 'Buyers specify requirements in plain language and define a private target, comfortable budget, and flexibility tier. Sellers author offerings with a private standard lowest price and flexibility tier. These limits never cross the network boundary.',
+      example: 'Buyer sets $250 budget with Flexible (+10%) stretch. Seller sets $160 standard lowest. Neither agent knows the other party’s limit.'
     },
     {
       num: '02',

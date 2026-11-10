@@ -1,6 +1,13 @@
 import { v4 as uuidv4 } from 'uuid';
 import { sqliteDb } from './sqlite.js';
 import {
+  dollarsToCents,
+  centsToDollars,
+  computeBuyerHardCapCents,
+  computeSellerAbsoluteMinCents,
+  FlexibilityTier
+} from '../services/negotiation/money.js';
+import {
   User,
   Session,
   Listing,
@@ -21,7 +28,10 @@ import {
   DecisionRecord,
   DecisionStatus,
   DecisionEntityType,
-  DecisionSignals
+  DecisionSignals,
+  SellerPayoutAccount,
+  PayoutRecord,
+  LedgerEntry
 } from '../types/index.js';
 
 export interface ReviewQueueItem {
@@ -145,6 +155,7 @@ export class SQLiteStore {
           role = ?, capabilities = ?, active_workspace = ?, onboarding_completed = ?,
           onboarding_step = ?, buyer_preferences = ?, seller_profile = ?,
           auto_approval_limit = ?, daily_budget_cap = ?, balance = ?, is_automation_paused = ?,
+          motion_preference = ?, coach_marks_dismissed = ?,
           updated_at = ?
         WHERE id = ?
       `).run(
@@ -165,6 +176,8 @@ export class SQLiteStore {
         user.dailyBudgetCap ?? 500,
         user.balance ?? 2500,
         user.isAutomationPaused ? 1 : 0,
+        user.motionPreference || 'system',
+        JSON.stringify(user.coachMarksDismissed || []),
         now,
         user.id
       );
@@ -174,8 +187,9 @@ export class SQLiteStore {
           id, email, password_hash, display_name, username, avatar_url, bio, role,
           capabilities, active_workspace, onboarding_completed, onboarding_step,
           buyer_preferences, seller_profile, auto_approval_limit, daily_budget_cap, balance, is_automation_paused,
+          motion_preference, coach_marks_dismissed,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         user.id,
         user.email,
@@ -195,6 +209,8 @@ export class SQLiteStore {
         user.dailyBudgetCap ?? 500,
         user.balance ?? 2500,
         user.isAutomationPaused ? 1 : 0,
+        user.motionPreference || 'system',
+        JSON.stringify(user.coachMarksDismissed || []),
         user.createdAt || now,
         now
       );
@@ -262,6 +278,10 @@ export class SQLiteStore {
       dailyBudgetCap: typeof row.daily_budget_cap === 'number' ? row.daily_budget_cap : 500,
       balance: typeof row.balance === 'number' ? row.balance : 2500,
       isAutomationPaused: Boolean(row.is_automation_paused),
+      motionPreference: (row.motion_preference as any) || 'system',
+      coachMarksDismissed: row.coach_marks_dismissed
+        ? (typeof row.coach_marks_dismissed === 'string' ? JSON.parse(row.coach_marks_dismissed) : row.coach_marks_dismissed)
+        : [],
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       ...(row.role ? { role: row.role } : {})
@@ -327,6 +347,16 @@ export class SQLiteStore {
   public saveListing(listing: Listing): Listing {
     const now = new Date().toISOString();
     listing.updatedAt = now;
+    const flex: FlexibilityTier = listing.flexibility || 'flexible';
+    const askingCents = listing.askingPriceCents ?? dollarsToCents(listing.price);
+    const floorCents = listing.floorPriceCents ?? dollarsToCents(listing.minAcceptablePrice);
+    const absMinCents = listing.absoluteMinCents ?? computeSellerAbsoluteMinCents(floorCents, flex);
+    listing.flexibility = flex;
+    listing.askingPriceCents = askingCents;
+    listing.floorPriceCents = floorCents;
+    listing.absoluteMinCents = absMinCents;
+    listing.absoluteMinPrice = centsToDollars(absMinCents);
+
     const existing = this.getListing(listing.id);
 
     if (existing) {
@@ -334,7 +364,9 @@ export class SQLiteStore {
         UPDATE listings SET
           seller_user_id = coalesce(?, seller_user_id),
           title = ?, description = ?, category = ?, type = ?, asking_price = ?,
-          floor_price = ?, currency = ?, pricing_model = ?, delivery_days = ?,
+          floor_price = ?, flexibility = ?, absolute_min_price = ?,
+          asking_price_cents = ?, floor_price_cents = ?, absolute_min_cents = ?,
+          currency = ?, pricing_model = ?, delivery_days = ?,
           deliverables = ?, images = ?, is_negotiable = ?, status = ?, tags = ?,
           updated_at = ?
         WHERE id = ?
@@ -346,6 +378,11 @@ export class SQLiteStore {
         listing.type,
         listing.price,
         listing.minAcceptablePrice,
+        flex,
+        listing.absoluteMinPrice,
+        askingCents,
+        floorCents,
+        absMinCents,
         listing.currency || 'USD',
         listing.pricingModel || 'fixed',
         listing.deliveryDays || 3,
@@ -361,9 +398,11 @@ export class SQLiteStore {
       this.db.prepare(`
         INSERT INTO listings (
           id, seller_id, seller_user_id, seller_agent_id, title, description, category, type,
-          asking_price, floor_price, currency, pricing_model, delivery_days,
+          asking_price, floor_price, flexibility, absolute_min_price,
+          asking_price_cents, floor_price_cents, absolute_min_cents,
+          currency, pricing_model, delivery_days,
           deliverables, images, is_negotiable, status, tags, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         listing.id,
         listing.sellerId,
@@ -375,6 +414,11 @@ export class SQLiteStore {
         listing.type,
         listing.price,
         listing.minAcceptablePrice,
+        flex,
+        listing.absoluteMinPrice,
+        askingCents,
+        floorCents,
+        absMinCents,
         listing.currency || 'USD',
         listing.pricingModel || 'fixed',
         listing.deliveryDays || 3,
@@ -397,6 +441,10 @@ export class SQLiteStore {
 
   private mapListing(row: any): Listing {
     const seller = this.getUser(row.seller_user_id || row.seller_id);
+    const flex: FlexibilityTier = (row.flexibility as FlexibilityTier) || 'flexible';
+    const askingCents = row.asking_price_cents ?? dollarsToCents(row.asking_price);
+    const floorCents = row.floor_price_cents ?? dollarsToCents(row.floor_price);
+    const absMinCents = row.absolute_min_cents ?? computeSellerAbsoluteMinCents(floorCents, flex);
     return {
       id: row.id,
       sellerId: row.seller_id,
@@ -407,9 +455,14 @@ export class SQLiteStore {
       category: row.category,
       type: row.type,
       price: row.asking_price,
+      askingPriceCents: askingCents,
       currency: row.currency,
       pricingModel: row.pricing_model,
       minAcceptablePrice: row.floor_price,
+      floorPriceCents: floorCents,
+      flexibility: flex,
+      absoluteMinPrice: row.absolute_min_price ?? centsToDollars(absMinCents),
+      absoluteMinCents: absMinCents,
       deliveryDays: row.delivery_days,
       deliverables: typeof row.deliverables === 'string' ? JSON.parse(row.deliverables) : row.deliverables,
       images: typeof row.images === 'string' ? JSON.parse(row.images) : row.images,
@@ -673,6 +726,18 @@ export class SQLiteStore {
   public saveRequest(request: CommerceRequest): CommerceRequest {
     const now = new Date().toISOString();
     request.updatedAt = now;
+    const flex: FlexibilityTier = request.flexibility || 'flexible';
+    const budgetCents = request.budgetCents ?? dollarsToCents(request.maxBudget);
+    const targetDollars = request.targetBudget ?? Math.round(request.maxBudget * 0.8);
+    const targetCents = request.targetPriceCents ?? dollarsToCents(targetDollars);
+    const hardCapCents = request.hardCapCents ?? computeBuyerHardCapCents(budgetCents, flex);
+    request.flexibility = flex;
+    request.targetBudget = centsToDollars(targetCents);
+    request.budgetCents = budgetCents;
+    request.targetPriceCents = targetCents;
+    request.hardCapCents = hardCapCents;
+    request.hardCap = centsToDollars(hardCapCents);
+
     const existing = this.getRequest(request.id);
 
     if (existing) {
@@ -680,7 +745,9 @@ export class SQLiteStore {
         UPDATE requests SET
           buyer_user_id = coalesce(?, buyer_user_id),
           title = ?, category = ?, required_capabilities = ?, deliverables = ?,
-          target_budget = ?, max_budget = ?, currency = ?, deadline_days = ?,
+          target_budget = ?, max_budget = ?, flexibility = ?, hard_cap = ?,
+          budget_cents = ?, target_price_cents = ?, hard_cap_cents = ?,
+          currency = ?, deadline_days = ?,
           quality_requirements = ?, additional_conditions = ?, max_candidates = ?,
           status = ?, selected_seller_agent_ids = ?, updated_at = ?
         WHERE id = ?
@@ -690,8 +757,13 @@ export class SQLiteStore {
         request.category,
         JSON.stringify(request.requiredCapabilities || []),
         JSON.stringify(request.deliverables || []),
-        (request as any).targetBudget || request.maxBudget,
+        request.targetBudget,
         request.maxBudget,
+        flex,
+        request.hardCap,
+        budgetCents,
+        targetCents,
+        hardCapCents,
         request.currency || 'USD',
         request.deadlineDays || 5,
         request.qualityRequirements || '',
@@ -707,9 +779,10 @@ export class SQLiteStore {
         INSERT INTO requests (
           id, user_id, buyer_user_id, buyer_agent_id, raw_input, title, category,
           required_capabilities, deliverables, target_budget, max_budget,
+          flexibility, hard_cap, budget_cents, target_price_cents, hard_cap_cents,
           currency, deadline_days, quality_requirements, additional_conditions,
           max_candidates, status, selected_seller_agent_ids, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         request.id,
         request.userId,
@@ -720,8 +793,13 @@ export class SQLiteStore {
         request.category,
         JSON.stringify(request.requiredCapabilities || []),
         JSON.stringify(request.deliverables || []),
-        (request as any).targetBudget || request.maxBudget,
+        request.targetBudget,
         request.maxBudget,
+        flex,
+        request.hardCap,
+        budgetCents,
+        targetCents,
+        hardCapCents,
         request.currency || 'USD',
         request.deadlineDays || 5,
         request.qualityRequirements || '',
@@ -737,6 +815,10 @@ export class SQLiteStore {
   }
 
   private mapRequest(row: any): CommerceRequest {
+    const flex: FlexibilityTier = (row.flexibility as FlexibilityTier) || 'flexible';
+    const budgetCents = row.budget_cents ?? dollarsToCents(row.max_budget);
+    const targetCents = row.target_price_cents ?? dollarsToCents(row.target_budget || Math.round(row.max_budget * 0.8));
+    const hardCapCents = row.hard_cap_cents ?? computeBuyerHardCapCents(budgetCents, flex);
     return {
       id: row.id,
       userId: row.user_id,
@@ -747,7 +829,13 @@ export class SQLiteStore {
       category: row.category,
       requiredCapabilities: typeof row.required_capabilities === 'string' ? JSON.parse(row.required_capabilities) : row.required_capabilities,
       deliverables: typeof row.deliverables === 'string' ? JSON.parse(row.deliverables) : row.deliverables,
+      targetBudget: centsToDollars(targetCents),
       maxBudget: row.max_budget,
+      flexibility: flex,
+      hardCap: row.hard_cap ?? centsToDollars(hardCapCents),
+      targetPriceCents: targetCents,
+      budgetCents,
+      hardCapCents,
       currency: row.currency,
       deadlineDays: row.deadline_days,
       qualityRequirements: row.quality_requirements,
@@ -763,6 +851,10 @@ export class SQLiteStore {
   // =========================================================================
   // 6. Negotiations & Conversations
   // =========================================================================
+  public getNegotiationsForUser(userId: string): Negotiation[] {
+    return this.getNegotiations({ userId });
+  }
+
   public getNegotiations(filter?: { requestId?: string; agentId?: string; userId?: string; status?: string }): Negotiation[] {
     let sql = 'SELECT * FROM negotiations WHERE 1=1';
     const params: any[] = [];
@@ -1005,13 +1097,14 @@ export class SQLiteStore {
   // 8. Proposals & Evaluations
   // =========================================================================
   public getProposals(negotiationId: string): Proposal[] {
-    const rows = this.db.prepare('SELECT * FROM proposals WHERE negotiation_id = ? ORDER BY round ASC').all(negotiationId) as any[];
+    const rows = this.db.prepare('SELECT * FROM proposals WHERE negotiation_id = ? ORDER BY rowid ASC').all(negotiationId) as any[];
     return rows.map(r => ({
       id: r.id,
       negotiationId: r.negotiation_id,
       senderAgentId: r.sender_agent_id,
       round: r.round,
       price: r.price,
+      priceCents: r.price_cents ?? dollarsToCents(r.price),
       currency: r.currency,
       deliverables: typeof r.deliverables === 'string' ? JSON.parse(r.deliverables) : r.deliverables,
       deliveryDays: r.delivery_days,
@@ -1023,24 +1116,28 @@ export class SQLiteStore {
       tradesMade: r.trades_made ? (typeof r.trades_made === 'string' ? JSON.parse(r.trades_made) : r.trades_made) : [],
       utilityScore: r.utility_score !== undefined && r.utility_score !== null ? Number(r.utility_score) : undefined,
       whyThisOffer: r.why_this_offer || undefined,
+      whyMove: r.why_move || r.why_this_offer || undefined,
       createdAt: r.created_at
     }));
   }
 
   public saveProposal(proposal: Proposal): Proposal {
+    const priceCents = proposal.priceCents ?? dollarsToCents(proposal.price);
+    proposal.priceCents = priceCents;
     this.db.prepare(`
       INSERT OR REPLACE INTO proposals (
-        id, negotiation_id, sender_agent_id, round, price, currency,
+        id, negotiation_id, sender_agent_id, round, price, price_cents, currency,
         deliverables, delivery_days, terms, valid_until, status,
-        revisions, payment_terms, trades_made, utility_score, why_this_offer,
+        revisions, payment_terms, trades_made, utility_score, why_this_offer, why_move,
         created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       proposal.id,
       proposal.negotiationId,
       proposal.senderAgentId,
       proposal.round,
       proposal.price,
+      priceCents,
       proposal.currency || 'USD',
       JSON.stringify(proposal.deliverables || []),
       proposal.deliveryDays,
@@ -1052,6 +1149,7 @@ export class SQLiteStore {
       JSON.stringify(proposal.tradesMade || []),
       proposal.utilityScore ?? null,
       proposal.whyThisOffer || null,
+      proposal.whyMove || proposal.whyThisOffer || null,
       proposal.createdAt || new Date().toISOString()
     );
     return proposal;
@@ -1106,19 +1204,28 @@ export class SQLiteStore {
   }
 
   public saveAgreement(agreement: Agreement): Agreement {
+    const finalCents = agreement.finalPriceCents ?? dollarsToCents(agreement.finalPrice);
+    agreement.finalPriceCents = finalCents;
     const existing = this.getAgreement(agreement.id);
 
     if (existing) {
       this.db.prepare(`
         UPDATE agreements SET
-          final_price = ?, final_deliverables = ?, delivery_days = ?,
+          final_price = ?, final_price_cents = ?, savings_vs_budget_cents = ?, stretch_zone_side = ?,
+          final_deliverables = ?, delivery_days = ?,
           commercial_terms = ?, human_approval_status = ?, human_approved_at = ?,
-          seller_acceptance_status = ?, seller_accepted_at = ?, rejection_reason = ?,
+          seller_acceptance_status = ?, seller_accepted_at = ?,
+          work_acceptance_status = ?, work_accepted_at = ?, dispute_reason = ?,
+          platform_fee_cents = ?, seller_payout_cents = ?,
+          rejection_reason = ?,
           paypal_ready = ?, trades_summary = ?, what_buyer_gave = ?, what_seller_gave = ?,
           payment_terms = ?, revisions = ?
         WHERE id = ?
       `).run(
         agreement.finalPrice,
+        finalCents,
+        agreement.savingsVsBudgetCents ?? null,
+        agreement.stretchZoneSide ?? null,
         JSON.stringify(agreement.finalDeliverables || []),
         agreement.deliveryDays,
         agreement.commercialTerms,
@@ -1126,6 +1233,11 @@ export class SQLiteStore {
         agreement.humanApprovedAt || null,
         agreement.sellerAcceptanceStatus || 'accepted',
         agreement.sellerAcceptedAt || null,
+        agreement.workAcceptanceStatus || 'pending',
+        agreement.workAcceptedAt || null,
+        agreement.disputeReason || null,
+        agreement.platformFeeCents ?? null,
+        agreement.sellerPayoutCents ?? null,
         agreement.rejectionReason || null,
         agreement.paypalReady ? 1 : 0,
         JSON.stringify(agreement.tradesSummary || []),
@@ -1139,13 +1251,15 @@ export class SQLiteStore {
       this.db.prepare(`
         INSERT INTO agreements (
           id, negotiation_id, request_id, buyer_agent_id, seller_agent_id,
-          buyer_user_id, seller_user_id, seller_business_name, final_price,
+          buyer_user_id, seller_user_id, seller_business_name, final_price, final_price_cents,
+          savings_vs_budget_cents, stretch_zone_side,
           currency, final_deliverables, delivery_days, commercial_terms,
           human_approval_status, human_approved_at, seller_acceptance_status,
-          seller_accepted_at, rejection_reason, paypal_ready,
+          seller_accepted_at, work_acceptance_status, work_accepted_at, dispute_reason,
+          platform_fee_cents, seller_payout_cents, rejection_reason, paypal_ready,
           trades_summary, what_buyer_gave, what_seller_gave, payment_terms, revisions,
           created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         agreement.id,
         agreement.negotiationId,
@@ -1156,6 +1270,9 @@ export class SQLiteStore {
         agreement.sellerUserId || null,
         agreement.sellerBusinessName,
         agreement.finalPrice,
+        finalCents,
+        agreement.savingsVsBudgetCents ?? null,
+        agreement.stretchZoneSide ?? null,
         agreement.currency || 'USD',
         JSON.stringify(agreement.finalDeliverables || []),
         agreement.deliveryDays,
@@ -1164,6 +1281,11 @@ export class SQLiteStore {
         agreement.humanApprovedAt || null,
         agreement.sellerAcceptanceStatus || 'accepted',
         agreement.sellerAcceptedAt || null,
+        agreement.workAcceptanceStatus || 'pending',
+        agreement.workAcceptedAt || null,
+        agreement.disputeReason || null,
+        agreement.platformFeeCents ?? null,
+        agreement.sellerPayoutCents ?? null,
         agreement.rejectionReason || null,
         agreement.paypalReady ? 1 : 0,
         JSON.stringify(agreement.tradesSummary || []),
@@ -1188,6 +1310,9 @@ export class SQLiteStore {
       sellerUserId: row.seller_user_id || undefined,
       sellerBusinessName: row.seller_business_name,
       finalPrice: row.final_price,
+      finalPriceCents: row.final_price_cents ?? dollarsToCents(row.final_price),
+      savingsVsBudgetCents: row.savings_vs_budget_cents ?? undefined,
+      stretchZoneSide: row.stretch_zone_side ?? null,
       currency: row.currency,
       finalDeliverables: typeof row.final_deliverables === 'string' ? JSON.parse(row.final_deliverables) : row.final_deliverables,
       deliveryDays: row.delivery_days,
@@ -1201,6 +1326,11 @@ export class SQLiteStore {
       humanApprovedAt: row.human_approved_at || undefined,
       sellerAcceptanceStatus: row.seller_acceptance_status,
       sellerAcceptedAt: row.seller_accepted_at || undefined,
+      workAcceptanceStatus: (row.work_acceptance_status as any) || 'pending',
+      workAcceptedAt: row.work_accepted_at || undefined,
+      disputeReason: row.dispute_reason || undefined,
+      platformFeeCents: row.platform_fee_cents ?? undefined,
+      sellerPayoutCents: row.seller_payout_cents ?? undefined,
       rejectionReason: row.rejection_reason || undefined,
       paypalReady: Boolean(row.paypal_ready),
       createdAt: row.created_at
@@ -1235,14 +1365,17 @@ export class SQLiteStore {
   }
 
   public saveTransaction(tx: Transaction): Transaction {
+    const amountCents = tx.amountCents ?? dollarsToCents(tx.amount);
+    tx.amountCents = amountCents;
     this.db.prepare(`
       INSERT OR REPLACE INTO transactions (
         id, agreement_id, negotiation_id, request_id, buyer_user_id, seller_user_id, buyer_agent_name,
-        seller_agent_id, seller_business_name, service_title, amount, currency,
-        paypal_order_id, paypal_capture_id, paypal_payer_email, paypal_payer_name,
+        seller_agent_id, seller_business_name, service_title, amount, amount_cents, platform_fee_cents, seller_payout_cents,
+        currency, paypal_order_id, paypal_capture_id, paypal_payer_email, paypal_payer_name,
         payment_status, idempotency_key, seller_share_held, seller_payout_status, seller_payout_at,
+        refund_id, refunded_at, refund_reason,
         created_at, completed_at, failure_reason, is_sandbox
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       tx.id,
       tx.agreementId,
@@ -1255,6 +1388,9 @@ export class SQLiteStore {
       tx.sellerBusinessName,
       tx.serviceTitle,
       tx.amount,
+      amountCents,
+      tx.platformFeeCents ?? null,
+      tx.sellerPayoutCents ?? null,
       tx.currency || 'USD',
       tx.paypalOrderId || null,
       tx.paypalCaptureId || null,
@@ -1265,6 +1401,9 @@ export class SQLiteStore {
       tx.sellerShareHeld ?? null,
       tx.sellerPayoutStatus || 'held',
       tx.sellerPayoutAt || null,
+      tx.refundId || null,
+      tx.refundedAt || null,
+      tx.refundReason || null,
       tx.createdAt || new Date().toISOString(),
       tx.completedAt || null,
       tx.failureReason || null,
@@ -1286,6 +1425,9 @@ export class SQLiteStore {
       sellerBusinessName: r.seller_business_name,
       serviceTitle: r.service_title,
       amount: r.amount,
+      amountCents: r.amount_cents ?? dollarsToCents(r.amount),
+      platformFeeCents: r.platform_fee_cents ?? undefined,
+      sellerPayoutCents: r.seller_payout_cents ?? undefined,
       currency: r.currency,
       paypalOrderId: r.paypal_order_id || undefined,
       paypalCaptureId: r.paypal_capture_id || undefined,
@@ -1296,6 +1438,9 @@ export class SQLiteStore {
       sellerShareHeld: r.seller_share_held !== null ? Number(r.seller_share_held) : undefined,
       sellerPayoutStatus: r.seller_payout_status || undefined,
       sellerPayoutAt: r.seller_payout_at || undefined,
+      refundId: r.refund_id || undefined,
+      refundedAt: r.refunded_at || undefined,
+      refundReason: r.refund_reason || undefined,
       createdAt: r.created_at,
       completedAt: r.completed_at || undefined,
       failureReason: r.failure_reason || undefined,
@@ -1339,6 +1484,27 @@ export class SQLiteStore {
       read: Boolean(r.read),
       createdAt: r.created_at
     }));
+  }
+
+  public addNotification(input: {
+    userId: string;
+    title: string;
+    message: string;
+    type: AppNotification['type'];
+    linkUrl?: string;
+    metadata?: Record<string, any>;
+  }): AppNotification {
+    return this.saveNotification({
+      id: `notif_${uuidv4().substring(0, 8)}`,
+      userId: input.userId,
+      title: input.title,
+      message: input.message,
+      type: input.type,
+      linkUrl: input.linkUrl,
+      metadata: input.metadata,
+      read: false,
+      createdAt: new Date().toISOString()
+    });
   }
 
   public saveNotification(notification: AppNotification): AppNotification {
@@ -1673,6 +1839,195 @@ export class SQLiteStore {
       createdAt: r.created_at,
       updatedAt: r.updated_at
     };
+  }
+
+  // =========================================================================
+  // 12. Seller Payout Accounts, Payouts & Platform Ledger
+  // =========================================================================
+  public getSellerPayoutAccount(userId: string): SellerPayoutAccount | undefined {
+    const r = this.db.prepare('SELECT * FROM seller_payout_accounts WHERE user_id = ?').get(userId) as any;
+    return r ? this.mapSellerPayoutAccount(r) : undefined;
+  }
+
+  public getSellerPayoutAccountById(id: string): SellerPayoutAccount | undefined {
+    const r = this.db.prepare('SELECT * FROM seller_payout_accounts WHERE id = ?').get(id) as any;
+    return r ? this.mapSellerPayoutAccount(r) : undefined;
+  }
+
+  public saveSellerPayoutAccount(acct: SellerPayoutAccount): SellerPayoutAccount {
+    const now = new Date().toISOString();
+    acct.updatedAt = now;
+    const existing = this.getSellerPayoutAccount(acct.userId);
+    if (existing) {
+      this.db.prepare(`
+        UPDATE seller_payout_accounts SET
+          provider = ?, paypal_email = ?, status = ?, verified_at = ?, last_error = ?, updated_at = ?
+        WHERE user_id = ?
+      `).run(
+        acct.provider,
+        acct.paypalEmail || null,
+        acct.status,
+        acct.verifiedAt || null,
+        acct.lastError || null,
+        now,
+        acct.userId
+      );
+      acct.id = existing.id;
+      acct.createdAt = existing.createdAt;
+    } else {
+      this.db.prepare(`
+        INSERT INTO seller_payout_accounts (
+          id, user_id, provider, paypal_email, status, verified_at, last_error, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        acct.id,
+        acct.userId,
+        acct.provider,
+        acct.paypalEmail || null,
+        acct.status,
+        acct.verifiedAt || null,
+        acct.lastError || null,
+        acct.createdAt || now,
+        now
+      );
+    }
+    return acct;
+  }
+
+  private mapSellerPayoutAccount(r: any): SellerPayoutAccount {
+    return {
+      id: r.id,
+      userId: r.user_id,
+      provider: r.provider,
+      paypalEmail: r.paypal_email || null,
+      status: r.status,
+      verifiedAt: r.verified_at || null,
+      lastError: r.last_error || null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  }
+
+  public getPayout(id: string): PayoutRecord | undefined {
+    const r = this.db.prepare('SELECT * FROM payouts WHERE id = ?').get(id) as any;
+    return r ? this.mapPayout(r) : undefined;
+  }
+
+  public getPayoutByDeal(dealId: string): PayoutRecord | undefined {
+    const r = this.db.prepare('SELECT * FROM payouts WHERE deal_id = ?').get(dealId) as any;
+    return r ? this.mapPayout(r) : undefined;
+  }
+
+  public getPayoutsForSeller(sellerUserId: string): PayoutRecord[] {
+    const rows = this.db.prepare('SELECT * FROM payouts WHERE seller_user_id = ? ORDER BY created_at DESC').all(sellerUserId) as any[];
+    return rows.map(r => this.mapPayout(r));
+  }
+
+  public savePayout(payout: PayoutRecord): PayoutRecord {
+    const now = new Date().toISOString();
+    payout.updatedAt = now;
+    const existing = this.getPayoutByDeal(payout.dealId);
+    if (existing) {
+      this.db.prepare(`
+        UPDATE payouts SET
+          status = ?, provider = ?, provider_batch_id = ?, provider_item_id = ?,
+          paypal_debug_id = ?, failure_reason = ?, retry_count = ?, next_retry_at = ?, updated_at = ?
+        WHERE id = ?
+      `).run(
+        payout.status,
+        payout.provider,
+        payout.providerBatchId || null,
+        payout.providerItemId || null,
+        payout.paypalDebugId || null,
+        payout.failureReason || null,
+        payout.retryCount ?? 0,
+        payout.nextRetryAt || null,
+        now,
+        existing.id
+      );
+      payout.id = existing.id;
+    } else {
+      this.db.prepare(`
+        INSERT INTO payouts (
+          id, deal_id, agreement_id, seller_user_id, amount_cents, fee_cents, gross_amount_cents,
+          currency, status, provider, provider_batch_id, provider_item_id, paypal_debug_id,
+          failure_reason, retry_count, next_retry_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        payout.id,
+        payout.dealId,
+        payout.agreementId,
+        payout.sellerUserId,
+        payout.amountCents,
+        payout.feeCents,
+        payout.grossAmountCents,
+        payout.currency || 'USD',
+        payout.status,
+        payout.provider,
+        payout.providerBatchId || null,
+        payout.providerItemId || null,
+        payout.paypalDebugId || null,
+        payout.failureReason || null,
+        payout.retryCount ?? 0,
+        payout.nextRetryAt || null,
+        payout.createdAt || now,
+        now
+      );
+    }
+    return payout;
+  }
+
+  private mapPayout(r: any): PayoutRecord {
+    return {
+      id: r.id,
+      dealId: r.deal_id,
+      agreementId: r.agreement_id,
+      sellerUserId: r.seller_user_id,
+      amountCents: Number(r.amount_cents),
+      feeCents: Number(r.fee_cents),
+      grossAmountCents: Number(r.gross_amount_cents),
+      currency: r.currency || 'USD',
+      status: r.status,
+      provider: r.provider,
+      providerBatchId: r.provider_batch_id || null,
+      providerItemId: r.provider_item_id || null,
+      paypalDebugId: r.paypal_debug_id || null,
+      failureReason: r.failure_reason || null,
+      retryCount: Number(r.retry_count || 0),
+      nextRetryAt: r.next_retry_at || null,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    };
+  }
+
+  public addLedgerEntry(entry: Omit<LedgerEntry, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): LedgerEntry {
+    const full: LedgerEntry = {
+      id: entry.id || `led_${uuidv4().substring(0, 10)}`,
+      dealId: entry.dealId,
+      type: entry.type,
+      amountCents: Math.round(entry.amountCents),
+      currency: entry.currency || 'USD',
+      note: entry.note,
+      createdAt: entry.createdAt || new Date().toISOString()
+    };
+    this.db.prepare(`
+      INSERT INTO ledger_entries (id, deal_id, type, amount_cents, currency, note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(full.id, full.dealId, full.type, full.amountCents, full.currency, full.note || null, full.createdAt);
+    return full;
+  }
+
+  public getLedgerEntriesForDeal(dealId: string): LedgerEntry[] {
+    const rows = this.db.prepare('SELECT * FROM ledger_entries WHERE deal_id = ? ORDER BY created_at ASC').all(dealId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      dealId: r.deal_id,
+      type: r.type,
+      amountCents: Number(r.amount_cents),
+      currency: r.currency,
+      note: r.note || undefined,
+      createdAt: r.created_at
+    }));
   }
 }
 

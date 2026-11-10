@@ -1,5 +1,4 @@
 import React from 'react';
-import { Loader2 } from 'lucide-react';
 
 export type ButtonVariant = 'volt' | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline' | 'accent' | 'danger';
 export type ButtonSize = 'sm' | 'md' | 'lg';
@@ -27,7 +26,7 @@ export const Button: React.FC<ButtonProps> = ({
   disabled,
   ...props
 }) => {
-  const base = 'inline-flex items-center justify-center font-medium rounded-control select-none cursor-pointer transition-all duration-150 text-center tracking-normal';
+  const base = 'inline-flex items-center justify-center font-medium rounded-control select-none cursor-pointer transition-transform transition-colors duration-[120ms] [transition-timing-function:var(--ease-standard)] text-center tracking-normal';
 
   const sizeStyles = {
     sm: 'h-9 px-3.5 text-secondary gap-1.5',
@@ -60,7 +59,11 @@ export const Button: React.FC<ButtonProps> = ({
       {...props}
     >
       {isLoading ? (
-        <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+        <span className="inline-flex items-center gap-1 shrink-0" aria-hidden="true">
+          <span className="w-1.5 h-1.5 rounded-full bg-current vyro-live-indicator" />
+          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-65" />
+          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-40" />
+        </span>
       ) : (
         prefixIcon && <span className="shrink-0 flex items-center">{prefixIcon}</span>
       )}

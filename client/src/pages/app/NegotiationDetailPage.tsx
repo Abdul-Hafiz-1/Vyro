@@ -7,12 +7,13 @@ import {
   Check,
   AlertTriangle,
   ShieldCheck,
-  Clock,
   Terminal,
   FileCheck,
-  DollarSign
+  AlertCircle,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { motion } from 'framer-motion';
 import { api } from '../../api/client';
 import { Button } from '../../components/common/Button';
 import { StatusChip, StatusRole } from '../../components/common/StatusChip';
@@ -21,9 +22,11 @@ import { SummaryPanel } from '../../components/common/SummaryPanel';
 import { DecisionCard } from '../../components/common/DecisionCard';
 import { Drawer } from '../../components/common/Drawer';
 import { Card } from '../../components/common/Card';
+import { RollingNumber } from '../../components/common/RollingNumber';
 import { PayPalCheckoutButton } from '../../components/negotiation/PayPalCheckoutButton';
 import { useAuth } from '../../context/AuthContext';
 import { formatMoney, formatDate, formatStatus, formatName } from '../../lib/present';
+import { EASE_STANDARD } from '../../lib/motion';
 
 interface TimelineItem {
   id: string;
@@ -32,6 +35,7 @@ interface TimelineItem {
   authorName: string;
   isSelf: boolean;
   deltaText?: string;
+  whyText?: string;
   timestamp?: string;
   statusBadge?: string;
   summaryText: string;
@@ -48,6 +52,8 @@ export const NegotiationDetailPage: React.FC = () => {
   const [chatMessage, setChatMessage] = useState('');
   const [appealReason, setAppealReason] = useState('');
   const [showAppealModal, setShowAppealModal] = useState(false);
+  const [showProblemForm, setShowProblemForm] = useState(false);
+  const [problemReason, setProblemReason] = useState('');
 
   // Fetch current negotiation details
   const {
@@ -142,20 +148,73 @@ export const NegotiationDetailPage: React.FC = () => {
     onError: (err: any) => toast.error(err.message || 'Appeal submission failed')
   });
 
-  // Mock payment fallback mutation
-  const mockPayMutation = useMutation({
-    mutationFn: (agreementId: string) => api.settlePaymentMock(agreementId),
+  // Mock payment mutation removed: PayPal SDK button is the single payment action
+  const undoMutation = useMutation({
+    mutationFn: async () => {
+      const qId = negData?.queueItem?.id;
+      if (!qId) return;
+      await api.undoReviewItem(qId);
+    },
     onSuccess: () => {
-      toast.success('Payment settled and funds held in escrow.');
+      toast.info('Decision undone — returned to queue.');
       queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
       refetch();
     },
-    onError: (err: any) => toast.error(err.message || 'Payment failed')
+    onError: (err: any) => toast.error(err.message || 'Undo failed')
+  });
+
+  const acceptWorkMutation = useMutation({
+    mutationFn: () => api.acceptDealWork(id!),
+    onSuccess: (res) => {
+      const pStatus = res?.payout?.status;
+      toast.success(
+        pStatus === 'failed'
+          ? 'Work accepted, but payout needs retry.'
+          : 'Work accepted and seller payout released.'
+      );
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      queryClient.invalidateQueries({ queryKey: ['transactionsList'] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Could not accept work')
+  });
+
+  const reportProblemMutation = useMutation({
+    mutationFn: (reason: string) => api.reportDealProblem(id!, reason),
+    onSuccess: () => {
+      toast.info('Problem reported. Seller payout is paused.');
+      setShowProblemForm(false);
+      setProblemReason('');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Could not report problem')
+  });
+
+  const refundMutation = useMutation({
+    mutationFn: (reason?: string) => api.refundPayment(negData!.agreement!.id, reason),
+    onSuccess: () => {
+      toast.success('Buyer refunded via PayPal escrow.');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      queryClient.invalidateQueries({ queryKey: ['transactionsList'] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Refund failed')
+  });
+
+  const retryPayoutMutation = useMutation({
+    mutationFn: (payoutId: string) => api.retryPayout(payoutId),
+    onSuccess: () => {
+      toast.success('Seller payout retried.');
+      queryClient.invalidateQueries({ queryKey: ['negotiationDetail', id] });
+      refetch();
+    },
+    onError: (err: any) => toast.error(err.message || 'Retry failed')
   });
 
   if (isLoading || !negData) {
     return (
-      <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-6 animate-pulse">
+      <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-6 opacity-70">
         <div className="h-14 w-full bg-surface border border-border-subtle rounded-control" />
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <div className="lg:col-span-7 h-96 bg-surface border border-border-subtle rounded-surface" />
@@ -220,26 +279,52 @@ export const NegotiationDetailPage: React.FC = () => {
   const summaryStatusRole: 'handled' | 'needsYou' | 'declined' | 'inProgress' =
     statusRole === 'neutral' ? 'inProgress' : statusRole;
 
-  // Build timeline items from proposals
+  // Build timeline items comparing ONLY to the same side's previous proposal (Part 4)
+  let prevBuyerProp: any = undefined;
+  let prevSellerProp: any = undefined;
+  let latestBuyerPrice: number | null = null;
+  let latestSellerPrice: number | null = null;
+
   const timelineNodes: TimelineItem[] = proposals.length > 0
     ? proposals.map((p, idx) => {
-        const isSelf = p.senderAgentId === negData.buyerAgentId;
-        const prevProposal = idx > 0 ? proposals[idx - 1] : undefined;
-        let deltaText: string | undefined;
-        if (prevProposal) {
-          const priceDiff = p.price - prevProposal.price;
-          if (priceDiff < 0) {
-            deltaText = `-${formatMoney(Math.abs(priceDiff))} price concession`;
-          } else if (priceDiff > 0) {
-            deltaText = `+${formatMoney(priceDiff)} counter`;
+        const isBuyerProp = p.senderAgentId === negData.buyerAgentId;
+        const isSelf = isBuyer ? isBuyerProp : !isBuyerProp;
+        const prevSameSide = isBuyerProp ? prevBuyerProp : prevSellerProp;
+
+        if (isBuyerProp) {
+          latestBuyerPrice = p.price;
+          prevBuyerProp = p;
+        } else {
+          latestSellerPrice = p.price;
+          prevSellerProp = p;
+        }
+
+        const changes: string[] = [];
+        if (prevSameSide) {
+          const sameDiff = p.price - prevSameSide.price;
+          if (sameDiff < 0) {
+            changes.push(`Lowered by ${formatMoney(Math.abs(sameDiff))}`);
+          } else if (sameDiff > 0) {
+            changes.push(`Raised by ${formatMoney(sameDiff)}`);
+          } else {
+            changes.push(`Held at ${formatMoney(p.price)}`);
+          }
+          if (prevSameSide.deliveryDays !== p.deliveryDays) {
+            changes.push(`Changed delivery ${prevSameSide.deliveryDays} → ${p.deliveryDays} days`);
           }
         } else {
-          deltaText = 'Initial proposal';
+          changes.push(isBuyerProp ? 'Opening offer' : 'Initial ask');
         }
+
+        const deltaText = changes.join(' · ');
+        const matchedMsg = (messages || []).find(
+          (m: any) => m.round === p.round && ((isBuyerProp && m.senderRole === 'buyer') || (!isBuyerProp && m.senderRole === 'seller')) && m.messageType !== 'request'
+        );
+        const whyText = p.whyMove || matchedMsg?.payload?.whyMove || p.whyThisOffer;
 
         const summaryText = isSelf
           ? `Offered ${formatMoney(p.price)} with ${p.deliveryDays}-day delivery turnaround.`
-          : `${counterpartName} proposed ${formatMoney(p.price)} for complete delivery in ${p.deliveryDays} days.`;
+          : `${counterpartName} proposed ${formatMoney(p.price)} for delivery in ${p.deliveryDays} days.`;
 
         return {
           id: p.id || `prop-${idx}`,
@@ -248,7 +333,8 @@ export const NegotiationDetailPage: React.FC = () => {
           authorName: isSelf ? 'Your agent' : counterpartName,
           isSelf,
           deltaText,
-          timestamp: undefined,
+          whyText,
+          timestamp: p.createdAt ? formatDate(p.createdAt) : undefined,
           statusBadge: idx === proposals.length - 1 && isAgreed ? 'Agreed terms' : undefined,
           summaryText
         };
@@ -260,10 +346,19 @@ export const NegotiationDetailPage: React.FC = () => {
           deliveryDays: agreedOrLatestDays,
           authorName: counterpartName,
           isSelf: false,
-          deltaText: 'Initial proposal',
+          deltaText: 'Initial ask',
           summaryText: `${counterpartName} proposed ${formatMoney(agreedOrLatestPrice)} with ${agreedOrLatestDays}-day turnaround.`
         }
       ];
+
+  const gapDollars =
+    latestBuyerPrice !== null && latestSellerPrice !== null
+      ? Math.max(0, latestSellerPrice - latestBuyerPrice)
+      : null;
+  const savingsDollars =
+    isAgreed && isBuyer && request?.maxBudget && agreement?.finalPrice && agreement.finalPrice < request.maxBudget
+      ? Math.round(request.maxBudget - agreement.finalPrice)
+      : 0;
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -301,6 +396,13 @@ export const NegotiationDetailPage: React.FC = () => {
                 role={statusRole}
                 size="sm"
               />
+              {(['evaluating', 'proposal_exchange', 'countering', 'initiated', 'negotiating'].includes(negData.status as string)) && (
+                <span className="vyro-live-indicator" title="Live negotiation" aria-label="Live negotiation">
+                  <span />
+                  <span />
+                  <span />
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-secondary text-text-muted mt-0.5">
               <span>With {counterpartName}</span>
@@ -369,6 +471,59 @@ export const NegotiationDetailPage: React.FC = () => {
             </p>
           </div>
 
+          {/* Slim Gap Bar / Agreed Summary above Timeline (Part 4 + Part B Animation) */}
+          {(isAgreed || gapDollars !== null) && (
+            <div className="bg-surface border border-border-subtle rounded-control p-4 flex flex-col gap-2.5 overflow-hidden">
+              {isAgreed ? (
+                <motion.div
+                  initial={{ scale: 0.96, opacity: 0.7 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.32, ease: EASE_STANDARD }}
+                  className="vyro-volt-sweep rounded-control px-3 py-2 flex flex-wrap items-center justify-between gap-2"
+                >
+                  <span className="font-semibold text-body text-status-handled">
+                    Agreed at <RollingNumber value={agreedOrLatestPrice} format={formatMoney} durationMs={320} />
+                  </span>
+                  {savingsDollars > 0 && (
+                    <StatusChip
+                      label={`You saved ${formatMoney(savingsDollars)} vs your budget`}
+                      role="handled"
+                      size="sm"
+                    />
+                  )}
+                </motion.div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-secondary">
+                    <span>
+                      Buyer bid: <strong className="text-text-primary">{latestBuyerPrice !== null ? formatMoney(latestBuyerPrice) : '—'}</strong>
+                    </span>
+                    <StatusChip
+                      label={`Gap: ${formatMoney(gapDollars || 0)}`}
+                      role="inProgress"
+                      size="sm"
+                    />
+                    <span>
+                      Seller ask: <strong className="text-text-primary">{latestSellerPrice !== null ? formatMoney(latestSellerPrice) : '—'}</strong>
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-raised overflow-hidden">
+                    <div
+                      className="h-full w-full bg-volt rounded-full origin-left transition-transform duration-300"
+                      style={{
+                        transform: `scaleX(${
+                          latestSellerPrice && latestBuyerPrice
+                            ? Math.min(1, Math.max(0.1, latestBuyerPrice / latestSellerPrice))
+                            : 0.25
+                        })`
+                      }}
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
           {/* Timeline Nodes */}
           <div className="flex flex-col">
             {timelineNodes.map((node) => (
@@ -379,6 +534,7 @@ export const NegotiationDetailPage: React.FC = () => {
                 authorName={node.authorName}
                 isSelf={node.isSelf}
                 deltaText={node.deltaText}
+                whyText={node.whyText}
                 timestamp={node.timestamp}
                 statusBadge={node.statusBadge}
                 summaryText={node.summaryText}
@@ -417,7 +573,7 @@ export const NegotiationDetailPage: React.FC = () => {
 
         {/* Right Column: Sticky SummaryPanel + DecisionCard / Payment */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* Summary Panel */}
+          {/* Summary Panel (Single PayPal Checkout Action Inside) */}
           <SummaryPanel
             currentPrice={agreedOrLatestPrice}
             deliveryDays={agreedOrLatestDays}
@@ -427,54 +583,89 @@ export const NegotiationDetailPage: React.FC = () => {
             counterpartName={counterpartName}
             isBuyer={isBuyer}
             actionState={actionState}
-            onPay={() => {
-              if (agreement?.id) {
-                mockPayMutation.mutate(agreement.id);
-              }
-            }}
+            completedBannerText={
+              negData.transaction?.paymentStatus === 'refunded'
+                ? 'Refunded to buyer'
+                : (negData.payout?.status || negData.transaction?.sellerPayoutStatus) === 'paid'
+                ? 'Released to seller'
+                : (negData.payout?.status || negData.transaction?.sellerPayoutStatus) === 'simulated_paid'
+                ? 'Test payout, simulated'
+                : (negData.payout?.status || negData.transaction?.sellerPayoutStatus) === 'processing' || (negData.payout?.status || negData.transaction?.sellerPayoutStatus) === 'scheduled'
+                ? 'Work accepted · sending payout'
+                : 'Paid with PayPal · held until you accept the work'
+            }
+            paymentSlot={
+              agreement && isApproved && !isCompleted && isBuyer && negData.sellerPayoutReady !== false ? (
+                <PayPalCheckoutButton
+                  agreement={agreement}
+                  projectTitle={request?.title}
+                  onPaymentSuccess={(tx) => {
+                    toast.success(`Payment verified and held in escrow.`);
+                    refetch();
+                  }}
+                  onPaymentError={(err) => {
+                    toast.error(`PayPal payment notice: ${err}`);
+                  }}
+                />
+              ) : undefined
+            }
           />
 
-          {/* Exception Approval: Decision Card (Ramp pattern) */}
+          {/* Seller Payout Setup Gate Notice (Part A2) */}
+          {negData.sellerPayoutReady === false && !isCompleted && (
+            <Card className="p-5 flex flex-col gap-3 border-border-subtle bg-raised">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-5 h-5 text-volt shrink-0 mt-0.5" />
+                <div className="flex flex-col gap-1">
+                  <span className="font-semibold text-body text-text-primary">
+                    {isBuyer
+                      ? 'Waiting for the seller to finish payout setup'
+                      : 'Add where to send your earnings'}
+                  </span>
+                  <p className="text-secondary text-text-muted">
+                    {isBuyer
+                      ? 'The seller needs to add their payout email before payment can be confirmed.'
+                      : 'Add your PayPal email on Payments before this deal can be confirmed and paid.'}
+                  </p>
+                </div>
+              </div>
+              {!isBuyer && (
+                <Link to="/app/transactions">
+                  <Button variant="volt" size="sm" fullWidth>
+                    Set up PayPal payout email
+                  </Button>
+                </Link>
+              )}
+            </Card>
+          )}
+
+          {/* Exception Approval: Decision Card (Approve / Counter / Decline) */}
           {needsHuman && (
             <DecisionCard
               title={request?.title || 'Commercial Project'}
               counterpartName={counterpartName}
               proposedPrice={agreedOrLatestPrice}
               proposedDays={agreedOrLatestDays}
-              reasonText={`Seller agreed at ${formatMoney(agreedOrLatestPrice)} with ${agreedOrLatestDays}-day delivery.`}
-              suggestionText="Suggested: Accept"
+              buyerBudget={request?.maxBudget}
+              buyerHardCap={request?.hardCap}
+              reasons={decision?.reasons}
+              reasonText={
+                decision?.reasons?.[0] ||
+                `${counterpartName} is verified and proposed ${formatMoney(agreedOrLatestPrice)} (${agreedOrLatestDays} days).`
+              }
+              suggestionText={decision?.recommendation || 'Review the terms and approve, counter, or decline.'}
               onApprove={() => approveMutation.mutate()}
               onCounter={(price) => counterMutation.mutate(price)}
               onDecline={() => declineMutation.mutate()}
-              isLoading={approveMutation.isPending || counterMutation.isPending || declineMutation.isPending}
+              onUndo={queueItem ? () => undoMutation.mutate() : undefined}
+              isLoading={approveMutation.isPending || counterMutation.isPending || declineMutation.isPending || undoMutation.isPending}
+              loadingAction={
+                approveMutation.isPending ? 'approve' :
+                counterMutation.isPending ? 'counter' :
+                declineMutation.isPending ? 'decline' :
+                undoMutation.isPending ? 'undo' : null
+              }
             />
-          )}
-
-          {/* PayPal Checkout Card (When Approved and Ready to Pay - BUYER ONLY) */}
-          {agreement && isApproved && !isCompleted && isBuyer && (
-            <div className="flex flex-col gap-3">
-              <PayPalCheckoutButton
-                agreement={agreement}
-                onPaymentSuccess={(tx) => {
-                  toast.success(`Payment verified and captured! Receipt: ${tx.id}`);
-                  refetch();
-                }}
-                onPaymentError={(err) => {
-                  toast.error(`PayPal payment notice: ${err}`);
-                }}
-              />
-
-              {/* Instant Platform Escrow Alternative */}
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => mockPayMutation.mutate(agreement.id)}
-                  className="text-secondary text-text-muted hover:text-text-primary underline cursor-pointer"
-                >
-                  Or test with Instant Platform Escrow
-                </button>
-              </div>
-            </div>
           )}
 
           {/* Seller State: Awaiting Buyer Payment */}
@@ -509,25 +700,166 @@ export const NegotiationDetailPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Completed State */}
-          {isCompleted && (
-            <Card className="p-5 flex flex-col items-center gap-3 text-center bg-status-handled/10 border-status-handled/30">
-              <div className="w-10 h-10 rounded-full bg-status-handled/20 flex items-center justify-center text-status-handled">
-                <Check className="w-5 h-5" strokeWidth={2.5} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <span className="font-semibold text-body text-text-primary">Contract settled</span>
-                <p className="text-secondary text-text-muted">
-                  Funds held securely in platform escrow for {counterpartName}.
-                </p>
-              </div>
-              <Link to="/app/transactions" className="w-full">
-                <Button variant="volt" size="md" fullWidth>
-                  View receipt and invoices
-                </Button>
-              </Link>
-            </Card>
-          )}
+          {/* Completed State — Buyer Work Acceptance & Seller Earnings Status (Part A4) */}
+          {isCompleted && (() => {
+            const tx = negData.transaction;
+            const payout = negData.payout;
+            const payoutStatus = payout?.status || tx?.sellerPayoutStatus;
+            const workStatus = agreement?.workAcceptanceStatus || 'pending';
+            const isRefunded = tx?.paymentStatus === 'refunded';
+            const grossDollars = tx?.amount ?? agreedOrLatestPrice;
+            const feePct = negData.platformFeePercent ?? 5;
+            const feeDollars = tx?.platformFeeCents
+              ? tx.platformFeeCents / 100
+              : Math.round(grossDollars * feePct) / 100;
+            const netDollars = tx?.sellerPayoutCents
+              ? tx.sellerPayoutCents / 100
+              : Math.max(0, grossDollars - feeDollars);
+
+            const statusBadge = isRefunded
+              ? { label: 'Refunded', role: 'declined' as const }
+              : payoutStatus === 'paid'
+              ? { label: 'Released to you', role: 'handled' as const }
+              : payoutStatus === 'simulated_paid'
+              ? { label: 'Test payout, simulated', role: 'handled' as const }
+              : payoutStatus === 'processing' || payoutStatus === 'scheduled'
+              ? { label: 'Sending payout', role: 'inProgress' as const }
+              : payoutStatus === 'failed'
+              ? { label: 'Failed', role: 'declined' as const }
+              : { label: 'Paid, held', role: 'inProgress' as const };
+
+            return (
+              <Card className="p-6 flex flex-col gap-4 bg-surface border-border-subtle">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-full bg-status-handled/15 flex items-center justify-center text-status-handled shrink-0">
+                      <Check className="w-4 h-4" strokeWidth={2.5} />
+                    </div>
+                    <span className="font-semibold text-body text-text-primary">
+                      {isRefunded
+                        ? 'Payment refunded'
+                        : workStatus === 'accepted'
+                        ? 'Work accepted & settled'
+                        : workStatus === 'disputed'
+                        ? 'Problem reported'
+                        : 'Paid with PayPal'}
+                    </span>
+                  </div>
+                  <StatusChip label={statusBadge.label} role={statusBadge.role} size="sm" />
+                </div>
+
+                {isBuyer ? (
+                  <p className="text-secondary text-text-muted leading-relaxed">
+                    {isRefunded
+                      ? 'Your PayPal payment was refunded in full.'
+                      : workStatus === 'accepted'
+                      ? `You accepted the work. ${formatMoney(netDollars)} was released to ${counterpartName} (${formatMoney(feeDollars)} service fee).`
+                      : workStatus === 'disputed'
+                      ? `Problem noted: "${agreement?.disputeReason || 'Under review'}". Payout to the seller is paused.`
+                      : 'Paid with PayPal · held until you accept the work.'}
+                  </p>
+                ) : (
+                  <p className="text-secondary text-text-muted leading-relaxed">
+                    {isRefunded
+                      ? `This order of ${formatMoney(grossDollars)} was refunded to the buyer.`
+                      : payoutStatus === 'paid' || payoutStatus === 'simulated_paid' || payoutStatus === 'processing'
+                      ? `Buyer paid ${formatMoney(grossDollars)}. Your earnings ${formatMoney(netDollars)} (after ${formatMoney(feeDollars)} fee) ${payoutStatus === 'processing' ? 'are being sent to' : 'were sent to'} ${negData.sellerPayoutAccount?.paypalEmail || 'your PayPal email'}.`
+                      : `Buyer paid ${formatMoney(grossDollars)}. Your earnings ${formatMoney(netDollars)} (after ${formatMoney(feeDollars)} fee) will be sent to ${negData.sellerPayoutAccount?.paypalEmail || 'your PayPal email'} after the buyer accepts.`}
+                  </p>
+                )}
+
+                {/* Buyer Work Acceptance & Problem Controls */}
+                {isBuyer && !isRefunded && workStatus !== 'accepted' && (
+                  <div className="flex flex-col gap-3 pt-1">
+                    {!showProblemForm ? (
+                      <div className="flex flex-col sm:flex-row gap-2.5">
+                        <Button
+                          type="button"
+                          variant="volt"
+                          size="md"
+                          className="flex-1"
+                          isLoading={acceptWorkMutation.isPending}
+                          onClick={() => acceptWorkMutation.mutate()}
+                          leftIcon={<Check className="w-4 h-4" strokeWidth={2.5} />}
+                        >
+                          Accept work
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="md"
+                          onClick={() => setShowProblemForm(true)}
+                        >
+                          Report a problem
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="p-3.5 rounded-control bg-raised border border-border-subtle flex flex-col gap-2.5">
+                        <label className="text-secondary font-medium text-text-primary">
+                          Describe the issue with deliverables
+                        </label>
+                        <textarea
+                          rows={2}
+                          value={problemReason}
+                          onChange={(e) => setProblemReason(e.target.value)}
+                          placeholder="e.g. Deliverables missing requested files…"
+                          className="w-full p-2.5 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt resize-none"
+                        />
+                        <div className="flex justify-end gap-2">
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setShowProblemForm(false)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="danger"
+                            size="sm"
+                            isLoading={reportProblemMutation.isPending}
+                            disabled={problemReason.trim().length < 5}
+                            onClick={() => reportProblemMutation.mutate(problemReason.trim())}
+                          >
+                            Submit problem
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {workStatus === 'disputed' && agreement?.id && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        isLoading={refundMutation.isPending}
+                        onClick={() => refundMutation.mutate(agreement.disputeReason || 'Disputed work refund')}
+                        leftIcon={<RotateCcw className="w-4 h-4" />}
+                      >
+                        Request PayPal refund
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* Seller Retry Failed Payout */}
+                {!isBuyer && payoutStatus === 'failed' && payout?.id && (
+                  <Button
+                    type="button"
+                    variant="volt"
+                    size="sm"
+                    isLoading={retryPayoutMutation.isPending}
+                    onClick={() => retryPayoutMutation.mutate(payout.id)}
+                    leftIcon={<RotateCcw className="w-4 h-4" />}
+                  >
+                    Retry payout
+                  </Button>
+                )}
+
+                <Link to={tx?.id ? `/app/transactions/${tx.id}` : '/app/transactions'} className="w-full">
+                  <Button variant="secondary" size="md" fullWidth>
+                    View itemized receipt
+                  </Button>
+                </Link>
+              </Card>
+            );
+          })()}
         </div>
       </div>
 

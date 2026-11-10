@@ -205,11 +205,25 @@ router.patch('/workspace', authenticateUser, (req: AuthenticatedRequest, res: Re
 // POST /api/v1/auth/onboarding
 router.post('/onboarding', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  const { step, capabilities, buyerPreferences, sellerProfile, completed } = req.body;
+  const {
+    step,
+    capabilities,
+    activeWorkspace,
+    buyerPreferences,
+    sellerProfile,
+    autoApprovalLimit,
+    dailyBudgetCap,
+    completed
+  } = req.body;
 
   if (capabilities) user.capabilities = capabilities;
-  if (buyerPreferences) user.buyerPreferences = buyerPreferences;
-  if (sellerProfile) user.sellerProfile = sellerProfile;
+  if (activeWorkspace && ['buyer', 'seller'].includes(activeWorkspace)) {
+    user.activeWorkspace = activeWorkspace;
+  }
+  if (buyerPreferences) user.buyerPreferences = { ...user.buyerPreferences, ...buyerPreferences };
+  if (sellerProfile) user.sellerProfile = { ...user.sellerProfile, ...sellerProfile };
+  if (typeof autoApprovalLimit === 'number' && autoApprovalLimit >= 0) user.autoApprovalLimit = autoApprovalLimit;
+  if (typeof dailyBudgetCap === 'number' && dailyBudgetCap >= 0) user.dailyBudgetCap = dailyBudgetCap;
   if (typeof step === 'number') user.onboardingStep = step;
   if (typeof completed === 'boolean') user.onboardingCompleted = completed;
 
@@ -223,7 +237,15 @@ router.post('/onboarding', authenticateUser, (req: AuthenticatedRequest, res: Re
 // PATCH /api/v1/auth/profile
 router.patch('/profile', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  const { displayName, bio, isAutomationPaused, buyerPreferences, sellerProfile } = req.body;
+  const {
+    displayName,
+    bio,
+    isAutomationPaused,
+    buyerPreferences,
+    sellerProfile,
+    motionPreference,
+    coachMarksDismissed
+  } = req.body;
 
   if (displayName && typeof displayName === 'string') {
     user.displayName = displayName.trim();
@@ -239,6 +261,12 @@ router.patch('/profile', authenticateUser, (req: AuthenticatedRequest, res: Resp
   }
   if (sellerProfile) {
     user.sellerProfile = { ...user.sellerProfile, ...sellerProfile };
+  }
+  if (motionPreference && ['full', 'reduced', 'system'].includes(motionPreference)) {
+    user.motionPreference = motionPreference;
+  }
+  if (Array.isArray(coachMarksDismissed)) {
+    user.coachMarksDismissed = coachMarksDismissed.map(String);
   }
 
   const updated = store.saveUser(user);

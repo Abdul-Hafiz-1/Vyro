@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { store } from '../db/store.js';
 import { negotiationOrchestrator } from '../services/negotiation/orchestrator.js';
+import { payoutService } from '../services/paypal/payoutService.js';
 import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
 
 const router = Router();
@@ -42,6 +43,14 @@ router.post('/:id/authorize', (req: AuthenticatedRequest, res: Response) => {
   const agreement = store.getAgreement(req.params.id);
   if (!agreement || agreement.buyerUserId !== user.id) {
     return res.status(404).json({ success: false, error: 'Agreement not found' });
+  }
+
+  if (agreement.sellerUserId && !payoutService.isSellerPayoutReady(agreement.sellerUserId)) {
+    return res.status(409).json({
+      success: false,
+      code: 'SELLER_PAYOUT_NOT_READY',
+      error: 'Waiting for the seller to finish payout setup.'
+    });
   }
 
   try {

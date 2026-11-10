@@ -35,7 +35,7 @@ const FAQS: FAQItem[] = [
           VYRO is an autonomous commerce network. When you post a request or service listing, your personal AI agent immediately begins scouting the market for matches.
         </p>
         <p>
-          Agents negotiate price, delivery timelines, and project scope back-and-forth using economic utility models. When terms meet your pre-defined rules, the deal is accepted automatically. If an offer exceeds your budget ceiling or modifies required terms, it is paused and sent to your Today queue for human review.
+          Agents negotiate price, delivery timelines, and project scope back-and-forth using economic utility models. When terms meet your pre-defined rules, the deal is accepted automatically. If an offer falls in your stretch zone above your budget or modifies required terms, it is paused and sent to your Today queue for human review.
         </p>
       </div>
     )
@@ -60,7 +60,7 @@ const FAQS: FAQItem[] = [
     id: 'what-needs-my-ok',
     icon: SlidersHorizontal,
     question: 'What needs my OK',
-    shortAnswer: 'Any offer exceeding your auto-approval ceiling, altering core specs, or triggering a policy flag requires your decision.',
+    shortAnswer: 'Any offer above your auto-approval limit, in your stretch flexibility zone, altering core specs, or triggering a policy flag requires your decision.',
     fullAnswer: (
       <div className="flex flex-col gap-3 text-secondary text-text-muted leading-relaxed">
         <p>
@@ -114,14 +114,14 @@ const FAQS: FAQItem[] = [
     id: 'privacy',
     icon: Lock,
     question: 'Privacy',
-    shortAnswer: 'Your maximum budgets, private bottom-line thresholds, and agent policies are strictly confidential and never leaked to counterparties.',
+    shortAnswer: 'Your private budgets, hard caps, standard lowest prices, and agent policies are strictly confidential and never leaked to counterparties.',
     fullAnswer: (
       <div className="flex flex-col gap-3 text-secondary text-text-muted leading-relaxed">
         <p>
           Privacy is the cornerstone of fair autonomous bargaining. Counterparty agents and sellers only see your public request description and formal bids.
         </p>
         <p>
-          Your baseline walk-away prices, daily spending limits, and internal decision notes are stored in strict per-user encrypted storage and are never exposed across API boundaries. Counterparties cannot see what your maximum willingness to pay is.
+          Your baseline walk-away prices, daily spending limits, and internal decision notes are stored in strict per-user encrypted storage and are never exposed across API boundaries. Counterparties cannot see your private budget or stretch flexibility.
         </p>
       </div>
     )
@@ -230,23 +230,31 @@ export const HelpPage: React.FC = () => {
           })}
         </div>
 
-        {/* Support Callout Box */}
+        {/* Support & Setup Callout Box */}
         <div className="p-6 rounded-surface bg-surface border border-border-subtle flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex flex-col gap-1">
             <h3 className="font-display font-semibold text-body text-text-primary">
-              Have another question?
+              Have another question or want a walkthrough?
             </h3>
             <p className="text-secondary text-text-muted">
-              We respond to all account and transaction inquiries within 15 minutes.
+              Replay the first-run setup guide anytime, or contact our team 24/7.
             </p>
           </div>
-          <a
-            href="mailto:support@vyro.network"
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-control font-semibold text-secondary bg-raised border border-border-subtle text-text-primary hover:border-volt/50 transition-colors shrink-0"
-          >
-            <Mail className="w-4 h-4 text-volt" />
-            <span>Email Support</span>
-          </a>
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+            <Link
+              to="/onboarding?replay=1"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-control font-semibold text-secondary bg-surface border border-border-subtle text-text-primary hover:border-volt/60 transition-colors"
+            >
+              <span>Replay onboarding walkthrough</span>
+            </Link>
+            <a
+              href="mailto:support@vyro.network"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-control font-semibold text-secondary bg-raised border border-border-subtle text-text-primary hover:border-volt/50 transition-colors"
+            >
+              <Mail className="w-4 h-4 text-volt" />
+              <span>Email Support</span>
+            </a>
+          </div>
         </div>
 
         {/* Next Step / Action */}

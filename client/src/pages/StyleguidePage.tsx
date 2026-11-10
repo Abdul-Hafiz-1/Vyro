@@ -176,10 +176,10 @@ export const StyleguidePage: React.FC = () => {
               icon={<Search className="w-4 h-4 text-text-muted" />}
             />
             <Input
-              label="Budget ceiling ($)"
+              label="My budget ($)"
               placeholder="150"
               type="number"
-              helperText="We will never offer higher than this."
+              helperText="Your comfortable budget before stretch flexibility."
             />
           </div>
         </div>
@@ -194,13 +194,14 @@ export const StyleguidePage: React.FC = () => {
           title="Landing page design · Pixel Studio"
           counterpartName="Pixel Studio"
           proposedPrice={155}
-          buyerCeiling={150}
+          buyerBudget={150}
+          buyerHardCap={165}
           proposedDays={7}
-          reasonText="Pixel Studio asked for $155. Your limit is $150."
+          reasons={['Pixel Studio asked for $155.', 'Your comfortable budget is $150 (within your $165 flexible stretch).']}
           suggestionText="Our suggestion: counter at $148 for 6 days."
-          onApprove={() => toast.success('Approved $155')}
-          onCounter={(price, days) => toast.info(`Countered at $${price} for ${days} days`)}
-          onDecline={() => toast.info('Declined offer')}
+          onApprove={() => { toast.success('Approved $155'); }}
+          onCounter={(price, days) => { toast.info(`Countered at $${price} for ${days} days`); }}
+          onDecline={() => { toast.info('Declined offer'); }}
         />
       </section>
 

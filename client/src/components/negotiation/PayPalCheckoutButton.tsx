@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
-import confetti from 'canvas-confetti';
+import {
+  PayPalScriptProvider,
+  PayPalButtons,
+  usePayPalScriptReducer,
+} from '@paypal/react-paypal-js';
+import { Link } from 'react-router-dom';
 import { api } from '../../api/client';
 import { Agreement, Transaction } from '../../types';
-import { ShieldCheck, Loader2, AlertCircle, HelpCircle } from 'lucide-react';
+import { CheckCircle2, AlertCircle, RotateCcw } from 'lucide-react';
 import { formatMoney } from '../../lib/present';
-import { StatusChip } from '../common/StatusChip';
 
 interface PayPalCheckoutButtonProps {
   agreement: Agreement;
+  projectTitle?: string;
+  isSandbox?: boolean;
   onPaymentSuccess: (tx: Transaction) => void;
   onPaymentError: (err: string) => void;
 }
@@ -18,155 +23,293 @@ interface ErrorDetails {
   nextStep?: string;
 }
 
+const PayPalButtonsInner: React.FC<{
+  agreementId: string;
+  isLight: boolean;
+  loading: boolean;
+  setLoading: (val: boolean) => void;
+  setErrorInfo: (err: ErrorDetails | null) => void;
+  onRetryScript: () => void;
+  onPaymentSuccess: (tx: Transaction) => void;
+  onPaymentError: (err: string) => void;
+}> = ({
+  agreementId,
+  isLight,
+  loading,
+  setLoading,
+  setErrorInfo,
+  onRetryScript,
+  onPaymentSuccess,
+  onPaymentError,
+}) => {
+  const [{ isPending, isRejected }] = usePayPalScriptReducer();
+  const [renderFailed, setRenderFailed] = useState(false);
+
+  if (isRejected || renderFailed) {
+    return (
+      <div className="min-h-[48px] p-3 rounded-[10px] border border-border-subtle bg-raised flex items-center justify-between gap-3">
+        <span className="text-secondary text-text-muted">
+          PayPal checkout couldn’t load right now.
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            setRenderFailed(false);
+            onRetryScript();
+          }}
+          className="h-9 px-3 rounded-[10px] border border-border-subtle bg-surface text-secondary font-medium text-text-primary hover:bg-raised inline-flex items-center gap-1.5 shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-volt"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          <span>Retry</span>
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative z-20 w-full min-h-[48px]">
+      {isPending && (
+        <div
+          aria-label="Loading PayPal button"
+          className="absolute inset-0 z-10 h-12 w-full rounded-[4px] bg-raised opacity-70"
+        />
+      )}
+      <div className={isPending ? 'w-full opacity-0 pointer-events-none' : 'w-full'}>
+        <PayPalButtons
+          forceReRender={[agreementId, isLight ? 'light' : 'dark']}
+          style={{
+            layout: 'vertical',
+            color: isLight ? 'blue' : 'gold',
+            shape: 'rect',
+            label: 'paypal',
+            height: 48,
+            tagline: false,
+          }}
+          disabled={loading}
+          createOrder={async () => {
+            setLoading(true);
+            setErrorInfo(null);
+            try {
+              const res = await api.createPayPalOrder(agreementId);
+              return res.orderId;
+            } catch (err: any) {
+              const message = err.message || 'Could not start PayPal checkout.';
+              setErrorInfo({
+                message,
+                nextStep: 'Confirm this deal is approved, then try again.',
+              });
+              onPaymentError(message);
+              throw err;
+            } finally {
+              setLoading(false);
+            }
+          }}
+          onApprove={async (data) => {
+            setLoading(true);
+            setErrorInfo(null);
+            try {
+              const tx = await api.capturePayPalOrder(data.orderID);
+              onPaymentSuccess(tx);
+            } catch (err: any) {
+              const message = err.message || 'Payment could not be captured.';
+              setErrorInfo({
+                message,
+                nextStep: 'Check your PayPal balance or try again.',
+              });
+              onPaymentError(message);
+            } finally {
+              setLoading(false);
+            }
+          }}
+          onCancel={() => {
+            setErrorInfo({
+              message: 'PayPal window closed before completing payment.',
+              nextStep: 'Click the PayPal button whenever you’re ready.',
+            });
+          }}
+          onError={(err) => {
+            console.error('[PayPal Checkout Error]:', err);
+            setRenderFailed(true);
+            setErrorInfo({
+              message: 'PayPal checkout encountered a loading error.',
+              nextStep: 'Disable blockers or click Retry to reload PayPal.',
+            });
+          }}
+        />
+      </div>
+    </div>
+  );
+};
+
 export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
   agreement,
+  projectTitle,
+  isSandbox = true,
   onPaymentSuccess,
-  onPaymentError
+  onPaymentError,
 }) => {
   const [loading, setLoading] = useState(false);
   const [errorInfo, setErrorInfo] = useState<ErrorDetails | null>(null);
+  const [paidTx, setPaidTx] = useState<Transaction | null>(null);
   const [clientId, setClientId] = useState<string>(
     import.meta.env.VITE_PAYPAL_CLIENT_ID || ''
   );
+  const [configError, setConfigError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
+  const [isLight, setIsLight] = useState<boolean>(() =>
+    typeof document !== 'undefined' && document.documentElement.classList.contains('light')
+  );
 
+  // Sync active theme for optimal PayPal button contrast (gold on dark, blue on light)
   useEffect(() => {
-    // Always sync authoritative PayPal clientId from server
-    api.getPayPalConfig().then((cfg) => {
-      if (cfg.clientId && cfg.clientId !== 'sb') {
-        setClientId(cfg.clientId);
-      }
-    }).catch(() => {});
+    if (typeof document === 'undefined') return;
+    const syncTheme = () => {
+      setIsLight(document.documentElement.classList.contains('light'));
+    };
+    syncTheme();
+    const observer = new MutationObserver(syncTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
   }, []);
 
-  return (
-    <div className="p-5 rounded-surface bg-surface border border-border-subtle flex flex-col gap-4 text-text-primary">
-      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
-        <div className="flex items-center gap-2 text-secondary text-text-primary font-medium">
-          <ShieldCheck className="w-4 h-4 text-status-handled" strokeWidth={2} />
-          <span>PayPal Escrow Checkout</span>
-        </div>
-        <StatusChip label="Sandbox testnet" role="neutral" size="sm" />
-      </div>
+  const loadConfig = () => {
+    setConfigError(false);
+    api
+      .getPayPalConfig()
+      .then((cfg) => {
+        if (cfg.clientId && cfg.clientId !== 'sb') {
+          setClientId(cfg.clientId);
+        } else if (!import.meta.env.VITE_PAYPAL_CLIENT_ID) {
+          setConfigError(true);
+        }
+      })
+      .catch(() => {
+        if (!import.meta.env.VITE_PAYPAL_CLIENT_ID) {
+          setConfigError(true);
+        }
+      });
+  };
 
-      <div className="flex items-baseline justify-between">
-        <span className="text-secondary text-text-muted">Total to authorize</span>
-        <span className="font-display font-bold text-[24px] text-text-primary">
-          {formatMoney(agreement.finalPrice)}
-        </span>
+  useEffect(() => {
+    loadConfig();
+  }, [retryKey]);
+
+  const scopeSummary =
+    projectTitle ||
+    (agreement.finalDeliverables?.length
+      ? agreement.finalDeliverables.slice(0, 2).join(', ')
+      : 'Agreed project deliverables');
+
+  if (paidTx) {
+    return (
+      <div className="w-full p-4 rounded-control bg-status-handled/10 border border-status-handled/30 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 text-status-handled font-medium text-secondary">
+          <CheckCircle2 className="w-5 h-5 shrink-0" strokeWidth={2.5} />
+          <span>Paid with PayPal</span>
+        </div>
+        <Link
+          to={`/app/transactions/${paidTx.id}`}
+          className="text-secondary font-medium text-text-primary underline hover:text-volt"
+        >
+          View receipt
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full flex flex-col gap-3 text-text-primary relative z-20">
+      {/* Clear Amount & Scope Summary Above Button */}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-secondary text-text-muted truncate">{scopeSummary}</span>
+          <span className="font-display font-bold text-[20px] text-text-primary shrink-0">
+            {formatMoney(agreement.finalPrice)}
+          </span>
+        </div>
+        <p className="text-secondary text-text-muted">
+          Service fee {formatMoney(Math.round(agreement.finalPrice * 100 * 0.05) / 100)} (5% included) · Paid with PayPal and held until you accept the work.
+        </p>
+        <p className="text-secondary text-text-muted">
+          You’ll approve the payment in PayPal. We never see your login.
+        </p>
       </div>
 
       {errorInfo && (
-        <div className="p-3.5 rounded-control bg-status-declined/10 border border-status-declined/20 text-secondary text-status-declined flex flex-col gap-1.5">
+        <div className="p-3 rounded-[10px] bg-status-declined/10 border border-status-declined/20 text-secondary text-status-declined flex flex-col gap-1">
           <div className="flex items-start gap-2">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" strokeWidth={2} />
             <span className="font-medium">{errorInfo.message}</span>
           </div>
           {errorInfo.nextStep && (
-            <div className="flex items-start gap-2 text-text-muted text-secondary pl-6">
-              <HelpCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-volt" strokeWidth={2} />
-              <span>{errorInfo.nextStep}</span>
-            </div>
+            <span className="text-secondary text-text-muted pl-6">{errorInfo.nextStep}</span>
           )}
         </div>
       )}
 
       {loading && (
-        <div className="flex items-center justify-center gap-2 py-2 text-secondary text-volt font-medium">
-          <Loader2 className="w-4 h-4 animate-spin" strokeWidth={2} />
-          <span>Processing PayPal authorization…</span>
+        <div className="flex items-center justify-center gap-2 py-1 text-secondary text-volt font-medium">
+          <span className="vyro-live-indicator" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </span>
+          <span>Processing PayPal approval…</span>
         </div>
       )}
 
-      {/* Real PayPal Buttons */}
-      <div className="pt-1">
-        {clientId ? (
+      {/* Official PayPal SDK Button Container (unclipped, untransformed, min-h-48px) */}
+      <div className="w-full min-h-[48px] relative z-20">
+        {configError ? (
+          <div className="min-h-[48px] p-3 rounded-[10px] border border-border-subtle bg-raised flex items-center justify-between gap-3">
+            <span className="text-secondary text-text-muted">PayPal configuration unavailable.</span>
+            <button
+              type="button"
+              onClick={() => setRetryKey((k) => k + 1)}
+              className="h-9 px-3 rounded-[10px] border border-border-subtle bg-surface text-secondary font-medium text-text-primary hover:bg-raised inline-flex items-center gap-1.5 shrink-0 cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
+          </div>
+        ) : clientId ? (
           <PayPalScriptProvider
+            key={`pp-${clientId}-${retryKey}`}
             options={{
-              clientId: clientId,
+              clientId,
+              components: 'buttons',
               currency: 'USD',
               intent: 'capture',
-              components: 'buttons'
+              disableFunding: 'card,credit,paylater',
             }}
           >
-            <PayPalButtons
-              style={{
-                layout: 'vertical',
-                color: 'gold',
-                shape: 'rect',
-                label: 'paypal',
-                height: 48
+            <PayPalButtonsInner
+              agreementId={agreement.id}
+              isLight={isLight}
+              loading={loading}
+              setLoading={setLoading}
+              setErrorInfo={setErrorInfo}
+              onRetryScript={() => setRetryKey((k) => k + 1)}
+              onPaymentSuccess={(tx) => {
+                setPaidTx(tx);
+                onPaymentSuccess(tx);
               }}
-              disabled={loading}
-              createOrder={async () => {
-                setLoading(true);
-                setErrorInfo(null);
-                try {
-                  const res = await api.createPayPalOrder(agreement.id);
-                  return res.orderId;
-                } catch (err: any) {
-                  const message = err.message || 'Failed to create PayPal order.';
-                  setErrorInfo({
-                    message,
-                    nextStep: 'Check that this deal is approved in your review queue.'
-                  });
-                  onPaymentError(message);
-                  throw err;
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              onApprove={async (data) => {
-                setLoading(true);
-                setErrorInfo(null);
-                try {
-                  const tx = await api.capturePayPalOrder(data.orderID);
-                  try {
-                    confetti({
-                      particleCount: 80,
-                      spread: 70,
-                      origin: { y: 0.6 },
-                      colors: ['#D4FF3A', '#34D399', '#FFFFFF']
-                    });
-                  } catch {}
-                  onPaymentSuccess(tx);
-                } catch (err: any) {
-                  const message = err.message || 'Failed to capture PayPal payment.';
-                  setErrorInfo({
-                    message,
-                    nextStep: 'Please check your sandbox balance and try again.'
-                  });
-                  onPaymentError(message);
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              onCancel={() => {
-                setErrorInfo({
-                  message: 'PayPal authorization window was closed without completing payment.',
-                  nextStep: 'Click the PayPal button again when you are ready to authorize payment.'
-                });
-              }}
-              onError={(err) => {
-                console.error('[PayPal Checkout Error]:', err);
-                const msg = err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err);
-                setErrorInfo({
-                  message: msg || 'An error occurred within the PayPal popup component.',
-                  nextStep: 'Ensure popups are allowed in your browser and try again.'
-                });
-              }}
+              onPaymentError={onPaymentError}
             />
           </PayPalScriptProvider>
         ) : (
-          <div className="flex items-center justify-center py-4 text-secondary text-text-muted">
-            <Loader2 className="w-4 h-4 animate-spin mr-2" />
-            <span>Loading payment gateway...</span>
-          </div>
+          <div
+            aria-label="Loading PayPal gateway"
+            className="h-12 w-full rounded-[4px] bg-raised opacity-70"
+          />
         )}
       </div>
 
-      <p className="text-secondary text-text-muted text-center">
-        Secured by PayPal Sandbox. Funds are held in escrow until deliverables are verified.
-      </p>
+      {isSandbox && (
+        <p className="text-secondary text-text-muted text-center">
+          Test mode: no real money moves
+        </p>
+      )}
     </div>
   );
 };

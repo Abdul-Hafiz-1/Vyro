@@ -22,6 +22,7 @@ import { Input } from '../../components/common/Input';
 import { StatusChip } from '../../components/common/StatusChip';
 import { Avatar } from '../../components/common/Avatar';
 import { useAuth } from '../../context/AuthContext';
+import { FlexibilityTier } from '../../types';
 import { formatMoney } from '../../lib/present';
 
 const CATEGORIES = ['Design', 'Engineering', 'Security', 'Mobile', 'Writing'];
@@ -70,7 +71,9 @@ export const RequestCreatePage: React.FC = () => {
   const [title, setTitle] = useState(initialPrompt || '');
   const [prompt, setPrompt] = useState(initialPrompt || '');
   const [category, setCategory] = useState<string>('Design');
+  const [targetBudget, setTargetBudget] = useState<number | ''>(200);
   const [maxBudget, setMaxBudget] = useState<number | ''>(250);
+  const [flexibility, setFlexibility] = useState<FlexibilityTier>('flexible');
   const [deadlineDays, setDeadlineDays] = useState<number | ''>(5);
   const [deliverables, setDeliverables] = useState<string[]>([
     'Primary deliverable ready for review',
@@ -130,7 +133,10 @@ export const RequestCreatePage: React.FC = () => {
     try {
       const result = await api.parsePurchasingPrompt(text);
       if (result.title) setTitle(result.title);
-      if (result.maxBudget) setMaxBudget(result.maxBudget);
+      if (result.maxBudget) {
+        setMaxBudget(result.maxBudget);
+        setTargetBudget(Math.round(result.maxBudget * 0.8));
+      }
       if (result.deadlineDays) setDeadlineDays(result.deadlineDays);
       if (result.category) setCategory(result.category);
       if (result.deliverables?.length) setDeliverables(result.deliverables);
@@ -141,6 +147,10 @@ export const RequestCreatePage: React.FC = () => {
       setIsParsing(false);
     }
   };
+
+  const stretchPct = flexibility === 'strict' ? 0 : flexibility === 'very_flexible' ? 0.2 : 0.1;
+  const computedHardCap = Math.round((Number(maxBudget) || 0) * (1 + stretchPct));
+  const flexLabel = flexibility === 'strict' ? 'Stick to budget' : flexibility === 'very_flexible' ? 'Very flexible' : 'Flexible';
 
   const handleLaunch = async () => {
     const projectTitle = title.trim() || prompt.trim() || 'Custom Project';
@@ -154,7 +164,9 @@ export const RequestCreatePage: React.FC = () => {
         category,
         requiredCapabilities: [`${category} Delivery`, 'Quality Verification'],
         deliverables: deliverables.length > 0 ? deliverables : [projectTitle, 'Handover checklist'],
+        targetBudget: targetBudget === '' ? undefined : Number(targetBudget),
         maxBudget: maxBudget === '' ? undefined : Number(maxBudget),
+        flexibility,
         currency: 'USD',
         deadlineDays: deadlineDays === '' ? undefined : Number(deadlineDays),
         qualityRequirements: 'Verified delivery with satisfaction guarantee.'
@@ -339,7 +351,7 @@ export const RequestCreatePage: React.FC = () => {
         </div>
       )}
 
-      {/* STEP 2: What is your budget ceiling and deadline? */}
+      {/* STEP 2: What is your budget and deadline? */}
       {step === 2 && (
         <div className="flex flex-col gap-8">
           <div className="flex flex-col gap-2">
@@ -347,17 +359,39 @@ export const RequestCreatePage: React.FC = () => {
               What is your budget and deadline?
             </h1>
             <p className="text-body text-text-muted">
-              Set your maximum budget and timeline. Your budget ceiling stays strictly private.
+              Set your target price, comfortable budget, and flexibility. These numbers stay strictly private.
             </p>
           </div>
 
-          {/* Budget & Deadline Fields */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          {/* Target, Budget & Deadline Fields */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+            {/* Target */}
+            <div className="flex flex-col gap-2">
+              <label className="text-secondary font-medium text-text-primary">
+                I’d like to pay about
+              </label>
+              <div className="relative">
+                <DollarSign className="w-5 h-5 text-text-muted absolute left-4 top-3.5 pointer-events-none" />
+                <input
+                  type="number"
+                  min={5}
+                  max={50000}
+                  value={targetBudget}
+                  onChange={(e) => setTargetBudget(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="200"
+                  className="w-full h-[52px] pl-11 pr-4 bg-surface border border-border-subtle rounded-control text-body font-semibold text-text-primary focus:outline-none focus:border-volt transition-colors"
+                />
+              </div>
+              <span className="text-secondary text-text-muted">
+                Your agent aims near this rate first.
+              </span>
+            </div>
+
             {/* Budget */}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between">
                 <label className="text-secondary font-medium text-text-primary">
-                  Maximum budget ceiling
+                  My budget
                 </label>
                 <div className="flex items-center gap-1 text-secondary text-status-handled">
                   <Lock className="w-3.5 h-3.5" strokeWidth={2} />
@@ -377,7 +411,7 @@ export const RequestCreatePage: React.FC = () => {
                 />
               </div>
               <span className="text-secondary text-text-muted">
-                Sellers never see this number. Your agent aims to negotiate lower.
+                Comfortable limit; sellers never see it.
               </span>
             </div>
 
@@ -402,9 +436,39 @@ export const RequestCreatePage: React.FC = () => {
                 </span>
               </div>
               <span className="text-secondary text-text-muted">
-                Target delivery window from deal confirmation.
+                Target delivery window.
               </span>
             </div>
+          </div>
+
+          {/* Flexibility Segmented Control + Live Hard Cap Sentence */}
+          <div className="flex flex-col gap-3 p-4 rounded-surface bg-surface border border-border-subtle">
+            <span className="text-secondary font-medium text-text-primary">Flexibility</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {([
+                { id: 'strict', label: 'Stick to budget' },
+                { id: 'flexible', label: 'Flexible, up to +10%' },
+                { id: 'very_flexible', label: 'Very flexible, up to +20%' }
+              ] as const).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setFlexibility(opt.id)}
+                  className={`h-11 px-3 rounded-[10px] text-secondary font-medium transition-colors cursor-pointer ${
+                    flexibility === opt.id
+                      ? 'bg-volt text-[#0C0E0D] font-bold'
+                      : 'bg-raised border border-border-subtle text-text-muted hover:text-text-primary'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-secondary text-text-muted">
+              {flexibility === 'strict'
+                ? `With a ${formatMoney(Number(maxBudget) || 0)} budget and Stick to budget, I will never exceed ${formatMoney(Number(maxBudget) || 0)}.`
+                : `With a ${formatMoney(Number(maxBudget) || 0)} budget and ${flexLabel}, I can ask for your OK up to ${formatMoney(computedHardCap)}.`}
+            </p>
           </div>
 
           {/* Deliverables Checklist */}
@@ -510,13 +574,13 @@ export const RequestCreatePage: React.FC = () => {
             {/* Key Commercial Boundaries */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="flex flex-col gap-1 p-4 bg-raised rounded-control">
-                <span className="text-secondary text-text-muted">Private budget ceiling</span>
+                <span className="text-secondary text-text-muted">Private budget (target {formatMoney(Number(targetBudget) || Math.round(Number(maxBudget) * 0.8))})</span>
                 <span className="font-display font-bold text-[28px] text-text-primary">
                   {formatMoney(Number(maxBudget))}
                 </span>
                 <span className="text-secondary text-status-handled flex items-center gap-1 mt-0.5">
                   <Lock className="w-3.5 h-3.5" strokeWidth={2} />
-                  <span>Hidden from sellers</span>
+                  <span>{flexLabel} (ask for OK up to {formatMoney(computedHardCap)})</span>
                 </span>
               </div>
 
@@ -581,7 +645,7 @@ export const RequestCreatePage: React.FC = () => {
                   How autonomous negotiation works
                 </span>
                 <p className="text-secondary text-text-muted leading-relaxed">
-                  Your buyer agent will contact verified sellers, negotiate pricing within your ceiling, and optimize turnaround. You will only be asked to approve the final agreed deal.
+                  Your buyer agent will contact verified sellers, aim near your target, and stay within your budget and flexibility rules. You will only step in if an offer stretches past budget.
                 </p>
               </div>
             </div>

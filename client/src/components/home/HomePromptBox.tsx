@@ -20,10 +20,12 @@ import { Button } from '../common/Button';
 import { StatusChip } from '../common/StatusChip';
 import { Chip } from '../common/Chip';
 import { formatMoney } from '../../lib/present';
+import { FlexibilityTier } from '../../types';
 import { toast } from 'sonner';
 
 interface HomePromptBoxProps {
   isSeller: boolean;
+  autoFocusPrompt?: boolean;
   onDealStarted?: (dealId: string) => void;
 }
 
@@ -51,7 +53,7 @@ interface ParsedSellerDraft {
   rawInput: string;
 }
 
-export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealStarted }) => {
+export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, autoFocusPrompt = false, onDealStarted }) => {
   const navigate = useNavigate();
 
   // Prompt input state
@@ -64,7 +66,9 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
   const [buyerBrief, setBuyerBrief] = useState<ParsedBuyerBrief | null>(null);
   const [isEditingBuyer, setIsEditingBuyer] = useState(false);
   const [editTitle, setEditTitle] = useState('');
+  const [editTargetBudget, setEditTargetBudget] = useState<number>(120);
   const [editBudget, setEditBudget] = useState<number>(150);
+  const [editFlexibility, setEditFlexibility] = useState<FlexibilityTier>('flexible');
   const [editDays, setEditDays] = useState<number>(5);
   const [editDeliverables, setEditDeliverables] = useState<string[]>([]);
   const [newDeliverableInput, setNewDeliverableInput] = useState('');
@@ -77,7 +81,13 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
   const [sellerDesc, setSellerDesc] = useState('');
   const [sellerListPrice, setSellerListPrice] = useState<number>(200);
   const [sellerLowestPrice, setSellerLowestPrice] = useState<number>(160);
+  const [sellerFlexibility, setSellerFlexibility] = useState<FlexibilityTier>('flexible');
   const [sellerDays, setSellerDays] = useState<number>(5);
+
+  const buyerStretchMultiplier = editFlexibility === 'strict' ? 1 : editFlexibility === 'very_flexible' ? 1.2 : 1.1;
+  const computedBuyerHardCap = Math.round(editBudget * buyerStretchMultiplier);
+  const sellerStretchMultiplier = sellerFlexibility === 'strict' ? 1 : sellerFlexibility === 'very_flexible' ? 0.8 : 0.9;
+  const computedSellerHardMin = Math.round(sellerLowestPrice * sellerStretchMultiplier);
 
   // Execution states
   const [isExecuting, setIsExecuting] = useState(false);
@@ -147,6 +157,8 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
         setBuyerBrief(parsed);
         setEditTitle(parsed.title);
         setEditBudget(parsed.maxBudget);
+        setEditTargetBudget(Math.round(parsed.maxBudget * 0.8));
+        setEditFlexibility('flexible');
         setEditDays(parsed.deadlineDays);
         setEditDeliverables(parsed.deliverables);
       }
@@ -224,7 +236,9 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
         title: editTitle || buyerBrief.title,
         category: buyerBrief.category,
         deliverables: editDeliverables.length > 0 ? editDeliverables : buyerBrief.deliverables,
+        targetBudget: editTargetBudget || Math.round((editBudget || buyerBrief.maxBudget) * 0.8),
         maxBudget: editBudget || buyerBrief.maxBudget,
+        flexibility: editFlexibility,
         deadlineDays: editDays || buyerBrief.deadlineDays,
         currency: 'USD',
         qualityRequirements: 'Production quality with verified deliverables.'
@@ -272,6 +286,7 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
         category: sellerDraft.category as any,
         price: sellerListPrice || sellerDraft.listPrice,
         minAcceptablePrice: sellerLowestPrice || sellerDraft.standardLowestPrice,
+        flexibility: sellerFlexibility,
         deliveryDays: sellerDays || sellerDraft.deliveryDays,
         deliverables: sellerDraft.deliverables,
         currency: 'USD',
@@ -313,9 +328,11 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
         <div className="flex flex-col gap-3">
           <div className="relative">
             <textarea
+              id="home-prompt-input"
               rows={3}
               value={promptText}
               disabled={isAnalyzing}
+              autoFocus={autoFocusPrompt}
               onChange={(e) => {
                 setPromptText(e.target.value);
                 if (inlineValidation) setInlineValidation(null);
@@ -509,14 +526,37 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
             {/* Budget & Timing */}
             <div className="flex flex-col gap-3 p-3.5 rounded-control bg-surface border border-border-subtle">
               <div className="flex flex-col">
-                <span className="text-secondary text-text-muted">Target budget ceiling</span>
+                <span className="text-secondary text-text-muted">I&apos;d like to pay about</span>
+                {isEditingBuyer ? (
+                  <div className="flex items-center gap-1 pt-1">
+                    <span className="text-text-muted">$</span>
+                    <input
+                      type="number"
+                      value={editTargetBudget}
+                      onChange={(e) => setEditTargetBudget(Math.max(1, parseInt(e.target.value || '0', 10)))}
+                      className="w-24 h-8 px-2 bg-raised border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt font-bold"
+                    />
+                  </div>
+                ) : (
+                  <span className="font-semibold text-body text-text-primary">
+                    {formatMoney(editTargetBudget)}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-secondary text-text-muted">My budget</span>
                 {isEditingBuyer ? (
                   <div className="flex items-center gap-1 pt-1">
                     <span className="text-text-muted">$</span>
                     <input
                       type="number"
                       value={editBudget}
-                      onChange={(e) => setEditBudget(Math.max(1, parseInt(e.target.value || '0', 10)))}
+                      onChange={(e) => {
+                        const val = Math.max(1, parseInt(e.target.value || '0', 10));
+                        setEditBudget(val);
+                        if (editTargetBudget > val) setEditTargetBudget(Math.round(val * 0.85));
+                      }}
                       className="w-24 h-8 px-2 bg-raised border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt font-bold"
                     />
                   </div>
@@ -527,8 +567,35 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
                 )}
               </div>
 
+              <div className="flex flex-col gap-1.5">
+                <span className="text-secondary text-text-muted">Flexibility</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id: 'strict', label: 'Stick to budget' },
+                    { id: 'flexible', label: 'Flexible (+10%)' },
+                    { id: 'very_flexible', label: 'Very flexible (+20%)' },
+                  ] as const).map((tier) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      onClick={() => setEditFlexibility(tier.id)}
+                      className={`px-2 py-1 rounded-[8px] text-[12px] font-medium border transition-colors cursor-pointer ${
+                        editFlexibility === tier.id
+                          ? 'bg-volt/15 border-volt text-text-primary'
+                          : 'bg-raised border-border-subtle text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[12px] text-text-muted leading-snug">
+                  With a {formatMoney(editBudget)} budget and {editFlexibility === 'strict' ? 'Stick to budget' : editFlexibility === 'very_flexible' ? 'Very flexible' : 'Flexible'}, I can ask for your OK up to {formatMoney(computedBuyerHardCap)}.
+                </span>
+              </div>
+
               <div className="flex flex-col">
-                <span className="text-secondary text-text-muted">Maximum delivery window</span>
+                <span className="text-secondary text-text-muted">Target turnaround</span>
                 {isEditingBuyer ? (
                   <div className="flex items-center gap-1 pt-1">
                     <input
@@ -666,6 +733,33 @@ export const HomePromptBox: React.FC<HomePromptBoxProps> = ({ isSeller, onDealSt
                     {formatMoney(sellerLowestPrice)}
                   </span>
                 )}
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <span className="text-secondary text-text-muted">Flexibility</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    { id: 'strict', label: 'Stick to lowest' },
+                    { id: 'flexible', label: 'Flexible (-10%)' },
+                    { id: 'very_flexible', label: 'Very flexible (-20%)' },
+                  ] as const).map((tier) => (
+                    <button
+                      key={tier.id}
+                      type="button"
+                      onClick={() => setSellerFlexibility(tier.id)}
+                      className={`px-2 py-1 rounded-[8px] text-[12px] font-medium border transition-colors cursor-pointer ${
+                        sellerFlexibility === tier.id
+                          ? 'bg-volt/15 border-volt text-text-primary'
+                          : 'bg-raised border-border-subtle text-text-muted hover:text-text-primary'
+                      }`}
+                    >
+                      {tier.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[12px] text-text-muted leading-snug">
+                  With {formatMoney(sellerLowestPrice)} standard lowest and {sellerFlexibility === 'strict' ? 'Stick to lowest' : sellerFlexibility === 'very_flexible' ? 'Very flexible' : 'Flexible'}, I can ask for your OK down to {formatMoney(computedSellerHardMin)}.
+                </span>
               </div>
 
               <div className="flex flex-col">

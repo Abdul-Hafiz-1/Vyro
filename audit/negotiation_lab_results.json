@@ -1,0 +1,220 @@
+{
+  "generatedAt": "2026-11-10T07:18:44.005Z",
+  "labMetrics": {
+    "totalPairs": 300,
+    "agreements": 161,
+    "agreementRatePct": 53.7,
+    "escalations": 38,
+    "escalatedPct": 12.7,
+    "declines": 101,
+    "avgRounds": 2.88,
+    "repeatedPrices": 0,
+    "crossingOffers": 0,
+    "buyerAboveAsk": 0,
+    "canaryLeaks": 0,
+    "falseDeclinesWithStretchOverlap": 0,
+    "falseDeclinePct": 0,
+    "falseDeclineExamples": []
+  },
+  "sensitivityTableAfter": [
+    {
+      "budget": 150,
+      "outcome": "escalated",
+      "price": 162,
+      "rounds": 8
+    },
+    {
+      "budget": 200,
+      "outcome": "agreement_reached",
+      "price": 200,
+      "rounds": 4
+    },
+    {
+      "budget": 300,
+      "outcome": "agreement_reached",
+      "price": 205,
+      "rounds": 3
+    },
+    {
+      "budget": 500,
+      "outcome": "agreement_reached",
+      "price": 205,
+      "rounds": 3
+    }
+  ],
+  "sensitivityRise200to500Pct": 2.5,
+  "replay1750": {
+    "status": "agreement_reached",
+    "rounds": 3,
+    "finalPrice": 205,
+    "proposals": [
+      {
+        "round": 1,
+        "role": "seller",
+        "type": "proposal",
+        "price": 300,
+        "content": "We can deliver \"OWASP API security audit\" (Vulnerability Scan, Top 10 Triage Report, Remediation Patches) for $300 in 5 days."
+      },
+      {
+        "round": 1,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 170,
+        "content": "The scope looks solid. To kick off this week, we'd open at $170 on a 5-day schedule."
+      },
+      {
+        "round": 2,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 255,
+        "content": "I came down $45 because you moved up $32.50. Updated quote is $255 with 5-day turnaround and milestone escrow."
+      },
+      {
+        "round": 2,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 205,
+        "content": "I came up $35 because you moved down $45. Putting $205 on the table for 6-day delivery with milestone escrow."
+      },
+      {
+        "round": 3,
+        "role": "seller",
+        "type": "acceptance",
+        "price": 205,
+        "content": "Confirmed on our side at $205 with 6-day turnaround covering Vulnerability Scan and Top 10 Triage Report."
+      }
+    ]
+  },
+  "replay132": {
+    "status": "escalated",
+    "rounds": 8,
+    "finalPrice": 162,
+    "proposals": [
+      {
+        "round": 1,
+        "role": "seller",
+        "type": "proposal",
+        "price": 300,
+        "content": "We can deliver \"Landing page with Tailwind tokens\" (Tailwind Tokens, Responsive Layout) for $300 in 5 days."
+      },
+      {
+        "round": 1,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 94,
+        "content": "The scope looks solid. To kick off this week, we'd open at $94 on a 5-day schedule."
+      },
+      {
+        "round": 2,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 245,
+        "content": "I came down $55 because you moved up $51.50. Updated quote is $245 with 5-day turnaround and milestone escrow."
+      },
+      {
+        "round": 2,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 115,
+        "content": "I came up $21 because you moved down $55. Putting $115 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 3,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 215,
+        "content": "I came down $30 because you moved up $21. Updated quote is $215 with 5-day turnaround and upfront escrow release."
+      },
+      {
+        "round": 3,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 130,
+        "content": "I came up $15 because you moved down $30. Putting $130 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 4,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 200,
+        "content": "I came down $15 because you moved up $15. Updated quote is $200 with 5-day turnaround and upfront escrow release."
+      },
+      {
+        "round": 4,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 140,
+        "content": "I came up $10 because you moved down $15. Putting $140 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 5,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 185,
+        "content": "I came down $15 because you moved up $10. Updated quote is $185 with 5-day turnaround and upfront escrow release."
+      },
+      {
+        "round": 5,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 150,
+        "content": "I came up $10 because you moved down $15. Putting $150 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 6,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 180,
+        "content": "I came down $5 because you moved up $10. Updated quote is $180 with 5-day turnaround and upfront escrow release."
+      },
+      {
+        "round": 6,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 155,
+        "content": "I came up $5 because you moved down $5. Putting $155 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 7,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 175,
+        "content": "I came down $5 because you moved up $5. Updated quote is $175 with 5-day turnaround and upfront escrow release."
+      },
+      {
+        "round": 7,
+        "role": "buyer",
+        "type": "counteroffer",
+        "price": 160,
+        "content": "I came up $5 because you moved down $5. Putting $160 on the table for 7-day delivery with upfront escrow release."
+      },
+      {
+        "round": 8,
+        "role": "seller",
+        "type": "counteroffer",
+        "price": 162,
+        "content": "I came down $13 to my final limit ($162) with 7d turnaround and upfront release. Updated quote is $162 with 7-day turnaround and upfront escrow release."
+      }
+    ]
+  },
+  "liveTranscriptSummary": [
+    {
+      "case": "Normal",
+      "status": "agreement_reached",
+      "rounds": 3,
+      "price": 185
+    },
+    {
+      "case": "Stretch",
+      "status": "escalated",
+      "rounds": 8,
+      "price": 164
+    },
+    {
+      "case": "NoDeal",
+      "status": "rejected",
+      "rounds": 1,
+      "price": 300
+    }
+  ]
+}

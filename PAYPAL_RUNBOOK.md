@@ -12,9 +12,15 @@ This document provides exact instructions for testing and verifying PayPal Sandb
 To locate or generate Sandbox test accounts:
 1. Log in to the [PayPal Developer Dashboard](https://developer.paypal.com/).
 2. In the left-hand navigation, click **Testing Tools** > **Sandbox Accounts**.
-3. You will see two pre-configured account types:
-   - **Personal Account** (Buyer): Used by the tester to log in during the checkout popup and authorize payment.
-   - **Business Account** (Merchant/Seller): The recipient account configured with the App credentials.
+3. Create or verify **three US / USD Sandbox accounts** (1 Business + 2 Personal):
+   - **Platform Business Account** (`sb-merchant...@business.example.com`): The single merchant account configured in `.env`. Receives buyer payments and sends seller payouts.
+   - **Personal Buyer Account** (`sb-buyer...@personal.example.com`): Used in the checkout popup by the buyer to authorize escrow payments.
+   - **Personal Seller Account** (`sb-seller...@personal.example.com`): Used by the seller as their **"Your PayPal email"** under **Selling > Payments** (or onboarding) to receive payouts when buyers accept work.
+4. Under **Apps & Credentials** > your Sandbox REST app, ensure **Payouts** is checked/enabled under App Feature Options (`https://uri.paypal.com/payments/payouts` scope).
+
+### Before Going Live (Legal, Licensing & Marketplace Onboarding)
+- In sandbox/test mode, a single platform merchant account holds funds on behalf of sellers until the buyer accepts work, then dispatches a PayPal Payout (net of the 5% service fee).
+- Holding funds belonging to other parties in real production has legal and financial-licensing implications (escrow / money-transmitter rules depending on jurisdiction). Before launching with real money, apply for **PayPal Commerce Platform / Partner Referrals** marketplace onboarding and consult legal/compliance counsel.
 
 ### Default Sandbox Credentials Configured in VYRO
 - **Environment**: `sandbox` (`https://api-m.sandbox.paypal.com`)
@@ -52,10 +58,11 @@ After completing payment:
 2. Log in using your Sandbox **Personal (Buyer)** account to see the debit activity:
    - Status: **Completed**
    - Recipient: VYRO Autonomous Commerce
-   - Amount: Matches agreed deal amount
-3. Log in using your Sandbox **Business (Seller)** account:
-   - Activity: Incoming payment captured
-   - Gross amount credited to merchant balance
+   - Amount: Matches agreed deal amount (funds held until work acceptance)
+3. Log in using your Sandbox **Business (Platform Merchant)** account:
+   - Activity: Incoming payment captured; once buyer clicks **Accept work**, outgoing payout batch to Seller email (`gross - 5% service fee`).
+4. Log in using your Sandbox **Personal (Seller)** account:
+   - Activity: Incoming payout received for `agreed price - 5% service fee`.
 
 ---
 

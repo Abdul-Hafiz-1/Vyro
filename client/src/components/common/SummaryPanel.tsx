@@ -1,7 +1,7 @@
 import React from 'react';
-import { Button } from './Button';
 import { StatusChip } from './StatusChip';
-import { Check, ShieldCheck, Clock } from 'lucide-react';
+import { RollingNumber } from './RollingNumber';
+import { Check, Clock } from 'lucide-react';
 import { formatMoney } from '../../lib/present';
 
 export interface SummaryPanelProps {
@@ -13,6 +13,8 @@ export interface SummaryPanelProps {
   counterpartName: string;
   isBuyer?: boolean;
   actionState: 'needsDecision' | 'readyToPay' | 'waitingCounterparty' | 'completed';
+  completedBannerText?: string;
+  paymentSlot?: React.ReactNode;
   onPay?: () => void;
   onDecisionApprove?: () => void;
   onDecisionDecline?: () => void;
@@ -36,27 +38,28 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
   counterpartName,
   isBuyer = true,
   actionState = 'waitingCounterparty',
-  onPay,
+  completedBannerText,
+  paymentSlot,
   className = '',
 }) => {
   return (
     <div
-      className={`sticky top-20 bg-surface border border-border-subtle rounded-surface p-6 flex flex-col gap-6 text-text-primary ${className}`}
+      className={`relative z-10 bg-surface border border-border-subtle rounded-surface p-6 flex flex-col gap-6 text-text-primary ${className}`}
     >
       {/* Status Chip Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <StatusChip label={statusLabel} role={statusRole} size="md" />
-        <span className="text-secondary text-text-muted">
+        <span className="text-secondary text-text-muted truncate">
           {isBuyer ? `With ${counterpartName}` : `For ${counterpartName}`}
         </span>
       </div>
 
-      {/* Giant Numerals Terms */}
+      {/* Current Terms */}
       <div className="flex flex-col gap-1 border-b border-border-subtle pb-5">
         <span className="text-secondary text-text-muted">Current terms</span>
         <div className="flex items-baseline gap-2">
           <span className="font-display font-bold text-price-giant text-text-primary tracking-tight">
-            {formatMoney(currentPrice)}
+            <RollingNumber value={currentPrice} format={formatMoney} durationMs={320} />
           </span>
         </div>
         <div className="flex items-center gap-2 text-secondary text-text-muted mt-1">
@@ -65,14 +68,19 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
         </div>
       </div>
 
-      {/* Stepping Stones Tracker (Stripe / Airbnb style) */}
+      {/* Stepping Stones Progress */}
       <div className="flex flex-col gap-3">
         <span className="text-secondary text-text-muted font-medium">Deal progress</span>
         <div className="flex flex-col gap-2">
           {STEPS.map((step, idx) => {
             const stepNum = idx + 1;
-            const isDone = stepNum < currentStep;
-            const isCurrent = stepNum === currentStep;
+            const isCompletedDeal = actionState === 'completed';
+            const isDone = isCompletedDeal ? true : stepNum < currentStep;
+            const isCurrent = !isCompletedDeal && stepNum === currentStep;
+            const label =
+              stepNum === 5 && actionState === 'readyToPay'
+                ? 'Ready to pay'
+                : step;
 
             return (
               <div key={step} className="flex items-center gap-3">
@@ -96,7 +104,7 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
                     isCurrent ? 'font-semibold text-text-primary' : isDone ? 'text-text-primary' : 'text-text-muted'
                   }`}
                 >
-                  {step}
+                  {label}
                 </span>
               </div>
             );
@@ -104,37 +112,30 @@ export const SummaryPanel: React.FC<SummaryPanelProps> = ({
         </div>
       </div>
 
-      {/* Single Next Action CTA */}
-      <div className="pt-2 border-t border-border-subtle flex flex-col gap-3">
-        {actionState === 'readyToPay' && isBuyer && (
-          <div className="flex flex-col gap-2">
-            <Button
-              variant="volt"
-              size="lg"
-              fullWidth
-              onClick={onPay}
-            >
-              Pay {formatMoney(currentPrice)} securely
-            </Button>
-            <div className="flex items-center justify-center gap-1.5 text-secondary text-text-muted">
-              <ShieldCheck className="w-4 h-4 text-status-handled" strokeWidth={2} />
-              <span>Funds held securely in escrow until delivered</span>
+      {/* Single Payment or Waiting State Slot */}
+      {(actionState === 'readyToPay' || actionState === 'waitingCounterparty' || actionState === 'completed') && (
+        <div className="pt-4 border-t border-border-subtle flex flex-col gap-3 relative z-20">
+          {actionState === 'readyToPay' && isBuyer && paymentSlot}
+
+          {actionState === 'readyToPay' && !isBuyer && (
+            <div className="bg-raised p-3.5 rounded-control text-center text-secondary text-text-muted">
+              Awaiting buyer payment via PayPal
             </div>
-          </div>
-        )}
+          )}
 
-        {actionState === 'waitingCounterparty' && (
-          <div className="bg-raised p-3.5 rounded-control text-center text-secondary text-text-muted">
-            Waiting for {counterpartName}’s response
-          </div>
-        )}
+          {actionState === 'waitingCounterparty' && (
+            <div className="bg-raised p-3.5 rounded-control text-center text-secondary text-text-muted">
+              Waiting for {counterpartName}’s response
+            </div>
+          )}
 
-        {actionState === 'completed' && (
-          <div className="bg-status-handled/10 border border-status-handled/30 p-3.5 rounded-control text-center text-secondary text-status-handled font-medium">
-            Deal completed and paid
-          </div>
-        )}
-      </div>
+          {actionState === 'completed' && (
+            <div className="bg-status-handled/10 border border-status-handled/30 p-3.5 rounded-control text-center text-secondary text-status-handled font-medium">
+              {completedBannerText || 'Paid with PayPal'}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

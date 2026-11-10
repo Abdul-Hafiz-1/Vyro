@@ -36,9 +36,21 @@ router.get('/config', (req: AuthenticatedRequest, res: Response) => {
       clientId: config.paypal.clientId || 'sb',
       env: config.paypal.env,
       mode: config.paypal.mode,
-      isConfigured: paypalService.isConfigured()
+      isConfigured: paypalService.isConfigured(),
+      platformFeePercent: config.platformFeePercent,
+      payoutProvider: config.paypal.payoutProvider
     }
   });
+});
+
+// GET /api/v1/payments/diagnostics (dev/admin Settings > Advanced Payments status)
+router.get('/diagnostics', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  try {
+    const diag = await paypalService.getDiagnostics();
+    return res.json({ success: true, data: diag });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // POST /api/v1/payments/create-order
@@ -122,25 +134,65 @@ router.post('/capture-order', authenticateUser, async (req: AuthenticatedRequest
 });
 
 // POST /api/v1/payments/mock-settle
-// Instant simulated platform escrow settlement for testing and development
-router.post('/mock-settle', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+// Registered ONLY when NODE_ENV is 'test' or 'development' AND PAYMENT_PROVIDER=mock
+if ((config.nodeEnv === 'test' || config.nodeEnv === 'development') && config.paymentProvider === 'mock') {
+  router.post('/mock-settle', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+    const user = req.user!;
+    const { agreementId } = req.body;
+    if (!agreementId) {
+      return res.status(400).json({
+        success: false,
+        error: 'agreementId is required',
+        code: 'VALIDATION_ERROR',
+        nextStep: 'Please provide a valid agreement ID.'
+      });
+    }
+
+    try {
+      const transaction = await paypalService.settleMockOrder(agreementId, user.id);
+      return res.json({
+        success: true,
+        message: 'Platform Escrow simulated settlement completed successfully.',
+        data: transaction
+      });
+    } catch (err: any) {
+      if (err instanceof PayPalApiException) {
+        return res.status(err.details.status).json({
+          success: false,
+          error: err.details.message,
+          code: err.details.code,
+          nextStep: err.details.nextStep,
+          debugId: err.details.debugId
+        });
+      }
+      return res.status(400).json({
+        success: false,
+        error: err.message || 'Mock payment settlement failed',
+        code: 'SETTLEMENT_FAILED',
+        nextStep: 'Please retry or check system logs.'
+      });
+    }
+  });
+}
+
+// POST /api/v1/payments/refund
+router.post('/refund', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
   const user = req.user!;
-  const { agreementId } = req.body;
+  const { agreementId, reason } = req.body;
   if (!agreementId) {
     return res.status(400).json({
       success: false,
       error: 'agreementId is required',
-      code: 'VALIDATION_ERROR',
-      nextStep: 'Please provide a valid agreement ID.'
+      code: 'VALIDATION_ERROR'
     });
   }
 
   try {
-    const transaction = await paypalService.settleMockOrder(agreementId, user.id);
+    const tx = await paypalService.refundPayment(agreementId, reason || 'Refund requested', user.id);
     return res.json({
       success: true,
-      message: 'Platform Escrow simulated settlement completed successfully.',
-      data: transaction
+      message: 'Payment refunded to buyer.',
+      data: tx
     });
   } catch (err: any) {
     if (err instanceof PayPalApiException) {
@@ -154,11 +206,40 @@ router.post('/mock-settle', authenticateUser, async (req: AuthenticatedRequest, 
     }
     return res.status(400).json({
       success: false,
-      error: err.message || 'Mock payment settlement failed',
-      code: 'SETTLEMENT_FAILED',
-      nextStep: 'Please retry or check system logs.'
+      error: err.message || 'Refund failed'
     });
   }
+});
+
+// POST /api/v1/payments/webhooks/paypal - Handle async PayPal payout & refund events
+router.post('/webhooks/paypal', (req: AuthenticatedRequest, res: Response) => {
+  const eventType = String(req.body?.event_type || '');
+  const resource = req.body?.resource || {};
+
+  if (eventType.startsWith('PAYMENT.PAYOUTS-ITEM.')) {
+    const batchId = resource.payout_batch_id;
+    const itemId = resource.payout_item?.sender_item_id;
+    const dealId = itemId;
+    if (dealId) {
+      const payout = store.getPayoutByDeal(dealId);
+      if (payout) {
+        if (eventType === 'PAYMENT.PAYOUTS-ITEM.SUCCEEDED') payout.status = 'paid';
+        else if (['PAYMENT.PAYOUTS-ITEM.FAILED', 'PAYMENT.PAYOUTS-ITEM.DENIED', 'PAYMENT.PAYOUTS-ITEM.BLOCKED'].includes(eventType)) {
+          payout.status = 'failed';
+          payout.failureReason = resource.errors?.message || eventType;
+        }
+        if (batchId) payout.providerBatchId = batchId;
+        store.savePayout(payout);
+        const tx = store.getTransactionByAgreement(payout.agreementId);
+        if (tx) {
+          tx.sellerPayoutStatus = payout.status;
+          store.saveTransaction(tx);
+        }
+      }
+    }
+  }
+
+  return res.json({ received: true });
 });
 
 export default router;

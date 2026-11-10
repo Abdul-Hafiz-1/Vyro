@@ -15,6 +15,7 @@ import requestRoutes from './routes/requests.js';
 import negotiationRoutes from './routes/negotiations.js';
 import agreementRoutes from './routes/agreements.js';
 import paymentRoutes from './routes/payments.js';
+import payoutRoutes from './routes/payouts.js';
 import transactionRoutes from './routes/transactions.js';
 import analyticsRoutes from './routes/analytics.js';
 import activityRoutes from './routes/activity.js';
@@ -64,12 +65,14 @@ app.use('/api/v1/requests', requestRoutes);
 app.use('/api/v1/negotiations', negotiationRoutes);
 app.use('/api/v1/agreements', agreementRoutes);
 app.use('/api/v1/payments', paymentRoutes);
+app.use('/api/v1/payouts', payoutRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/system', systemRoutes);
 app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/home', homeRoutes);
+app.use('/api/v1/rules', homeRoutes);
 app.use('/api/v1/events', eventsRoutes);
 
 // Global Error Handler

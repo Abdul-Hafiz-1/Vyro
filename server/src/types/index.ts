@@ -56,6 +56,8 @@ export interface User {
   dailyBudgetCap?: number;
   balance?: number;
   isAutomationPaused?: boolean;
+  motionPreference?: 'full' | 'reduced' | 'system';
+  coachMarksDismissed?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +114,8 @@ export interface DecisionRecord {
   updatedAt: string;
 }
 
+export type FlexibilityTier = 'strict' | 'flexible' | 'very_flexible';
+
 export type ListingCategory = 'Design' | 'Development' | 'Security' | 'Marketing' | 'Hardware' | 'Other';
 export type ListingType = 'service' | 'physical_product' | 'digital_product' | 'custom_project';
 export type ListingPricingModel = 'fixed' | 'hourly' | 'starting_at';
@@ -127,9 +131,14 @@ export interface Listing {
   category: ListingCategory;
   type: ListingType;
   price: number;
+  askingPriceCents?: number;
   currency: string;
   pricingModel: ListingPricingModel;
-  minAcceptablePrice: number;
+  minAcceptablePrice: number; // standard lowest
+  floorPriceCents?: number;
+  flexibility?: FlexibilityTier;
+  absoluteMinPrice?: number;
+  absoluteMinCents?: number;
   deliveryDays: number;
   deliverables: string[];
   images: string[];
@@ -255,7 +264,13 @@ export interface CommerceRequest {
   category: string;
   requiredCapabilities: string[];
   deliverables: string[];
-  maxBudget: number;
+  targetBudget?: number;
+  maxBudget: number; // Buyer comfortable budget ("My budget")
+  flexibility?: FlexibilityTier;
+  hardCap?: number; // Computed budget * (1 + stretch)
+  targetPriceCents?: number;
+  budgetCents?: number;
+  hardCapCents?: number;
   currency: string;
   deadlineDays: number;
   qualityRequirements: string;
@@ -309,6 +324,7 @@ export interface Proposal {
   senderAgentId: string;
   round: number;
   price: number;
+  priceCents?: number;
   currency: string;
   deliverables: string[];
   deliveryDays: number;
@@ -320,6 +336,7 @@ export interface Proposal {
   tradesMade?: string[];
   utilityScore?: number;
   whyThisOffer?: string;
+  whyMove?: string;
   createdAt: string;
 }
 
@@ -339,6 +356,7 @@ export type NegotiationStatus =
   // Legacy aliases for backwards-compat during transition
   | 'initiated'
   | 'in_negotiation'
+  | 'waiting_retry'
   | 'escalated'
   | 'agreement_reached'
   | 'completed'
@@ -412,6 +430,9 @@ export interface Agreement {
   sellerUserId?: string;
   sellerBusinessName: string;
   finalPrice: number;
+  finalPriceCents?: number;
+  savingsVsBudgetCents?: number;
+  stretchZoneSide?: 'buyer' | 'seller' | null;
   currency: string;
   finalDeliverables: string[];
   deliveryDays: number;
@@ -425,6 +446,11 @@ export interface Agreement {
   humanApprovedAt?: string;
   sellerAcceptanceStatus?: 'pending' | 'accepted' | 'rejected';
   sellerAcceptedAt?: string;
+  workAcceptanceStatus?: 'pending' | 'accepted' | 'disputed' | 'refunded';
+  workAcceptedAt?: string;
+  disputeReason?: string;
+  platformFeeCents?: number;
+  sellerPayoutCents?: number;
   rejectionReason?: string;
   paypalReady: boolean;
   createdAt: string;
@@ -435,8 +461,11 @@ export type PaymentStatus =
   | 'awaiting_paypal'
   | 'processing'
   | 'completed'
+  | 'refunded'
   | 'cancelled'
   | 'failed';
+
+export type SellerPayoutStatus = 'held' | 'scheduled' | 'processing' | 'paid' | 'failed' | 'simulated_paid' | 'refunded';
 
 export interface Transaction {
   id: string;
@@ -450,6 +479,9 @@ export interface Transaction {
   sellerBusinessName: string;
   serviceTitle: string;
   amount: number;
+  amountCents?: number;
+  platformFeeCents?: number;
+  sellerPayoutCents?: number;
   currency: string;
   paypalOrderId?: string;
   paypalCaptureId?: string;
@@ -458,12 +490,58 @@ export interface Transaction {
   paymentStatus: PaymentStatus;
   idempotencyKey: string;
   sellerShareHeld?: number;
-  sellerPayoutStatus?: 'held' | 'simulated_paid';
+  sellerPayoutStatus?: SellerPayoutStatus;
   sellerPayoutAt?: string;
+  refundId?: string;
+  refundedAt?: string;
+  refundReason?: string;
   createdAt: string;
   completedAt?: string;
   failureReason?: string;
   isSandbox: boolean;
+}
+
+export interface SellerPayoutAccount {
+  id: string;
+  userId: string;
+  provider: 'paypal_email' | 'simulated';
+  paypalEmail: string | null;
+  status: 'not_set' | 'pending_check' | 'ready' | 'failed';
+  verifiedAt?: string | null;
+  lastError?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PayoutRecord {
+  id: string;
+  dealId: string;
+  agreementId: string;
+  sellerUserId: string;
+  amountCents: number;
+  feeCents: number;
+  grossAmountCents: number;
+  currency: string;
+  status: 'scheduled' | 'processing' | 'paid' | 'failed' | 'simulated_paid';
+  provider: 'paypal' | 'simulated';
+  providerBatchId?: string | null;
+  providerItemId?: string | null;
+  paypalDebugId?: string | null;
+  failureReason?: string | null;
+  retryCount: number;
+  nextRetryAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LedgerEntry {
+  id: string;
+  dealId: string;
+  type: 'buyer_paid' | 'held_for_seller' | 'platform_fee' | 'seller_payout' | 'refund';
+  amountCents: number;
+  currency: string;
+  note?: string;
+  createdAt: string;
 }
 
 export interface ActivityEvent {
@@ -483,6 +561,12 @@ export interface ActivityEvent {
     | 'approval_granted'
     | 'paypal_order_created'
     | 'paypal_payment_completed'
+    | 'paypal_refund_completed'
+    | 'work_accepted'
+    | 'deal_disputed'
+    | 'seller_payout_initiated'
+    | 'seller_payout_completed'
+    | 'seller_payout_failed'
     | 'payment_failed';
   title: string;
   description: string;
@@ -500,7 +584,7 @@ export interface AppNotification {
   userId: string;
   title: string;
   message: string;
-  type: 'action_required' | 'offer_received' | 'agreement_ready' | 'payment_settled' | 'system';
+  type: 'action_required' | 'offer_received' | 'agreement_ready' | 'payment_settled' | 'payout_released' | 'payout_required' | 'system';
   read: boolean;
   linkUrl?: string;
   metadata?: Record<string, any>;

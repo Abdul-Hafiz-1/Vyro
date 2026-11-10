@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { 
   ArrowRight, 
@@ -15,7 +16,8 @@ import {
   Plus,
   Handshake,
   Store,
-  CreditCard
+  CreditCard,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -27,22 +29,79 @@ import { DecisionCard } from '../../components/common/DecisionCard';
 import { EmptyState } from '../../components/common/EmptyState';
 import { HomePromptBox } from '../../components/home/HomePromptBox';
 import { formatMoney, formatDate, formatName } from '../../lib/present';
+import { EASE_STANDARD } from '../../lib/motion';
 
 export const OverviewPage: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { user, isSellerWorkspace } = useAuth();
+  const focusPrompt = new URLSearchParams(location.search).get('focusPrompt') === '1';
 
   const [promptText, setPromptText] = useState('');
   const [selectedDecisionIndex, setSelectedDecisionIndex] = useState(0);
   const [actionInProgressId, setActionInProgressId] = useState<string | null>(null);
   const [isMobileSheetOpen, setIsMobileSheetOpen] = useState(false);
+  const [localDismissedCoach, setLocalDismissedCoach] = useState<string[]>([]);
 
   const { data: homeData, isLoading } = useQuery({
     queryKey: ['home'],
     queryFn: api.getHome,
     refetchInterval: 8000
   });
+
+  const needsSellerSetupCheck = isSellerWorkspace || Boolean(user?.capabilities?.selling);
+  const { data: sellerPayoutSetup } = useQuery({
+    queryKey: ['sellerPayoutAccount'],
+    queryFn: api.getSellerPayoutAccount,
+    enabled: needsSellerSetupCheck,
+    staleTime: 20000,
+  });
+
+  useEffect(() => {
+    if (focusPrompt) {
+      const el = document.getElementById('home-prompt-input') as HTMLTextAreaElement | null;
+      if (el) el.focus();
+    }
+  }, [focusPrompt, isLoading]);
+
+  const dismissedCoachMarks = Array.from(
+    new Set([...(user?.coachMarksDismissed || []), ...localDismissedCoach])
+  );
+
+  const dismissCoachMark = async (id: string) => {
+    const next = Array.from(new Set([...dismissedCoachMarks, id]));
+    setLocalDismissedCoach(next);
+    try {
+      await api.updateProfile({ coachMarksDismissed: next });
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+    } catch {
+      // keep locally dismissed even if transient network error
+    }
+  };
+
+  const activeCoachMark =
+    user?.onboardingCompleted
+      ? [
+          {
+            id: 'homeBox',
+            title: 'Tip 1 of 3 · Start in plain words',
+            text: isSellerWorkspace
+              ? 'Describe any service you offer above to draft and publish a listing in seconds.'
+              : 'Describe what you need above and press Enter — AI structures the brief and matches sellers.',
+          },
+          {
+            id: 'workspaceSwitch',
+            title: 'Tip 2 of 3 · Switch Buying & Selling anytime',
+            text: 'Use the Buying | Selling switch in the top bar whenever you want to switch between hiring and offering services.',
+          },
+          {
+            id: 'needsInbox',
+            title: 'Tip 3 of 3 · Quick human approvals',
+            text: 'Whenever an offer crosses your comfort limit, it appears in Needs you with one-click Approve, Counter, or Decline.',
+          },
+        ].find((m) => !dismissedCoachMarks.includes(m.id))
+      : undefined;
 
   const needsYou = homeData?.needsYou || [];
   const inProgress = homeData?.inProgress || [];
@@ -142,6 +201,16 @@ export const OverviewPage: React.FC = () => {
       toast.error(err.message || 'Could not send counter proposal.');
     } finally {
       setActionInProgressId(null);
+    }
+  };
+
+  const handleUndo = async (item: any) => {
+    try {
+      await api.undoReviewItem(item.id);
+      toast.info(`Undid decision for ${formatName(item.title)}.`);
+      queryClient.invalidateQueries({ queryKey: ['home'] });
+    } catch (err: any) {
+      toast.error(err.message || 'Could not undo decision.');
     }
   };
 
@@ -263,13 +332,65 @@ export const OverviewPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col gap-8 py-4 animate-pulse">
+      <div className="flex flex-col gap-8 py-4 opacity-70">
         <div className="h-6 w-36 bg-raised rounded-control" />
         <div className="h-10 w-72 bg-raised rounded-control" />
         <div className="h-44 w-full bg-surface border border-border-subtle rounded-surface" />
       </div>
     );
   }
+
+  const showSellerPayoutBanner =
+    needsSellerSetupCheck &&
+    sellerPayoutSetup &&
+    sellerPayoutSetup.account?.status !== 'ready';
+
+  const renderSellerPayoutBanner = () =>
+    showSellerPayoutBanner ? (
+      <Card className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-raised border-border-subtle">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-volt shrink-0 mt-0.5" />
+          <div className="flex flex-col gap-0.5">
+            <span className="font-semibold text-body text-text-primary">
+              Add where to send your earnings
+            </span>
+            <p className="text-secondary text-text-muted">
+              Add your PayPal email so buyers can confirm and fund your deals.
+            </p>
+          </div>
+        </div>
+        <Link to="/app/transactions" className="shrink-0">
+          <Button variant="volt" size="sm">
+            Set up payout email
+          </Button>
+        </Link>
+      </Card>
+    ) : null;
+
+  const renderCoachMark = () =>
+    activeCoachMark ? (
+      <div
+        data-coachmark={activeCoachMark.id}
+        className="p-4 rounded-surface bg-raised/90 border border-volt/35 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      >
+        <div className="flex items-start gap-2.5">
+          <Sparkles className="w-4 h-4 text-volt shrink-0 mt-1" />
+          <div className="flex flex-col gap-0.5">
+            <span className="text-secondary font-semibold text-text-primary">
+              {activeCoachMark.title}
+            </span>
+            <span className="text-secondary text-text-muted">{activeCoachMark.text}</span>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => dismissCoachMark(activeCoachMark.id)}
+          className="h-8 px-3 rounded-control border border-border-subtle bg-surface text-secondary font-medium text-text-primary hover:bg-raised cursor-pointer shrink-0 self-end sm:self-center"
+        >
+          Got it
+        </button>
+      </div>
+    ) : null;
 
   // 1. BRAND NEW FIRST-TIME USER EMPTY STATE
   if (isEmpty) {
@@ -283,15 +404,19 @@ export const OverviewPage: React.FC = () => {
           <p className="text-body text-text-muted max-w-[620px]">
             {isSellerWorkspace
               ? 'List your capabilities and minimum terms. Your assistant will evaluate incoming requests and only alert you on exceptions.'
-              : 'Describe what you need. Your assistant will search verified specialists and negotiate pricing within your ceiling.'}
+              : 'Describe what you need. Your assistant will search verified specialists and negotiate pricing within your budget.'}
           </p>
         </div>
+
+        {renderSellerPayoutBanner()}
 
         {/* 4 Quick Action Cards */}
         {renderQuickActions()}
 
         {/* Hero Prompt Box (Interactive AI-driven brief & matching) */}
-        <HomePromptBox isSeller={isSellerWorkspace} />
+        <HomePromptBox isSeller={isSellerWorkspace} autoFocusPrompt={focusPrompt} />
+
+        {renderCoachMark()}
       </div>
     );
   }
@@ -307,11 +432,15 @@ export const OverviewPage: React.FC = () => {
         </h1>
       </div>
 
+      {renderSellerPayoutBanner()}
+
       {/* 4 Quick Action Cards */}
       {renderQuickActions()}
 
       {/* Hero Prompt Box (Interactive AI-driven brief & matching) */}
-      <HomePromptBox isSeller={isSellerWorkspace} />
+      <HomePromptBox isSeller={isSellerWorkspace} autoFocusPrompt={focusPrompt} />
+
+      {renderCoachMark()}
 
       {/* SPLIT INBOX SECTION: LIST ON LEFT, DETAIL PANE ON RIGHT (LINEAR INBOX REFERENCE) */}
       {needsYou.length > 0 && (
@@ -380,13 +509,18 @@ export const OverviewPage: React.FC = () => {
                   title={`${formatName(activeDecision.title)} · ${formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')}`}
                   counterpartName={formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')}
                   proposedPrice={(activeDecision as any).amount || (activeDecision as any).currentOffer?.price || 155}
-                  buyerCeiling={(activeDecision as any).budgetCeiling || (activeDecision as any).buyerCeiling || 150}
+                  buyerBudget={(activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || (activeDecision as any).buyerCeiling || 150}
+                  buyerHardCap={(activeDecision as any).buyerHardCap || Math.round(((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150) * 1.1)}
                   proposedDays={(activeDecision as any).deliveryDays || (activeDecision as any).currentOffer?.deliveryDays || 7}
-                  reasonText={`${formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')} asked for ${formatMoney((activeDecision as any).amount || 155)}. Your limit is ${formatMoney((activeDecision as any).budgetCeiling || 150)}.`}
-                  suggestionText={`Our suggestion: counter at ${formatMoney(Math.max(((activeDecision as any).budgetCeiling || 150) - 5, ((activeDecision as any).amount || 155) - 10))} for ${(activeDecision as any).deliveryDays || 7}\u00A0days.`}
+                  reasons={Array.isArray((activeDecision as any).reasons) && (activeDecision as any).reasons.length > 0
+                    ? (activeDecision as any).reasons
+                    : [`${formatName((activeDecision as any).counterpartName || 'Seller')} asked for ${formatMoney((activeDecision as any).amount || 155)}.`, `Your budget is ${formatMoney((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150)}.`]}
+                  reasonText={(activeDecision as any).shortSummary || `${formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')} asked for ${formatMoney((activeDecision as any).amount || 155)}. Your budget is ${formatMoney((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150)}.`}
+                  suggestionText={`Our suggestion: counter at ${formatMoney(Math.max(((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150) - 5, ((activeDecision as any).amount || 155) - 10))} for ${(activeDecision as any).deliveryDays || 7}\u00A0days.`}
                   onApprove={() => handleApprove(activeDecision)}
                   onDecline={() => handleDecline(activeDecision)}
                   onCounter={(price, days) => handleCounter(activeDecision, price, days)}
+                  onUndo={() => handleUndo(activeDecision)}
                   isLoading={actionInProgressId === activeDecision.id}
                 />
               )}
@@ -419,11 +553,16 @@ export const OverviewPage: React.FC = () => {
               title={`${formatName(activeDecision.title)} · ${formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')}`}
               counterpartName={formatName((activeDecision as any).counterpartName || 'Marlow & Finch, Lisbon')}
               proposedPrice={(activeDecision as any).amount || (activeDecision as any).currentOffer?.price || 155}
-              buyerCeiling={(activeDecision as any).budgetCeiling || (activeDecision as any).buyerCeiling || 150}
+              buyerBudget={(activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || (activeDecision as any).buyerCeiling || 150}
+              buyerHardCap={(activeDecision as any).buyerHardCap || Math.round(((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150) * 1.1)}
               proposedDays={(activeDecision as any).deliveryDays || (activeDecision as any).currentOffer?.deliveryDays || 7}
+              reasons={Array.isArray((activeDecision as any).reasons) && (activeDecision as any).reasons.length > 0
+                ? (activeDecision as any).reasons
+                : [`${formatName((activeDecision as any).counterpartName || 'Seller')} asked for ${formatMoney((activeDecision as any).amount || 155)}.`, `Your budget is ${formatMoney((activeDecision as any).buyerBudget || (activeDecision as any).budgetCeiling || 150)}.`]}
               onApprove={() => handleApprove(activeDecision)}
               onDecline={() => handleDecline(activeDecision)}
               onCounter={(price, days) => handleCounter(activeDecision, price, days)}
+              onUndo={() => handleUndo(activeDecision)}
               isLoading={actionInProgressId === activeDecision.id}
             />
           </div>
@@ -450,49 +589,63 @@ export const OverviewPage: React.FC = () => {
           </div>
 
           <div className="flex flex-col gap-3">
-            {inProgress.map((deal: any) => {
+            {inProgress.map((deal: any, idx: number) => {
               const offerPrice = deal.currentOffer?.price || deal.agreedPrice || deal.estimatedPrice || 140;
               const deliveryDays = deal.currentOffer?.deliveryDays || 5;
               const counterpart = formatName(deal.counterpartName || deal.sellerName || 'Dev Raman, backend contractor');
 
               return (
-                <Link
+                <motion.div
                   key={deal.id}
-                  to={`/app/deals/${deal.id}`}
-                  className="block group"
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{
+                    duration: 0.2,
+                    delay: Math.min(idx, 7) * 0.04,
+                    ease: EASE_STANDARD
+                  }}
                 >
-                  <div className="bg-surface border border-border-subtle rounded-surface p-5 hover:border-text-muted/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex items-center gap-3.5">
-                      <div className="w-10 h-10 rounded-control bg-raised border border-border-subtle flex items-center justify-center shrink-0">
-                        <Clock className="w-5 h-5 text-status-progress" strokeWidth={2} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-1">
-                          <StatusChip label="Negotiating" role="inProgress" size="sm" />
-                          <span className="text-secondary text-text-muted">· {counterpart}</span>
+                  <Link
+                    to={`/app/deals/${deal.id}`}
+                    className="block group"
+                  >
+                    <div className="bg-surface border border-border-subtle rounded-surface p-5 hover:border-text-muted/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3.5">
+                        <div className="w-10 h-10 rounded-control bg-raised border border-border-subtle flex items-center justify-center shrink-0">
+                          <span className="vyro-live-indicator" aria-hidden="true">
+                            <span />
+                            <span />
+                            <span />
+                          </span>
                         </div>
-                        <h3 className="font-display font-semibold text-body text-text-primary group-hover:text-volt transition-colors">
-                          {formatName(deal.title)}
-                        </h3>
-                        <p className="text-secondary text-text-muted mt-0.5">
-                          Negotiating terms with seller agent within ceiling…
-                        </p>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            <StatusChip label="Negotiating" role="inProgress" size="sm" />
+                            <span className="text-secondary text-text-muted">· {counterpart}</span>
+                          </div>
+                          <h3 className="font-display font-semibold text-body text-text-primary group-hover:text-volt transition-colors">
+                            {formatName(deal.title)}
+                          </h3>
+                          <p className="text-secondary text-text-muted mt-0.5">
+                            Negotiating terms with seller agent within your budget…
+                          </p>
+                        </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-4 sm:text-right">
-                      <div>
-                        <span className="font-display font-bold text-[22px] text-text-primary block">
-                          {formatMoney(offerPrice)}
-                        </span>
-                        <span className="text-secondary text-text-muted">
-                          {deliveryDays}&nbsp;days delivery
-                        </span>
+                      <div className="flex items-center gap-4 sm:text-right">
+                        <div>
+                          <span className="font-display font-bold text-[22px] text-text-primary block">
+                            {formatMoney(offerPrice)}
+                          </span>
+                          <span className="text-secondary text-text-muted">
+                            {deliveryDays}&nbsp;days delivery
+                          </span>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-text-primary transition-colors shrink-0" />
                       </div>
-                      <ChevronRight className="w-4 h-4 text-text-muted group-hover:text-text-primary transition-colors shrink-0" />
                     </div>
-                  </div>
-                </Link>
+                  </Link>
+                </motion.div>
               );
             })}
           </div>

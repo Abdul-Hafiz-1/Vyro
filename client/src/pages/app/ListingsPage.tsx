@@ -177,7 +177,7 @@ export const ListingsPage: React.FC = () => {
 
       {/* Listings Grid */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 animate-pulse">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 opacity-70">
           <div className="md:col-span-2 h-72 bg-surface rounded-surface border border-border-subtle" />
           <div className="h-72 bg-surface rounded-surface border border-border-subtle" />
           <div className="h-72 bg-surface rounded-surface border border-border-subtle" />

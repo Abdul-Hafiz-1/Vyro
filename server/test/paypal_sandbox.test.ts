@@ -50,6 +50,14 @@ describe('PayPal Sandbox Orders v2 Integration & Security Gates', () => {
       updatedAt: new Date().toISOString()
     };
     store.saveUser(buyerUser);
+    store.saveUser({
+      ...buyerUser,
+      id: sellerUserId,
+      email: `${sellerUserId}@test.com`,
+      displayName: 'Bob Seller',
+      username: 'bobseller',
+      activeWorkspace: 'seller'
+    });
 
     const dealId = `deal_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
     const agreementId = `agr_test_${Date.now()}_${Math.random().toString(36).substring(7)}`;
@@ -74,6 +82,18 @@ describe('PayPal Sandbox Orders v2 Integration & Security Gates', () => {
       createdAt: new Date().toISOString()
     };
     store.saveAgreement(agreement);
+
+    store.saveSellerPayoutAccount({
+      id: `spa_${sellerUserId}`,
+      userId: sellerUserId,
+      provider: 'paypal_email',
+      paypalEmail: `${sellerUserId}@personal.example.com`,
+      status: 'ready',
+      verifiedAt: new Date().toISOString(),
+      lastError: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
 
     const decision: DecisionRecord = {
       id: `dec_${dealId}`,
@@ -156,9 +176,10 @@ describe('PayPal Sandbox Orders v2 Integration & Security Gates', () => {
     assert.strictEqual(tx.paymentStatus, 'completed');
     assert.strictEqual(tx.paypalCaptureId, mockCaptureId);
     assert.strictEqual(tx.amount, 175.50);
-    assert.strictEqual(tx.sellerShareHeld, 175.50);
-    assert.strictEqual(tx.sellerPayoutStatus, 'simulated_paid');
-    assert.ok(tx.sellerPayoutAt);
+    assert.strictEqual(tx.platformFeeCents, 878);
+    assert.strictEqual(tx.sellerShareHeld, 166.72);
+    assert.strictEqual(tx.sellerPayoutStatus, 'held');
+    assert.strictEqual(tx.sellerPayoutAt, undefined);
   });
 
   it('2. Capture Before Approval: Rejection with mapped error when unapproved in popup', async () => {
@@ -400,7 +421,9 @@ describe('PayPal Sandbox Orders v2 Integration & Security Gates', () => {
     assert.strictEqual(tx.paymentStatus, 'completed');
     assert.strictEqual(tx.amount, 125.00);
     assert.strictEqual(tx.sellerUserId, sellerUserId);
-    assert.strictEqual(tx.sellerShareHeld, 125.00);
+    assert.strictEqual(tx.platformFeeCents, 625);
+    assert.strictEqual(tx.sellerShareHeld, 118.75);
+    assert.strictEqual(tx.sellerPayoutStatus, 'held');
     assert.ok(tx.paypalCaptureId?.startsWith('CAP-MOCK-'));
 
     // Idempotent retry returns existing transaction

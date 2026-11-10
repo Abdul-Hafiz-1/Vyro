@@ -23,6 +23,13 @@
     --status-needs: #FFB020;
     --status-declined: #FF6B6B;
     --status-progress: #8FA3B8;
+
+    /* Calm Motion Tokens */
+    --motion-micro: 120ms;
+    --motion-standard: 200ms;
+    --motion-emphasis: 320ms;
+    --ease-standard: cubic-bezier(.2, .8, .2, 1);
+    --ease-exit: cubic-bezier(.4, 0, 1, 1);
   }
 
   /* Light Theme Fully Supported */
@@ -64,7 +71,7 @@
   }
 }
 
-/* Agreement Volt Sweep Banner */
+/* Agreement Volt Sweep Banner (emphasis 380ms <= 400ms max) */
 @keyframes volt-sweep {
   0% {
     transform: translateX(-100%);
@@ -75,7 +82,23 @@
 }
 
 .animate-volt-sweep {
-  animation: volt-sweep 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: volt-sweep 380ms var(--ease-standard) forwards;
+}
+
+/* Single allowed live status indicator */
+@keyframes vyro-live-pulse {
+  0%, 100% {
+    opacity: 0.35;
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.vyro-live-indicator {
+  animation: vyro-live-pulse 1200ms var(--ease-standard) infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -85,4 +108,11 @@
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.motion-reduced *, .motion-reduced ::before, .motion-reduced ::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
 }

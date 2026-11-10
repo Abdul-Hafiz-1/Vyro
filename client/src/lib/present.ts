@@ -23,20 +23,25 @@ export interface FormattedStatus {
  */
 export function formatMoney(amount: number | string | null | undefined): string {
   if (amount === null || amount === undefined || amount === '') return '$0';
-  const num = typeof amount === 'number' ? amount : parseFloat(String(amount));
-  if (isNaN(num)) return '$0';
+  const num = typeof amount === 'number'
+    ? amount
+    : parseFloat(String(amount).replace(/[^0-9.-]/g, ''));
+  if (!Number.isFinite(num)) return '$0';
 
-  if (Math.round(num) === num) {
-    return `$${Math.round(num)}`;
-  }
+  const roundedCents = Math.round(num * 100);
+  const absCents = Math.abs(roundedCents);
+  const whole = absCents % 100 === 0;
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: whole ? 0 : 2,
+  }).format(absCents / 100);
 
-  // Format to 2 decimal places
-  const fixed = num.toFixed(2);
-  // If .00, drop cents
-  if (fixed.endsWith('.00')) {
-    return `$${parseInt(fixed, 10)}`;
-  }
-  return `$${fixed}`;
+  return roundedCents < 0 ? `-$${formatted}` : `$${formatted}`;
+}
+
+export function formatCents(cents: number | null | undefined): string {
+  if (cents === null || cents === undefined || !Number.isFinite(cents)) return '$0';
+  return formatMoney(Math.round(cents) / 100);
 }
 
 /**
@@ -129,6 +134,11 @@ const STATUS_MAP: Record<string, FormattedStatus> = {
   awaiting_counter: {
     label: 'Negotiating',
     explanation: 'Waiting for counterparty response',
+    role: 'in_progress'
+  },
+  waiting_retry: {
+    label: 'Waiting to retry',
+    explanation: 'The AI assistant is briefly busy and will automatically retry shortly',
     role: 'in_progress'
   },
 

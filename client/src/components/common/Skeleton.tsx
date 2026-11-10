@@ -21,7 +21,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 
   return (
     <div
-      className={`bg-raised animate-pulse border border-border-subtle/40 ${width} ${height} ${roundedClass} ${className}`}
+      className={`bg-raised opacity-70 transition-opacity duration-200 border border-border-subtle/40 ${width} ${height} ${roundedClass} ${className}`}
     />
   );
 };

@@ -267,10 +267,11 @@ describe('VYRO Multi-User Isolation & Commercial Integrity', () => {
     }
     assert.ok(!bobViewText.includes(String(CANARY_CEILING)), 'Seller view must NEVER leak buyer ceiling');
 
-    // Alice views the negotiation: must NOT leak Bob's floor
+    // Alice views the negotiation: must NOT leak Bob's floor (mask ISO millisecond fragments .XXXz to avoid timestamp coincidences)
     const aliceViewRes = await jarA.fetch(`${BASE_URL}/negotiations/${negotiationId}`);
     const aliceViewText = await aliceViewRes.text();
-    assert.ok(!aliceViewText.includes(String(CANARY_FLOOR)), 'Buyer view must NEVER leak seller floor');
+    const aliceViewStripped = aliceViewText.replace(/\.\d{3}Z/g, '.000Z');
+    assert.ok(!aliceViewStripped.includes(String(CANARY_FLOOR)), 'Buyer view must NEVER leak seller floor');
   });
 
   test('5. Self-dealing prevention: User cannot negotiate with themselves', async () => {
@@ -401,7 +402,23 @@ describe('VYRO Multi-User Isolation & Commercial Integrity', () => {
     });
     assert.equal(earlyCaptureRes.status, 404, 'Capturing non-existent/unapproved order must fail');
 
-    // 8. Alice approves the deal via the review queue action
+    // 8. Without Seller payout account configured, Alice's confirmation is cleanly gated (409)
+    const gatedRes = await jarA.fetch(`${BASE_URL}/home/review/${escalatedItem.id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Trying approve before seller payout email.' })
+    });
+    assert.equal(gatedRes.status, 409, 'Confirming a deal before seller adds a payout account must return 409');
+
+    // Bob configures his seller payout email
+    const setupPayoutRes = await jarB.fetch(`${BASE_URL}/payouts/account`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paypalEmail: 'sb-bob-seller@personal.example.com' })
+    });
+    assert.equal(setupPayoutRes.status, 200, 'Bob must be able to set his PayPal payout email');
+
+    // Now Alice approves the deal via the review queue action
     const approveRes = await jarA.fetch(`${BASE_URL}/home/review/${escalatedItem.id}/approve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

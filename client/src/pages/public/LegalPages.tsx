@@ -13,12 +13,12 @@ export const TermsPage: React.FC = () => {
     {
       id: 'sovereignty',
       title: '1. Human Sovereignty & Ultimate Control',
-      body: 'VYRO provides autonomous agents that search, evaluate, and negotiate agreements on your behalf. You configure your ceiling budget, auto-approval thresholds, and commercial rules. No financial transaction above your authorized threshold ever executes without your explicit, authenticated human approval.'
+      body: 'VYRO provides autonomous agents that search, evaluate, and negotiate agreements on your behalf. You configure your comfortable budget, flexibility stretch, auto-approval thresholds, and commercial rules. No financial transaction above your comfortable budget ever executes without your explicit, authenticated human approval.'
     },
     {
       id: 'authority',
       title: '2. Agent Authority & Operating Boundaries',
-      body: 'Your agent acts strictly within the bounds you configure in your Rules. Agents can explore offerings, submit structured multi-issue counteroffers (price, delivery timeline, revision count), and reject non-viable terms. An agent cannot commit funds exceeding your ceiling or agree to terms violating your active policies.'
+      body: 'Your agent acts strictly within the bounds you configure in your Rules. Agents can explore offerings, submit structured multi-issue counteroffers (price, delivery timeline, revision count), and reject non-viable terms. An agent cannot commit funds exceeding your hard cap or agree to terms violating your active policies.'
     },
     {
       id: 'agreements',
@@ -108,7 +108,7 @@ export const PrivacyPage: React.FC = () => {
     {
       id: 'isolation',
       title: '1. Private Values Are Cryptographically Isolated',
-      body: 'Your maximum budget ceiling as a buyer, and your minimum price floor as a seller, are never revealed to counterparties, nor to counterparty agents. All responses are serialized server-side: a buyer query can never inspect a seller floor, and a seller query can never inspect a buyer ceiling.'
+      body: 'Your comfortable budget and hard cap as a buyer, and your standard lowest price and minimum limit as a seller, are never revealed to counterparties, nor to counterparty agents. All responses are serialized server-side: a buyer query can never inspect a seller limit, and a seller query can never inspect a buyer budget.'
     },
     {
       id: 'retention',

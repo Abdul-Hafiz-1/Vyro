@@ -265,7 +265,8 @@ export class DecisionEngine {
       escalationReasons.push(`Seller "${sellerAgent.businessName}" is a community member and has not completed verified partner accreditation.`);
     }
     if (!priceWithinCeiling) {
-      escalationReasons.push(`Offer price $${price} is above your target ceiling of $${buyerMaxBudget}.`);
+      const overBy = Math.round(price - buyerMaxBudget);
+      escalationReasons.push(`$${price} is $${overBy} over your $${buyerMaxBudget} budget.`);
     }
 
     const urgency: 'high' | 'medium' | 'low' =
@@ -281,7 +282,7 @@ export class DecisionEngine {
       reasons: escalationReasons,
       recommendation: priceWithinCeiling
         ? 'Price matches scope; verify seller credentials and approve if satisfied.'
-        : 'Counter at maximum budget ceiling or request reduced turnaround.',
+        : 'Approve stretch price or counter closer to your budget.',
       signals,
       confidence,
       decidedBy: 'rule',

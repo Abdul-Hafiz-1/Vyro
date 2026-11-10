@@ -48,7 +48,7 @@ export const StatusChip: React.FC<StatusChipProps> = ({
   return (
     <span
       onClick={onClick}
-      className={`inline-flex items-center font-medium rounded-pill border select-none transition-all ${sizeStyles} ${roleStyles} ${interactive} ${className}`}
+      className={`inline-flex items-center whitespace-nowrap shrink-0 font-medium rounded-pill border select-none transition-all ${sizeStyles} ${roleStyles} ${interactive} ${className}`}
     >
       {icon || defaultIcon}
       <span>{label}</span>

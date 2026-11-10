@@ -16,7 +16,14 @@ function serializeListing(listing: Listing, viewerUserId?: string): any {
   if (isOwner) {
     return listing;
   }
-  const { minAcceptablePrice, ...publicListing } = listing;
+  const {
+    minAcceptablePrice,
+    floorPriceCents,
+    absoluteMinPrice,
+    absoluteMinCents,
+    flexibility,
+    ...publicListing
+  } = listing;
   return publicListing;
 }
 
@@ -110,6 +117,7 @@ router.post('/', authenticateUser, (req: AuthenticatedRequest, res: Response) =>
     currency,
     pricingModel,
     minAcceptablePrice,
+    flexibility,
     deliveryDays,
     deliverables,
     images,
@@ -182,6 +190,7 @@ router.post('/', authenticateUser, (req: AuthenticatedRequest, res: Response) =>
     currency: currency || 'USD',
     pricingModel: pricingModel || 'fixed',
     minAcceptablePrice: typeof minAcceptablePrice === 'number' ? minAcceptablePrice : Math.round(price * 0.85),
+    flexibility: (['strict', 'flexible', 'very_flexible'].includes(flexibility) ? flexibility : 'flexible'),
     deliveryDays: typeof deliveryDays === 'number' ? deliveryDays : 5,
     deliverables: Array.isArray(deliverables) && deliverables.length > 0 ? deliverables : [`${title} Implementation`, 'QA Delivery'],
     images: Array.isArray(images) ? images : [],

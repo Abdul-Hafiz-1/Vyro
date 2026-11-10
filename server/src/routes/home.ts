@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { v4 as uuidv4 } from 'uuid';
 import { store } from '../db/store.js';
+import { config } from '../config/index.js';
+import { payoutService } from '../services/paypal/payoutService.js';
 import { AuthenticatedRequest, authenticateUser, requireRole } from '../middleware/rbac.js';
 import { broadcastEvent } from './events.js';
 import { DecisionRecord, DecisionStatus } from '../types/index.js';
@@ -148,7 +150,9 @@ router.get('/', (req: AuthenticatedRequest, res: Response) => {
         dailyBudgetCap: dailyCap,
         balance,
         isAutomationPaused: isPaused
-      }
+      },
+      sellerPayoutAccount: payoutService.getSellerPayoutAccount(user.id),
+      platformFeePercent: config.platformFeePercent
     }
   });
 });
@@ -159,6 +163,25 @@ router.post('/review/:id/approve', (req: AuthenticatedRequest, res: Response) =>
   const item = store.getReviewQueueItem(req.params.id);
   if (!item || (item.buyerId !== user.id && item.sellerId !== user.id)) {
     return res.status(404).json({ success: false, error: 'Review queue item not found' });
+  }
+
+  const neg = store.getNegotiation(item.negotiationId);
+  const sellerUserId = neg?.sellerUserId;
+  if (sellerUserId && !payoutService.isSellerPayoutReady(sellerUserId)) {
+    store.addNotification({
+      userId: sellerUserId,
+      title: 'Add where to send your earnings',
+      message: 'A buyer tried to confirm your deal, but your PayPal payout email is missing. Add it in Selling > Payments.',
+      type: 'payout_required',
+      linkUrl: `/app/deals/${item.negotiationId}`
+    });
+    return res.status(409).json({
+      success: false,
+      code: 'SELLER_PAYOUT_NOT_READY',
+      error: sellerUserId === user.id
+        ? 'Add where to send your earnings before confirming this deal.'
+        : 'Waiting for the seller to finish payout setup.'
+    });
   }
 
   const now = new Date().toISOString();
@@ -177,7 +200,6 @@ router.post('/review/:id/approve', (req: AuthenticatedRequest, res: Response) =>
   }
 
   // 3. Mark Agreement approved
-  const neg = store.getNegotiation(item.negotiationId);
   if (neg) {
     neg.status = 'agreement_reached';
     neg.updatedAt = now;
@@ -293,6 +315,45 @@ router.post('/review/:id/counter', (req: AuthenticatedRequest, res: Response) =>
 
   broadcastEvent('deal_updated', { negotiationId: item.negotiationId, status: 'countered' });
   res.json({ success: true, message: `Counteroffer of $${counterPrice} dispatched.`, data: item });
+});
+
+// POST /api/v1/home/review/:id/undo (10-second Undo window)
+router.post('/review/:id/undo', (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const item = store.getReviewQueueItem(req.params.id);
+  if (!item || (item.buyerId !== user.id && item.sellerId !== user.id)) {
+    return res.status(404).json({ success: false, error: 'Review queue item not found' });
+  }
+
+  const now = new Date().toISOString();
+  item.status = 'pending';
+  item.resolvedBy = undefined;
+  item.resolvedAt = undefined;
+  item.resolutionNote = undefined;
+  store.saveReviewQueueItem(item);
+
+  const decision = store.getDecisionByEntity('deal', item.negotiationId);
+  if (decision) {
+    store.updateDecisionStatus(decision.id, 'needs_review', 'user', 'Action undone within 10s window.');
+  }
+
+  const neg = store.getNegotiation(item.negotiationId);
+  if (neg) {
+    neg.status = 'escalated';
+    neg.updatedAt = now;
+    if (neg.agreementId) {
+      const agr = store.getAgreement(neg.agreementId);
+      if (agr) {
+        agr.humanApprovalStatus = 'pending';
+        agr.paypalReady = false;
+        store.saveAgreement(agr);
+      }
+    }
+    store.saveNegotiation(neg);
+  }
+
+  broadcastEvent('deal_updated', { negotiationId: item.negotiationId, status: 'needs_review' });
+  res.json({ success: true, message: 'Decision undone. Returned to your review queue.', data: item });
 });
 
 // POST /api/v1/home/review/:id/override
