@@ -121,4 +121,44 @@ router.post('/capture-order', authenticateUser, async (req: AuthenticatedRequest
   }
 });
 
+// POST /api/v1/payments/mock-settle
+// Instant simulated platform escrow settlement for testing and development
+router.post('/mock-settle', authenticateUser, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  const { agreementId } = req.body;
+  if (!agreementId) {
+    return res.status(400).json({
+      success: false,
+      error: 'agreementId is required',
+      code: 'VALIDATION_ERROR',
+      nextStep: 'Please provide a valid agreement ID.'
+    });
+  }
+
+  try {
+    const transaction = await paypalService.settleMockOrder(agreementId, user.id);
+    return res.json({
+      success: true,
+      message: 'Platform Escrow simulated settlement completed successfully.',
+      data: transaction
+    });
+  } catch (err: any) {
+    if (err instanceof PayPalApiException) {
+      return res.status(err.details.status).json({
+        success: false,
+        error: err.details.message,
+        code: err.details.code,
+        nextStep: err.details.nextStep,
+        debugId: err.details.debugId
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: err.message || 'Mock payment settlement failed',
+      code: 'SETTLEMENT_FAILED',
+      nextStep: 'Please retry or check system logs.'
+    });
+  }
+});
+
 export default router;

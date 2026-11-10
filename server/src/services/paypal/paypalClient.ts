@@ -590,6 +590,101 @@ export class PayPalService {
 
     return tx;
   }
+
+  /**
+   * Settles an authorized agreement using simulated instant platform escrow.
+   * Useful for development, end-to-end integration testing, or offline sandbox tests.
+   */
+  async settleMockOrder(agreementId: string, requestingUserId?: string): Promise<Transaction> {
+    const agreement = store.getAgreement(agreementId);
+    if (!agreement || (requestingUserId && agreement.buyerUserId !== requestingUserId)) {
+      throw new PayPalApiException({
+        status: 404,
+        code: 'AGREEMENT_NOT_FOUND',
+        message: 'Agreement not found or access denied.',
+        nextStep: 'Ensure you are signed in as the authorized buyer for this deal.'
+      });
+    }
+
+    const existingTx = store.getTransactionByAgreement(agreementId);
+    if (existingTx && existingTx.paymentStatus === 'completed') {
+      return existingTx;
+    }
+
+    const decision = store.getDecisionByEntity('deal', agreement.negotiationId);
+    const isApproved = decision
+      ? (decision.status === 'auto_approved' || decision.status === 'human_approved')
+      : (agreement.humanApprovalStatus === 'approved');
+
+    if (!isApproved) {
+      throw new PayPalApiException({
+        status: 403,
+        code: 'DECISION_NOT_APPROVED',
+        message: 'Payment rejected: Agreement has not been approved by autonomous policy or human review.',
+        nextStep: 'Approve the deal in the Review Queue before executing payment.'
+      });
+    }
+
+    const currency = 'USD';
+    const simulatedOrderId = `PAYID-MOCK-${uuidv4().substring(0, 10).toUpperCase()}`;
+    const simulatedCaptureId = `CAP-MOCK-${uuidv4().substring(0, 10).toUpperCase()}`;
+
+    const tx: Transaction = {
+      id: `tx_${uuidv4().substring(0, 8)}`,
+      agreementId: agreement.id,
+      negotiationId: agreement.negotiationId,
+      requestId: agreement.requestId,
+      buyerUserId: agreement.buyerUserId,
+      sellerUserId: agreement.sellerUserId,
+      buyerAgentName: 'Buyer Agent',
+      sellerAgentId: agreement.sellerAgentId,
+      sellerBusinessName: agreement.sellerBusinessName,
+      serviceTitle: 'Commercial Agreement Contract',
+      amount: agreement.finalPrice,
+      currency,
+      paypalOrderId: simulatedOrderId,
+      paypalCaptureId: simulatedCaptureId,
+      paypalPayerEmail: 'buyer.studio@sandbox.vyro.network',
+      paypalPayerName: 'Platform Escrow Buyer',
+      paymentStatus: 'completed',
+      idempotencyKey: `mock_idem_${uuidv4().substring(0, 10)}`,
+      sellerShareHeld: agreement.finalPrice,
+      sellerPayoutStatus: 'simulated_paid',
+      sellerPayoutAt: new Date().toISOString(),
+      isSandbox: true,
+      createdAt: new Date().toISOString(),
+      completedAt: new Date().toISOString()
+    };
+
+    store.saveTransaction(tx);
+
+    const negotiation = store.getNegotiation(tx.negotiationId);
+    if (negotiation) {
+      negotiation.status = 'completed';
+      negotiation.updatedAt = new Date().toISOString();
+      store.saveNegotiation(negotiation);
+    }
+
+    const request = store.getRequest(tx.requestId);
+    if (request) {
+      request.status = 'completed';
+      request.updatedAt = new Date().toISOString();
+      store.saveRequest(request);
+    }
+
+    store.logActivity({
+      type: 'paypal_payment_completed',
+      title: `Platform Escrow Payment Settled: $${tx.amount} ${tx.currency}`,
+      description: `Commercial agreement ${tx.agreementId} fully settled with ${tx.sellerBusinessName}. Capture ID: ${tx.paypalCaptureId}.`,
+      transactionId: tx.id,
+      negotiationId: tx.negotiationId,
+      amount: tx.amount,
+      currency: tx.currency,
+      severity: 'success'
+    });
+
+    return tx;
+  }
 }
 
 export const paypalService = new PayPalService();

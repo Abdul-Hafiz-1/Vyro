@@ -26,18 +26,17 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorInfo, setErrorInfo] = useState<ErrorDetails | null>(null);
   const [clientId, setClientId] = useState<string>(
-    import.meta.env.VITE_PAYPAL_CLIENT_ID || 'AVQClLhVOWU_i3bKRJlGUbmviCeZSyd172KNUy7oP6T0YLUUwoDIcjTRxWAt6sA2ai91FKk-jtI4BNlc'
+    import.meta.env.VITE_PAYPAL_CLIENT_ID || ''
   );
 
   useEffect(() => {
-    if (!clientId || clientId === 'sb') {
-      api.getPayPalConfig().then((cfg) => {
-        if (cfg.clientId && cfg.clientId !== 'sb') {
-          setClientId(cfg.clientId);
-        }
-      }).catch(() => {});
-    }
-  }, [clientId]);
+    // Always sync authoritative PayPal clientId from server
+    api.getPayPalConfig().then((cfg) => {
+      if (cfg.clientId && cfg.clientId !== 'sb') {
+        setClientId(cfg.clientId);
+      }
+    }).catch(() => {});
+  }, []);
 
   return (
     <div className="p-5 rounded-surface bg-surface border border-border-subtle flex flex-col gap-4 text-text-primary">
@@ -80,81 +79,89 @@ export const PayPalCheckoutButton: React.FC<PayPalCheckoutButtonProps> = ({
 
       {/* Real PayPal Buttons */}
       <div className="pt-1">
-        <PayPalScriptProvider
-          options={{
-            clientId: clientId,
-            currency: 'USD',
-            intent: 'capture',
-            components: 'buttons'
-          }}
-        >
-          <PayPalButtons
-            style={{
-              layout: 'vertical',
-              color: 'gold',
-              shape: 'rect',
-              label: 'paypal',
-              height: 48
+        {clientId ? (
+          <PayPalScriptProvider
+            options={{
+              clientId: clientId,
+              currency: 'USD',
+              intent: 'capture',
+              components: 'buttons'
             }}
-            disabled={loading}
-            createOrder={async () => {
-              setLoading(true);
-              setErrorInfo(null);
-              try {
-                const res = await api.createPayPalOrder(agreement.id);
-                return res.orderId;
-              } catch (err: any) {
-                const message = err.message || 'Failed to create PayPal order.';
-                setErrorInfo({
-                  message,
-                  nextStep: 'Check that this deal is approved in your review queue.'
-                });
-                onPaymentError(message);
-                throw err;
-              } finally {
-                setLoading(false);
-              }
-            }}
-            onApprove={async (data) => {
-              setLoading(true);
-              setErrorInfo(null);
-              try {
-                const tx = await api.capturePayPalOrder(data.orderID);
+          >
+            <PayPalButtons
+              style={{
+                layout: 'vertical',
+                color: 'gold',
+                shape: 'rect',
+                label: 'paypal',
+                height: 48
+              }}
+              disabled={loading}
+              createOrder={async () => {
+                setLoading(true);
+                setErrorInfo(null);
                 try {
-                  confetti({
-                    particleCount: 80,
-                    spread: 70,
-                    origin: { y: 0.6 },
-                    colors: ['#D4FF3A', '#34D399', '#FFFFFF']
+                  const res = await api.createPayPalOrder(agreement.id);
+                  return res.orderId;
+                } catch (err: any) {
+                  const message = err.message || 'Failed to create PayPal order.';
+                  setErrorInfo({
+                    message,
+                    nextStep: 'Check that this deal is approved in your review queue.'
                   });
-                } catch {}
-                onPaymentSuccess(tx);
-              } catch (err: any) {
-                const message = err.message || 'Failed to capture PayPal payment.';
+                  onPaymentError(message);
+                  throw err;
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              onApprove={async (data) => {
+                setLoading(true);
+                setErrorInfo(null);
+                try {
+                  const tx = await api.capturePayPalOrder(data.orderID);
+                  try {
+                    confetti({
+                      particleCount: 80,
+                      spread: 70,
+                      origin: { y: 0.6 },
+                      colors: ['#D4FF3A', '#34D399', '#FFFFFF']
+                    });
+                  } catch {}
+                  onPaymentSuccess(tx);
+                } catch (err: any) {
+                  const message = err.message || 'Failed to capture PayPal payment.';
+                  setErrorInfo({
+                    message,
+                    nextStep: 'Please check your sandbox balance and try again.'
+                  });
+                  onPaymentError(message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              onCancel={() => {
                 setErrorInfo({
-                  message,
-                  nextStep: 'Please check your sandbox balance and try again.'
+                  message: 'PayPal authorization window was closed without completing payment.',
+                  nextStep: 'Click the PayPal button again when you are ready to authorize payment.'
                 });
-                onPaymentError(message);
-              } finally {
-                setLoading(false);
-              }
-            }}
-            onCancel={() => {
-              setErrorInfo({
-                message: 'PayPal authorization window was closed without completing payment.',
-                nextStep: 'Click the PayPal button again when you are ready to authorize payment.'
-              });
-            }}
-            onError={(err) => {
-              console.error('[PayPal Checkout Error]:', err);
-              setErrorInfo({
-                message: 'An error occurred within the PayPal popup component.',
-                nextStep: 'Ensure popups are allowed in your browser and try again.'
-              });
-            }}
-          />
-        </PayPalScriptProvider>
+              }}
+              onError={(err) => {
+                console.error('[PayPal Checkout Error]:', err);
+                const msg = err && typeof err === 'object' && 'message' in err ? (err as any).message : String(err);
+                setErrorInfo({
+                  message: msg || 'An error occurred within the PayPal popup component.',
+                  nextStep: 'Ensure popups are allowed in your browser and try again.'
+                });
+              }}
+            />
+          </PayPalScriptProvider>
+        ) : (
+          <div className="flex items-center justify-center py-4 text-secondary text-text-muted">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+            <span>Loading payment gateway...</span>
+          </div>
+        )}
       </div>
 
       <p className="text-secondary text-text-muted text-center">

@@ -379,4 +379,32 @@ describe('PayPal Sandbox Orders v2 Integration & Security Gates', () => {
     assert.strictEqual(tokenFetchCount, 2, 'Must request a fresh token on 401 retry');
     assert.strictEqual(orderCallCount, 2, 'Must retry the order creation call');
   });
+
+  it('8. Mock Settlement: Settle agreement via instant simulated platform escrow', async () => {
+    const { agreement, buyerUserId, sellerUserId } = setupApprovedDeal({ price: 125.00 });
+
+    // Imposter cannot settle
+    await assert.rejects(
+      async () => {
+        await paypalService.settleMockOrder(agreement.id, 'wrong_user_999');
+      },
+      (err: any) => {
+        assert.ok(err instanceof PayPalApiException);
+        assert.strictEqual(err.details.status, 404);
+        return true;
+      }
+    );
+
+    // Legitimate buyer settles mock escrow
+    const tx = await paypalService.settleMockOrder(agreement.id, buyerUserId);
+    assert.strictEqual(tx.paymentStatus, 'completed');
+    assert.strictEqual(tx.amount, 125.00);
+    assert.strictEqual(tx.sellerUserId, sellerUserId);
+    assert.strictEqual(tx.sellerShareHeld, 125.00);
+    assert.ok(tx.paypalCaptureId?.startsWith('CAP-MOCK-'));
+
+    // Idempotent retry returns existing transaction
+    const tx2 = await paypalService.settleMockOrder(agreement.id, buyerUserId);
+    assert.strictEqual(tx2.id, tx.id);
+  });
 });

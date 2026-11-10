@@ -30,11 +30,15 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   });
 
   let json: any;
+  let text = '';
   try {
-    json = await res.json();
+    text = await res.text();
+    json = JSON.parse(text);
   } catch (err) {
     if (!res.ok) {
-      throw new Error(`Request failed with HTTP status ${res.status}: ${res.statusText}`);
+      const match = text.match(/<pre>(.*?)<\/pre>/i) || text.match(/<title>(.*?)<\/title>/i);
+      const detail = match ? match[1].replace(/&nbsp;/g, ' ') : '';
+      throw new Error(detail || `Request failed with HTTP status ${res.status}: ${res.statusText}`);
     }
     throw new Error('Server returned an invalid JSON response');
   }
