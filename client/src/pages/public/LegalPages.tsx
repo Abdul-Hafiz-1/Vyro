@@ -228,19 +228,19 @@ export const DisputePolicyPage: React.FC = () => {
 
         <Card className="p-6 flex flex-col gap-3">
           <h2 className="font-display font-bold text-[20px] text-text-primary">
-            7-Day Inspection Window
+            Stage-Aware Refund Fail-Safe &amp; 72-Hour Review Window
           </h2>
           <p className="text-body text-text-muted leading-relaxed">
-            Funds captured via PayPal Sandbox escrow remain locked until you confirm that deliverables match the agreement. If a delivery does not meet agreed specifications, you have 7 calendar days to initiate mediation.
+            Funds captured via PayPal escrow remain held until work is delivered and accepted. Before the seller clicks <strong>Start work</strong>, buyers may cancel for an immediate full refund. While in progress, refunds require seller agreement or mediation. Once delivered, buyers cannot self-refund; they have a 72-hour review window to accept work, request changes, or open a dispute before auto-acceptance releases seller earnings.
           </p>
         </Card>
 
         <Card className="p-6 flex flex-col gap-3">
           <h2 className="font-display font-bold text-[20px] text-text-primary">
-            Deterministic Schema Proofs
+            SHA-256 Evidence Proofs &amp; 72-Hour Dispute Mediation
           </h2>
           <p className="text-body text-text-muted leading-relaxed">
-            All negotiations record a cryptographically bound snapshot of the final agreed deliverables package. In any dispute, the system compares delivered files against this immutable agreement record.
+            All projects record an immutable agreed deliverables snapshot and compute SHA-256 hashes for every uploaded delivery file stored privately outside public web directories. When a dispute is opened, held funds freeze and respondents have 72 hours to submit counter-evidence before a mediator releases, refunds, or splits funds. External claims filed directly inside PayPal remain subject to PayPal&apos;s Buyer Protection rules.
           </p>
         </Card>
       </div>

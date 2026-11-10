@@ -82,6 +82,8 @@ export class DecisionEngine {
     const underAutoLimit = price <= autoLimit;
     const withinDailyBudget = (todaySpend + price) <= dailyCap;
     const categoryAllowed = !isProhibitedCategory;
+    const recentDisputeLosses = store.getUserDisputeLossCount30Days(buyerUser.id);
+    const abuseFlagRequiresApproval = recentDisputeLosses > 2 && price > 100;
 
     // Deterministic Confidence Computation (Scale 0.0 - 1.0)
     let score = 0;
@@ -198,6 +200,7 @@ export class DecisionEngine {
     // allowed category, no red flags, not paused, confidence >= 0.85
     const canAutoApprove =
       !isPaused &&
+      !abuseFlagRequiresApproval &&
       priceWithinCeiling &&
       priceAboveFloor &&
       sellerVerified &&
@@ -254,6 +257,9 @@ export class DecisionEngine {
     const escalationReasons: string[] = [];
     if (isPaused) {
       escalationReasons.push('Automation is currently paused by user switch. All transactions require manual approval.');
+    }
+    if (abuseFlagRequiresApproval) {
+      escalationReasons.push(`Recent dispute history (${recentDisputeLosses} losses in 30 days) requires manual approval on orders over $100.`);
     }
     if (!underAutoLimit) {
       escalationReasons.push(`Offer price $${price} exceeds your auto-approval threshold of $${autoLimit}.`);

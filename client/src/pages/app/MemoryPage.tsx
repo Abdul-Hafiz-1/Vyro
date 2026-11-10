@@ -47,13 +47,44 @@ export const MemoryPage: React.FC = () => {
 
   const [autoLimitInput, setAutoLimitInput] = useState<number>(limits.autoApprovalLimit);
   const [dailyCapInput, setDailyCapInput] = useState<number>(limits.dailyBudgetCap);
+  const [sellerMinBudget, setSellerMinBudget] = useState<string>(user?.sellerAutoRules?.minBudget ? String(user.sellerAutoRules.minBudget) : '');
+  const [sellerMinDays, setSellerMinDays] = useState<string>(user?.sellerAutoRules?.minDeadlineDays ? String(user.sellerAutoRules.minDeadlineDays) : '');
+  const [sellerBlockedCats, setSellerBlockedCats] = useState<string>((user?.sellerAutoRules?.blockedCategories || []).join(', '));
+  const [sellerMaxProjects, setSellerMaxProjects] = useState<number>(user?.sellerProfile?.maxConcurrentProjects || homeData?.sellerCapacity?.max || 5);
+  const [sellerAutoRejectFull, setSellerAutoRejectFull] = useState<boolean>(Boolean(user?.sellerAutoRules?.autoRejectWhenFull));
+  const [sellerReviewManual, setSellerReviewManual] = useState<boolean>(Boolean(user?.sellerAutoRules?.reviewIncomingManually));
 
   React.useEffect(() => {
     if (homeData?.userLimits) {
       setAutoLimitInput(homeData.userLimits.autoApprovalLimit);
       setDailyCapInput(homeData.userLimits.dailyBudgetCap);
     }
-  }, [homeData?.userLimits]);
+    if (homeData?.sellerCapacity?.max) {
+      setSellerMaxProjects(homeData.sellerCapacity.max);
+    }
+  }, [homeData?.userLimits, homeData?.sellerCapacity?.max]);
+
+  const updateSellerRulesMut = useMutation({
+    mutationFn: () =>
+      api.updateSellerAutoRules({
+        minBudget: sellerMinBudget.trim() ? Number(sellerMinBudget) : undefined,
+        minDeadlineDays: sellerMinDays.trim() ? Number(sellerMinDays) : undefined,
+        blockedCategories: sellerBlockedCats
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean),
+        autoRejectWhenFull: sellerAutoRejectFull,
+        reviewIncomingManually: sellerReviewManual,
+        maxConcurrentProjects: Number(sellerMaxProjects) || 5
+      }),
+    onSuccess: () => {
+      toast.success('Seller auto-reject and capacity rules saved.');
+      queryClient.invalidateQueries({ queryKey: ['home'] });
+      queryClient.invalidateQueries({ queryKey: ['currentUser'] });
+      queryClient.invalidateQueries({ queryKey: ['projects'] });
+    },
+    onError: (err: any) => toast.error(err.message || 'Could not save seller rules.')
+  });
 
   // Memory rules
   const { data: memoryItems = [], isLoading: isRulesLoading } = useQuery({
@@ -214,6 +245,88 @@ export const MemoryPage: React.FC = () => {
           </div>
         </Card>
       </div>
+
+      {/* Seller Auto-Reject Rules & Capacity */}
+      {roleTab === 'seller' && (
+        <div className="flex flex-col gap-4">
+          <span className="font-display font-bold text-[20px] text-text-primary">
+            Seller Intake &amp; Auto-Reject Rules
+          </span>
+          <Card className="p-6 flex flex-col gap-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-secondary font-medium text-text-primary">Minimum buyer budget ($)</label>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="e.g. 100"
+                  value={sellerMinBudget}
+                  onChange={(e) => setSellerMinBudget(e.target.value)}
+                  className="h-11 px-3 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-secondary font-medium text-text-primary">Minimum delivery days</label>
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="e.g. 2"
+                  value={sellerMinDays}
+                  onChange={(e) => setSellerMinDays(e.target.value)}
+                  className="h-11 px-3 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-secondary font-medium text-text-primary">Max concurrent projects</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={25}
+                  value={sellerMaxProjects}
+                  onChange={(e) => setSellerMaxProjects(Number(e.target.value))}
+                  className="h-11 px-3 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-secondary font-medium text-text-primary">Excluded categories (comma-separated)</label>
+              <input
+                type="text"
+                placeholder="e.g. Mobile, Hardware"
+                value={sellerBlockedCats}
+                onChange={(e) => setSellerBlockedCats(e.target.value)}
+                className="h-11 px-3 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary"
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="flex items-center gap-2 text-secondary text-text-primary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sellerAutoRejectFull}
+                  onChange={(e) => setSellerAutoRejectFull(e.target.checked)}
+                />
+                <span>Automatically decline new requests when at full concurrent capacity</span>
+              </label>
+              <label className="flex items-center gap-2 text-secondary text-text-primary cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={sellerReviewManual}
+                  onChange={(e) => setSellerReviewManual(e.target.checked)}
+                />
+                <span>Send direct buyer inquiries to my inbox before AI negotiates</span>
+              </label>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-border-subtle">
+              <Button variant="volt" size="md" isLoading={updateSellerRulesMut.isPending} onClick={() => updateSellerRulesMut.mutate()}>
+                Save seller intake rules
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
 
       {/* Autonomous Memory Rules List */}
       <div className="flex flex-col gap-4">

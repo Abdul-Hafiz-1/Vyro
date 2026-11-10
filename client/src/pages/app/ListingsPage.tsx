@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Search, Plus, Sparkles, Clock, Check, ShieldCheck, ArrowRight, ArrowLeft } from 'lucide-react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Search, Plus, Sparkles, Clock, Check, ShieldCheck, ArrowRight, ArrowLeft, PauseCircle, PlayCircle } from 'lucide-react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Listing } from '../../types';
@@ -23,6 +24,7 @@ const SEARCH_SUGGESTIONS = [
 
 export const ListingsPage: React.FC = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, isBuyerWorkspace } = useAuth();
 
   const [activeTab, setActiveTab] = useState<'all' | 'my'>(isBuyerWorkspace ? 'all' : 'my');
@@ -35,11 +37,30 @@ export const ListingsPage: React.FC = () => {
     queryFn: () =>
       api.getListings({
         sellerId: activeTab === 'my' ? user?.id : undefined,
+        status: activeTab === 'my' ? 'all' : 'active',
         category: selectedCategory !== 'All' ? selectedCategory : undefined,
         search: searchQuery || undefined
       }),
     refetchInterval: 10000
   });
+
+  const togglePauseMut = useMutation({
+    mutationFn: ({ id, paused }: { id: string; paused: boolean }) => api.pauseListing(id, paused),
+    onSuccess: (updated) => {
+      toast.success(updated.status === 'paused' ? 'Listing paused.' : 'Listing resumed.');
+      queryClient.invalidateQueries({ queryKey: ['listings'] });
+    },
+    onError: (err: any) => toast.error(err.message || 'Could not update listing status')
+  });
+
+  const handleDirectInquire = async (listing: Listing) => {
+    try {
+      const proj = await api.inquireProject(listing.id);
+      navigate(`/app/projects/${proj.id}`);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not send request');
+    }
+  };
 
   const handleStartNegotiationWithListing = (listing: Listing) => {
     navigate('/app/requests/new', {
@@ -273,57 +294,110 @@ export const ListingsPage: React.FC = () => {
                   >
                     Negotiate terms
                   </Button>
+                  {activeTab === 'all' && featuredListing.sellerId !== user?.id && !featuredListing.atCapacity && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      onClick={() => handleDirectInquire(featuredListing)}
+                    >
+                      Send request
+                    </Button>
+                  )}
+                  {activeTab === 'my' && (
+                    <Button
+                      variant="outline"
+                      size="md"
+                      isLoading={togglePauseMut.isPending}
+                      onClick={() => togglePauseMut.mutate({ id: featuredListing.id, paused: featuredListing.status !== 'paused' })}
+                      leftIcon={featuredListing.status === 'paused' ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+                    >
+                      {featuredListing.status === 'paused' ? 'Resume' : 'Pause'}
+                    </Button>
+                  )}
                 </div>
               </div>
             </Card>
           )}
 
           {/* Standard Listings Cards (Fiverr style) */}
-          {regularListings.map((listing) => (
-            <Card
-              key={listing.id}
-              interactive
-              onClick={() => handleStartNegotiationWithListing(listing)}
-              className="p-5 flex flex-col justify-between gap-5 h-full text-left"
-            >
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-secondary font-medium text-text-muted">
-                    {listing.category || 'Services'}
-                  </span>
-                  <div className="flex items-center gap-1 text-secondary text-text-muted">
-                    <Clock className="w-3.5 h-3.5" strokeWidth={2} />
-                    <span>{listing.deliveryDays || 5}d</span>
+          {regularListings.map((listing) => {
+            const isOwn = listing.sellerId === user?.id;
+            return (
+              <Card
+                key={listing.id}
+                interactive={!isOwn}
+                onClick={!isOwn ? () => handleStartNegotiationWithListing(listing) : undefined}
+                className="p-5 flex flex-col justify-between gap-5 h-full text-left"
+              >
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-secondary font-medium text-text-muted">
+                      {listing.category || 'Services'}
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {listing.status === 'paused' && <StatusChip label="Paused" role="declined" size="sm" />}
+                      {listing.atCapacity && <StatusChip label="At capacity" role="needsYou" size="sm" />}
+                      <div className="flex items-center gap-1 text-secondary text-text-muted">
+                        <Clock className="w-3.5 h-3.5" strokeWidth={2} />
+                        <span>{listing.deliveryDays || 5}d</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <h4 className="font-display font-bold text-[18px] text-text-primary line-clamp-2">
+                    {listing.title}
+                  </h4>
+
+                  <p className="text-secondary text-text-muted line-clamp-2 leading-relaxed">
+                    {listing.description || 'Verified delivery with satisfaction guarantee and quality checks.'}
+                  </p>
+                </div>
+
+                {/* Bottom Seller Info & Price */}
+                <div className="flex items-center justify-between pt-3 border-t border-border-subtle gap-2">
+                  <div className="flex items-center gap-2">
+                    <Avatar name={formatName(listing.sellerName || 'Studio')} size="sm" />
+                    <span className="text-secondary text-text-primary font-medium truncate max-w-[110px]">
+                      {formatName(listing.sellerName || 'Studio')}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {isOwn && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePauseMut.mutate({ id: listing.id, paused: listing.status !== 'paused' });
+                        }}
+                      >
+                        {listing.status === 'paused' ? 'Resume' : 'Pause'}
+                      </Button>
+                    )}
+                    {!isOwn && !listing.atCapacity && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDirectInquire(listing);
+                        }}
+                      >
+                        Request
+                      </Button>
+                    )}
+                    <div className="text-right">
+                      <span className="text-secondary text-text-muted block">From</span>
+                      <span className="font-display font-bold text-[18px] text-text-primary">
+                        {formatMoney(listing.price)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-
-                <h4 className="font-display font-bold text-[18px] text-text-primary line-clamp-2">
-                  {listing.title}
-                </h4>
-
-                <p className="text-secondary text-text-muted line-clamp-2 leading-relaxed">
-                  {listing.description || 'Verified delivery with satisfaction guarantee and quality checks.'}
-                </p>
-              </div>
-
-              {/* Bottom Seller Info & Price */}
-              <div className="flex items-center justify-between pt-3 border-t border-border-subtle">
-                <div className="flex items-center gap-2">
-                  <Avatar name={formatName(listing.sellerName || 'Studio')} size="sm" />
-                  <span className="text-secondary text-text-primary font-medium truncate max-w-[110px]">
-                    {formatName(listing.sellerName || 'Studio')}
-                  </span>
-                </div>
-
-                <div className="text-right">
-                  <span className="text-secondary text-text-muted block">From</span>
-                  <span className="font-display font-bold text-[18px] text-text-primary">
-                    {formatMoney(listing.price)}
-                  </span>
-                </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

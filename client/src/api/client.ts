@@ -17,7 +17,15 @@ import {
   Proposal,
   PayoutRecord,
   LedgerEntry,
-  SellerPayoutAccount
+  SellerPayoutAccount,
+  ProjectSummary,
+  ProjectEvent,
+  MoneyState,
+  DeliveryRecord,
+  CancellationRequestRecord,
+  DisputeRecord,
+  SellerCapacity,
+  SellerAutoRules
 } from '../types';
 
 const API_BASE = '/api/v1';
@@ -233,6 +241,13 @@ export const api = {
     transaction?: Transaction | null;
     payout?: PayoutRecord | null;
     ledger?: LedgerEntry[];
+    events?: ProjectEvent[];
+    moneyState?: MoneyState;
+    deliveries?: DeliveryRecord[];
+    cancellationRequest?: CancellationRequestRecord | null;
+    dispute?: DisputeRecord | null;
+    sellerCapacity?: SellerCapacity;
+    buyerAbuseSummary?: { losses30d: number; flagged: boolean; requiresLargeDealApproval: boolean };
     platformFeePercent?: number;
     sellerPayoutReady?: boolean;
     sellerPayoutAccount?: SellerPayoutAccount | null;
@@ -294,6 +309,112 @@ export const api = {
   reportDealProblem: (dealId: string, reason: string) => fetchJson<Agreement>(`${API_BASE}/negotiations/${dealId}/report-problem`, { method: 'POST', body: JSON.stringify({ reason }) }),
   retryPayout: (payoutId: string) => fetchJson<any>(`${API_BASE}/payouts/${payoutId}/retry`, { method: 'POST' }),
   refreshPayoutStatus: (payoutId: string) => fetchJson<any>(`${API_BASE}/payouts/${payoutId}/refresh`, { method: 'POST' }),
+
+  // Projects State Machine, Reject/Cancel, Delivery, Revisions & Disputes
+  pauseListing: (id: string, paused: boolean) =>
+    fetchJson<Listing>(`${API_BASE}/listings/${id}/pause`, {
+      method: 'PATCH',
+      body: JSON.stringify({ paused, status: paused ? 'paused' : 'active' })
+    }),
+  getProjects: async (role?: 'buyer' | 'seller') => {
+    const res = await fetch(`${API_BASE}/projects${role ? `?role=${role}` : ''}`, { credentials: 'include' });
+    const json = await res.json();
+    if (!res.ok || json.success === false) throw new Error(json.error || 'Could not load projects.');
+    return {
+      projects: (json.data || []) as ProjectSummary[],
+      sellerCapacity: (json.sellerCapacity || { active: 0, max: 5, isFull: false }) as SellerCapacity
+    };
+  },
+  getProject: (id: string) => fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}`),
+  updateSellerAutoRules: (rules: SellerAutoRules & { maxConcurrentProjects?: number }) =>
+    fetchJson<{ sellerAutoRules: SellerAutoRules; sellerCapacity: SellerCapacity }>(`${API_BASE}/projects/seller/rules`, {
+      method: 'PATCH',
+      body: JSON.stringify(rules)
+    }),
+  inquireProject: (listingId: string, payload?: { title?: string; description?: string; maxBudget?: number; deadlineDays?: number; autoNegotiate?: boolean }) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/inquire`, {
+      method: 'POST',
+      body: JSON.stringify({ listingId, ...payload })
+    }),
+  acceptProjectRequest: (id: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/accept-request`, { method: 'POST' }),
+  counterProjectRequest: (id: string, price: number, deliveryDays?: number, note?: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/counter-request`, {
+      method: 'POST',
+      body: JSON.stringify({ price, deliveryDays, note })
+    }),
+  rejectProject: (id: string, payload: { reasonChip?: string; note?: string; shareNote?: boolean }) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/reject`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  overrideAutoDecline: (id: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/override-auto-decline`, { method: 'POST' }),
+  cancelProject: (id: string, reason?: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    }),
+  startProjectWork: (id: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/start`, { method: 'POST' }),
+  deliverProjectWork: (
+    id: string,
+    payload: { note: string; links?: string[]; files?: Array<{ originalName: string; mimeType: string; contentBase64: string }> }
+  ) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/deliver`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  requestProjectChanges: (id: string, message: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/request-changes`, {
+      method: 'POST',
+      body: JSON.stringify({ message })
+    }),
+  acceptProjectWork: (id: string) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/accept-work`, { method: 'POST' }),
+  sendProjectReminder: (id: string) =>
+    fetchJson<{ ok: boolean; sentAt: string }>(`${API_BASE}/projects/${id}/remind`, { method: 'POST' }),
+  requestProjectCancel: (id: string, reason: string) =>
+    fetchJson<CancellationRequestRecord>(`${API_BASE}/projects/${id}/request-cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    }),
+  respondProjectCancel: (id: string, payload: { action: 'agree_full' | 'agree_partial' | 'decline'; partialRefundCents?: number; note?: string }) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/respond-cancel`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  issueVoluntaryRefund: (id: string, payload: { amountCents?: number; reason?: string }) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/voluntary-refund`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  openProjectDispute: (
+    id: string,
+    payload: { reasonChip: string; description: string; evidenceLinks?: string[]; files?: Array<{ originalName: string; mimeType: string; contentBase64: string }> }
+  ) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/disputes`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  respondProjectDispute: (
+    id: string,
+    payload: { note: string; evidenceLinks?: string[]; files?: Array<{ originalName: string; mimeType: string; contentBase64: string }> }
+  ) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/disputes/respond`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
+  getAdminDisputes: () =>
+    fetchJson<any[]>(`${API_BASE}/projects/disputes/admin`),
+  resolveProjectDispute: (
+    id: string,
+    payload: { outcome: 'release' | 'refund' | 'split'; sellerPercent?: number; reason: string }
+  ) =>
+    fetchJson<ProjectSummary>(`${API_BASE}/projects/${id}/disputes/resolve`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }),
 
   // Transactions
   getTransactions: () => fetchJson<Transaction[]>(`${API_BASE}/transactions`),

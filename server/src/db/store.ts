@@ -28,10 +28,17 @@ import {
   DecisionRecord,
   DecisionStatus,
   DecisionEntityType,
-  DecisionSignals,
-  SellerPayoutAccount,
+  ProjectStatus,
+  ProjectEvent,
+  DeliveryRecord,
+  CancellationRequestRecord,
+  DisputeRecord,
+  MoneyState,
+  SellerAutoRules,
+  LedgerEntry,
   PayoutRecord,
-  LedgerEntry
+  DecisionSignals,
+  SellerPayoutAccount
 } from '../types/index.js';
 
 export interface ReviewQueueItem {
@@ -155,7 +162,7 @@ export class SQLiteStore {
           role = ?, capabilities = ?, active_workspace = ?, onboarding_completed = ?,
           onboarding_step = ?, buyer_preferences = ?, seller_profile = ?,
           auto_approval_limit = ?, daily_budget_cap = ?, balance = ?, is_automation_paused = ?,
-          motion_preference = ?, coach_marks_dismissed = ?,
+          motion_preference = ?, coach_marks_dismissed = ?, seller_auto_rules = ?, user_role = ?,
           updated_at = ?
         WHERE id = ?
       `).run(
@@ -178,6 +185,8 @@ export class SQLiteStore {
         user.isAutomationPaused ? 1 : 0,
         user.motionPreference || 'system',
         JSON.stringify(user.coachMarksDismissed || []),
+        JSON.stringify(user.sellerAutoRules || {}),
+        user.role === 'admin' ? 'admin' : 'user',
         now,
         user.id
       );
@@ -187,9 +196,9 @@ export class SQLiteStore {
           id, email, password_hash, display_name, username, avatar_url, bio, role,
           capabilities, active_workspace, onboarding_completed, onboarding_step,
           buyer_preferences, seller_profile, auto_approval_limit, daily_budget_cap, balance, is_automation_paused,
-          motion_preference, coach_marks_dismissed,
+          motion_preference, coach_marks_dismissed, seller_auto_rules, user_role,
           created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         user.id,
         user.email,
@@ -211,6 +220,8 @@ export class SQLiteStore {
         user.isAutomationPaused ? 1 : 0,
         user.motionPreference || 'system',
         JSON.stringify(user.coachMarksDismissed || []),
+        JSON.stringify(user.sellerAutoRules || {}),
+        user.role === 'admin' ? 'admin' : 'user',
         user.createdAt || now,
         now
       );
@@ -282,9 +293,12 @@ export class SQLiteStore {
       coachMarksDismissed: row.coach_marks_dismissed
         ? (typeof row.coach_marks_dismissed === 'string' ? JSON.parse(row.coach_marks_dismissed) : row.coach_marks_dismissed)
         : [],
+      sellerAutoRules: row.seller_auto_rules
+        ? (typeof row.seller_auto_rules === 'string' ? JSON.parse(row.seller_auto_rules) : row.seller_auto_rules)
+        : {},
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-      ...(row.role ? { role: row.role } : {})
+      ...(row.user_role === 'admin' ? { role: 'admin' } : row.role ? { role: row.role } : {})
     } as User;
   }
 
@@ -886,24 +900,55 @@ export class SQLiteStore {
     return row ? this.mapNegotiation(row) : undefined;
   }
 
+  private deriveDefaultProjectStatus(n: Negotiation): ProjectStatus {
+    if (n.projectStatus) return n.projectStatus;
+    const s = String(n.status || '');
+    if (s === 'completed' || s === 'COMPLETED') return 'completed';
+    if (s === 'agreement_reached' || s === 'AGREEMENT_PROPOSED' || s === 'APPROVED') return 'agreed';
+    if (['declined', 'rejected', 'auto_declined', 'REJECTED'].includes(s)) return 'declined';
+    if (['cancelled', 'CANCELLED'].includes(s)) return 'cancelled';
+    if (['expired', 'EXPIRED'].includes(s)) return 'expired';
+    return 'negotiating';
+  }
+
   public saveNegotiation(negotiation: Negotiation): Negotiation {
     const now = new Date().toISOString();
     negotiation.updatedAt = now;
+    const projectStatus = this.deriveDefaultProjectStatus(negotiation);
+    negotiation.projectStatus = projectStatus;
     const existing = this.getNegotiation(negotiation.id);
 
     if (existing) {
       this.db.prepare(`
         UPDATE negotiations SET
-          status = ?, current_round = ?, max_rounds = ?, current_proposal = ?,
-          messages = ?, agreement_id = ?, updated_at = ?
+          status = ?, project_status = ?, current_round = ?, max_rounds = ?, current_proposal = ?,
+          messages = ?, agreement_id = ?,
+          started_at = ?, delivered_at = ?, due_at = ?, review_due_at = ?, accepted_at = ?, cancelled_at = ?,
+          revisions_allowed = ?, revisions_used = ?, delivery_note = ?, delivery_links = ?,
+          reject_reason = ?, shared_reject_note = ?, last_reminder_at = ?,
+          updated_at = ?
         WHERE id = ?
       `).run(
         negotiation.status,
+        projectStatus,
         negotiation.currentRound,
         negotiation.maxRounds,
         negotiation.currentProposal ? JSON.stringify(negotiation.currentProposal) : null,
         JSON.stringify(negotiation.messages || []),
         negotiation.agreementId || null,
+        negotiation.startedAt ?? existing.startedAt ?? null,
+        negotiation.deliveredAt ?? existing.deliveredAt ?? null,
+        negotiation.dueAt ?? existing.dueAt ?? null,
+        negotiation.reviewDueAt ?? existing.reviewDueAt ?? null,
+        negotiation.acceptedAt ?? existing.acceptedAt ?? null,
+        negotiation.cancelledAt ?? existing.cancelledAt ?? null,
+        negotiation.revisionsAllowed ?? existing.revisionsAllowed ?? 1,
+        negotiation.revisionsUsed ?? existing.revisionsUsed ?? 0,
+        negotiation.deliveryNote ?? existing.deliveryNote ?? null,
+        JSON.stringify(negotiation.deliveryLinks ?? existing.deliveryLinks ?? []),
+        negotiation.rejectReason ?? existing.rejectReason ?? null,
+        negotiation.sharedRejectNote ?? existing.sharedRejectNote ?? null,
+        negotiation.lastReminderAt ?? existing.lastReminderAt ?? null,
         now,
         negotiation.id
       );
@@ -911,9 +956,13 @@ export class SQLiteStore {
       this.db.prepare(`
         INSERT INTO negotiations (
           id, request_id, buyer_agent_id, seller_agent_id, buyer_user_id,
-          seller_user_id, listing_id, status, current_round, max_rounds,
-          current_proposal, messages, agreement_id, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          seller_user_id, listing_id, status, project_status, current_round, max_rounds,
+          current_proposal, messages, agreement_id,
+          started_at, delivered_at, due_at, review_due_at, accepted_at, cancelled_at,
+          revisions_allowed, revisions_used, delivery_note, delivery_links,
+          reject_reason, shared_reject_note, last_reminder_at,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         negotiation.id,
         negotiation.requestId,
@@ -923,11 +972,25 @@ export class SQLiteStore {
         negotiation.sellerUserId || null,
         negotiation.listingId || null,
         negotiation.status,
+        projectStatus,
         negotiation.currentRound,
         negotiation.maxRounds,
         negotiation.currentProposal ? JSON.stringify(negotiation.currentProposal) : null,
         JSON.stringify(negotiation.messages || []),
         negotiation.agreementId || null,
+        negotiation.startedAt || null,
+        negotiation.deliveredAt || null,
+        negotiation.dueAt || null,
+        negotiation.reviewDueAt || null,
+        negotiation.acceptedAt || null,
+        negotiation.cancelledAt || null,
+        negotiation.revisionsAllowed ?? 1,
+        negotiation.revisionsUsed ?? 0,
+        negotiation.deliveryNote || null,
+        JSON.stringify(negotiation.deliveryLinks || []),
+        negotiation.rejectReason || null,
+        negotiation.sharedRejectNote || null,
+        negotiation.lastReminderAt || null,
         negotiation.createdAt || now,
         now
       );
@@ -945,6 +1008,20 @@ export class SQLiteStore {
       sellerUserId: row.seller_user_id || undefined,
       listingId: row.listing_id || undefined,
       status: row.status,
+      projectStatus: (row.project_status as ProjectStatus) || 'negotiating',
+      startedAt: row.started_at || null,
+      deliveredAt: row.delivered_at || null,
+      dueAt: row.due_at || null,
+      reviewDueAt: row.review_due_at || null,
+      acceptedAt: row.accepted_at || null,
+      cancelledAt: row.cancelled_at || null,
+      revisionsAllowed: typeof row.revisions_allowed === 'number' ? row.revisions_allowed : 1,
+      revisionsUsed: typeof row.revisions_used === 'number' ? row.revisions_used : 0,
+      deliveryNote: row.delivery_note || null,
+      deliveryLinks: row.delivery_links ? JSON.parse(row.delivery_links) : [],
+      rejectReason: row.reject_reason || null,
+      sharedRejectNote: row.shared_reject_note || null,
+      lastReminderAt: row.last_reminder_at || null,
       currentRound: row.current_round,
       maxRounds: row.max_rounds,
       currentProposal: row.current_proposal ? JSON.parse(row.current_proposal) : null,
@@ -2007,13 +2084,29 @@ export class SQLiteStore {
       type: entry.type,
       amountCents: Math.round(entry.amountCents),
       currency: entry.currency || 'USD',
+      idempotencyKey: entry.idempotencyKey || null,
       note: entry.note,
       createdAt: entry.createdAt || new Date().toISOString()
     };
+    if (full.idempotencyKey) {
+      const existing = this.db.prepare('SELECT * FROM ledger_entries WHERE idempotency_key = ?').get(full.idempotencyKey) as any;
+      if (existing) {
+        return {
+          id: existing.id,
+          dealId: existing.deal_id,
+          type: existing.type,
+          amountCents: Number(existing.amount_cents),
+          currency: existing.currency,
+          idempotencyKey: existing.idempotency_key,
+          note: existing.note || undefined,
+          createdAt: existing.created_at
+        };
+      }
+    }
     this.db.prepare(`
-      INSERT INTO ledger_entries (id, deal_id, type, amount_cents, currency, note, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(full.id, full.dealId, full.type, full.amountCents, full.currency, full.note || null, full.createdAt);
+      INSERT INTO ledger_entries (id, deal_id, type, amount_cents, currency, idempotency_key, note, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(full.id, full.dealId, full.type, full.amountCents, full.currency, full.idempotencyKey || null, full.note || null, full.createdAt);
     return full;
   }
 
@@ -2025,9 +2118,339 @@ export class SQLiteStore {
       type: r.type,
       amountCents: Number(r.amount_cents),
       currency: r.currency,
+      idempotencyKey: r.idempotency_key || null,
       note: r.note || undefined,
       createdAt: r.created_at
     }));
+  }
+
+  // =========================================================================
+  // 13. SQLite Immediate Lock, Money State & Project Lifecycle Stores
+  // =========================================================================
+  public runInImmediateTransaction<T>(fn: () => T): T {
+    this.db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = fn();
+      this.db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch {}
+      throw err;
+    }
+  }
+
+  public getMoneyState(dealId: string): MoneyState {
+    const entries = this.getLedgerEntriesForDeal(dealId);
+    let capturedCents = 0;
+    let refundedCents = 0;
+    let paidOutCents = 0;
+    let feeCents = 0;
+    let feeRefundedCents = 0;
+    for (const e of entries) {
+      if (e.type === 'buyer_paid') capturedCents += e.amountCents;
+      else if (e.type === 'refund') refundedCents += e.amountCents;
+      else if (e.type === 'seller_payout') paidOutCents += e.amountCents;
+      else if (e.type === 'platform_fee') feeCents += e.amountCents;
+      else if (e.type === 'platform_fee_refund') feeRefundedCents += e.amountCents;
+    }
+    const netFeeCents = Math.max(0, feeCents - feeRefundedCents);
+    const heldCents = Math.max(0, capturedCents - refundedCents - paidOutCents - netFeeCents);
+    return {
+      capturedCents,
+      refundedCents,
+      paidOutCents,
+      feeCents: netFeeCents,
+      feeRefundedCents,
+      heldCents
+    };
+  }
+
+  public addProjectEvent(ev: Omit<ProjectEvent, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): ProjectEvent {
+    const full: ProjectEvent = {
+      id: ev.id || `pev_${uuidv4().substring(0, 10)}`,
+      dealId: ev.dealId,
+      actorUserId: ev.actorUserId,
+      actorRole: ev.actorRole,
+      fromStatus: ev.fromStatus,
+      toStatus: ev.toStatus,
+      summary: ev.summary,
+      reason: ev.reason || null,
+      metadata: ev.metadata,
+      createdAt: ev.createdAt || new Date().toISOString()
+    };
+    this.db.prepare(`
+      INSERT INTO project_events (id, deal_id, actor_user_id, actor_role, from_status, to_status, summary, reason, metadata, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      full.id,
+      full.dealId,
+      full.actorUserId,
+      full.actorRole,
+      full.fromStatus,
+      full.toStatus,
+      full.summary,
+      full.reason || null,
+      full.metadata ? JSON.stringify(full.metadata) : null,
+      full.createdAt
+    );
+    return full;
+  }
+
+  public getProjectEvents(dealId: string): ProjectEvent[] {
+    const rows = this.db.prepare('SELECT * FROM project_events WHERE deal_id = ? ORDER BY created_at ASC').all(dealId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      dealId: r.deal_id,
+      actorUserId: r.actor_user_id,
+      actorRole: r.actor_role,
+      fromStatus: (r.from_status as ProjectStatus) || null,
+      toStatus: r.to_status as ProjectStatus,
+      summary: r.summary,
+      reason: r.reason || null,
+      metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+      createdAt: r.created_at
+    }));
+  }
+
+  public getSellerActiveProjectsCount(sellerUserId: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) as cnt FROM negotiations
+      WHERE seller_user_id = ? AND project_status IN ('paid_held', 'in_progress', 'delivered', 'revision_requested', 'disputed')
+    `).get(sellerUserId) as any;
+    return Number(row?.cnt || 0);
+  }
+
+  public getDeliveredPastReviewDue(): Negotiation[] {
+    const now = new Date().toISOString();
+    const rows = this.db.prepare(`
+      SELECT * FROM negotiations
+      WHERE project_status = 'delivered' AND review_due_at IS NOT NULL AND review_due_at <= ?
+    `).all(now) as any[];
+    return rows.map(r => this.mapNegotiation(r));
+  }
+
+  public addDelivery(d: Omit<DeliveryRecord, 'id' | 'createdAt'> & { id?: string; createdAt?: string }): DeliveryRecord {
+    const full: DeliveryRecord = {
+      id: d.id || `del_${uuidv4().substring(0, 10)}`,
+      dealId: d.dealId,
+      sellerUserId: d.sellerUserId,
+      revisionNumber: d.revisionNumber,
+      note: d.note,
+      links: d.links || [],
+      files: d.files || [],
+      evidenceHash: d.evidenceHash,
+      createdAt: d.createdAt || new Date().toISOString()
+    };
+    this.db.prepare(`
+      INSERT INTO deliveries (id, deal_id, seller_user_id, revision_number, note, links, files, evidence_hash, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      full.id,
+      full.dealId,
+      full.sellerUserId,
+      full.revisionNumber,
+      full.note,
+      JSON.stringify(full.links),
+      JSON.stringify(full.files),
+      full.evidenceHash,
+      full.createdAt
+    );
+    return full;
+  }
+
+  public getDeliveries(dealId: string): DeliveryRecord[] {
+    const rows = this.db.prepare('SELECT * FROM deliveries WHERE deal_id = ? ORDER BY created_at ASC').all(dealId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      dealId: r.deal_id,
+      sellerUserId: r.seller_user_id,
+      revisionNumber: Number(r.revision_number || 0),
+      note: r.note,
+      links: r.links ? JSON.parse(r.links) : [],
+      files: r.files ? JSON.parse(r.files) : [],
+      evidenceHash: r.evidence_hash,
+      createdAt: r.created_at
+    }));
+  }
+
+  public saveCancellationRequest(req: CancellationRequestRecord): CancellationRequestRecord {
+    const existing = this.getCancellationRequest(req.dealId);
+    if (existing) {
+      this.db.prepare(`
+        UPDATE cancellation_requests SET
+          reason = ?, status = ?, refund_cents = ?, seller_note = ?, respond_due_at = ?, resolved_at = ?
+        WHERE deal_id = ?
+      `).run(
+        req.reason,
+        req.status,
+        req.refundCents ?? null,
+        req.sellerNote ?? null,
+        req.respondDueAt ?? null,
+        req.resolvedAt ?? null,
+        req.dealId
+      );
+    } else {
+      this.db.prepare(`
+        INSERT INTO cancellation_requests (id, deal_id, buyer_user_id, seller_user_id, reason, status, refund_cents, seller_note, respond_due_at, created_at, resolved_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        req.id,
+        req.dealId,
+        req.buyerUserId,
+        req.sellerUserId,
+        req.reason,
+        req.status,
+        req.refundCents ?? null,
+        req.sellerNote ?? null,
+        req.respondDueAt ?? null,
+        req.createdAt,
+        req.resolvedAt ?? null
+      );
+    }
+    return req;
+  }
+
+  public getCancellationRequest(dealId: string): CancellationRequestRecord | undefined {
+    const r = this.db.prepare('SELECT * FROM cancellation_requests WHERE deal_id = ?').get(dealId) as any;
+    if (!r) return undefined;
+    return {
+      id: r.id,
+      dealId: r.deal_id,
+      buyerUserId: r.buyer_user_id,
+      sellerUserId: r.seller_user_id,
+      reason: r.reason,
+      status: r.status,
+      refundCents: r.refund_cents ?? null,
+      sellerNote: r.seller_note ?? null,
+      respondDueAt: r.respond_due_at ?? null,
+      createdAt: r.created_at,
+      resolvedAt: r.resolved_at ?? null
+    };
+  }
+
+  public getPendingCancellationRequestsForSeller(sellerUserId: string): CancellationRequestRecord[] {
+    const rows = this.db.prepare(`SELECT * FROM cancellation_requests WHERE seller_user_id = ? AND status = 'pending' ORDER BY created_at DESC`).all(sellerUserId) as any[];
+    return rows.map(r => ({
+      id: r.id,
+      dealId: r.deal_id,
+      buyerUserId: r.buyer_user_id,
+      sellerUserId: r.seller_user_id,
+      reason: r.reason,
+      status: r.status,
+      refundCents: r.refund_cents ?? null,
+      sellerNote: r.seller_note ?? null,
+      respondDueAt: r.respond_due_at ?? null,
+      createdAt: r.created_at,
+      resolvedAt: r.resolved_at ?? null
+    }));
+  }
+
+  public saveDispute(d: DisputeRecord): DisputeRecord {
+    const existing = this.getDispute(d.id);
+    if (existing) {
+      this.db.prepare(`
+        UPDATE disputes SET
+          respondent_note = ?, respondent_evidence_links = ?, respondent_evidence_files = ?,
+          status = ?, resolution_seller_pct = ?, resolution_reason = ?, resolved_by = ?, resolved_at = ?
+        WHERE id = ?
+      `).run(
+        d.respondentNote ?? null,
+        JSON.stringify(d.respondentEvidenceLinks || []),
+        JSON.stringify(d.respondentEvidenceFiles || []),
+        d.status,
+        d.resolutionSellerPct ?? null,
+        d.resolutionReason ?? null,
+        d.resolvedBy ?? null,
+        d.resolvedAt ?? null,
+        d.id
+      );
+    } else {
+      this.db.prepare(`
+        INSERT INTO disputes (
+          id, deal_id, opened_by_user_id, opened_by_role, reason_chip, description,
+          evidence_links, evidence_files, respondent_user_id, respondent_note,
+          respondent_evidence_links, respondent_evidence_files, response_due_at,
+          status, resolution_seller_pct, resolution_reason, resolved_by, resolved_at, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        d.id,
+        d.dealId,
+        d.openedByUserId,
+        d.openedByRole,
+        d.reasonChip,
+        d.description,
+        JSON.stringify(d.evidenceLinks || []),
+        JSON.stringify(d.evidenceFiles || []),
+        d.respondentUserId,
+        d.respondentNote ?? null,
+        JSON.stringify(d.respondentEvidenceLinks || []),
+        JSON.stringify(d.respondentEvidenceFiles || []),
+        d.responseDueAt,
+        d.status,
+        d.resolutionSellerPct ?? null,
+        d.resolutionReason ?? null,
+        d.resolvedBy ?? null,
+        d.resolvedAt ?? null,
+        d.createdAt
+      );
+    }
+    return d;
+  }
+
+  public getDispute(id: string): DisputeRecord | undefined {
+    const r = this.db.prepare('SELECT * FROM disputes WHERE id = ?').get(id) as any;
+    return r ? this.mapDispute(r) : undefined;
+  }
+
+  public getDisputeByDeal(dealId: string): DisputeRecord | undefined {
+    const r = this.db.prepare('SELECT * FROM disputes WHERE deal_id = ? ORDER BY created_at DESC LIMIT 1').get(dealId) as any;
+    return r ? this.mapDispute(r) : undefined;
+  }
+
+  public getAllDisputes(): DisputeRecord[] {
+    const rows = this.db.prepare('SELECT * FROM disputes ORDER BY created_at DESC').all() as any[];
+    return rows.map(r => this.mapDispute(r));
+  }
+
+  public getUserDisputeLossCount30Days(userId: string): number {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const rows = this.db.prepare(`
+      SELECT * FROM disputes
+      WHERE created_at >= ? AND status IN ('resolved_release', 'resolved_refund')
+      AND (opened_by_user_id = ? OR respondent_user_id = ?)
+    `).all(cutoff, userId, userId) as any[];
+    let losses = 0;
+    for (const r of rows) {
+      const buyerId = r.opened_by_role === 'buyer' ? r.opened_by_user_id : r.respondent_user_id;
+      const sellerId = r.opened_by_role === 'seller' ? r.opened_by_user_id : r.respondent_user_id;
+      if (r.status === 'resolved_release' && userId === buyerId) losses++;
+      if (r.status === 'resolved_refund' && userId === sellerId) losses++;
+    }
+    return losses;
+  }
+
+  private mapDispute(r: any): DisputeRecord {
+    return {
+      id: r.id,
+      dealId: r.deal_id,
+      openedByUserId: r.opened_by_user_id,
+      openedByRole: r.opened_by_role,
+      reasonChip: r.reason_chip,
+      description: r.description,
+      evidenceLinks: r.evidence_links ? JSON.parse(r.evidence_links) : [],
+      evidenceFiles: r.evidence_files ? JSON.parse(r.evidence_files) : [],
+      respondentUserId: r.respondent_user_id,
+      respondentNote: r.respondent_note || null,
+      respondentEvidenceLinks: r.respondent_evidence_links ? JSON.parse(r.respondent_evidence_links) : [],
+      respondentEvidenceFiles: r.respondent_evidence_files ? JSON.parse(r.respondent_evidence_files) : [],
+      responseDueAt: r.response_due_at,
+      status: r.status,
+      resolutionSellerPct: r.resolution_seller_pct ?? null,
+      resolutionReason: r.resolution_reason || null,
+      resolvedBy: r.resolved_by || null,
+      resolvedAt: r.resolved_at || null,
+      createdAt: r.created_at
+    };
   }
 }
 

@@ -28,7 +28,7 @@ import { Chip } from '../../components/common/Chip';
 import { DecisionCard } from '../../components/common/DecisionCard';
 import { EmptyState } from '../../components/common/EmptyState';
 import { HomePromptBox } from '../../components/home/HomePromptBox';
-import { formatMoney, formatDate, formatName } from '../../lib/present';
+import { formatMoney, formatCents, formatDate, formatName } from '../../lib/present';
 import { EASE_STANDARD } from '../../lib/motion';
 
 export const OverviewPage: React.FC = () => {
@@ -106,8 +106,18 @@ export const OverviewPage: React.FC = () => {
   const needsYou = homeData?.needsYou || [];
   const inProgress = homeData?.inProgress || [];
   const handledForYou = homeData?.handledForYou || [];
+  const incomingRequests = homeData?.incomingRequests || [];
+  const cancellationRequests = homeData?.cancellationRequests || [];
+  const sellerProjectsSummary = homeData?.sellerProjectsSummary;
+  const sellerCapacity = homeData?.sellerCapacity;
 
-  const isEmpty = needsYou.length === 0 && inProgress.length === 0 && handledForYou.length === 0;
+  const isEmpty =
+    needsYou.length === 0 &&
+    inProgress.length === 0 &&
+    handledForYou.length === 0 &&
+    incomingRequests.length === 0 &&
+    cancellationRequests.length === 0 &&
+    (!isSellerWorkspace || ((sellerProjectsSummary?.activeCount || 0) === 0 && (sellerProjectsSummary?.releasedCents || 0) === 0));
 
   // Linear-style Keyboard Navigation: J (next), K (prev)
   useEffect(() => {
@@ -140,8 +150,11 @@ export const OverviewPage: React.FC = () => {
   };
 
   const greeting = `${getGreeting()}, ${formatName(user?.displayName, 'friend')}`;
-  const statusSentence = needsYou.length > 0
-    ? `${needsYou.length} ${needsYou.length === 1 ? 'thing needs' : 'things need'} your decision`
+  const totalNeedsAction = isSellerWorkspace
+    ? needsYou.length + incomingRequests.length + cancellationRequests.length
+    : needsYou.length;
+  const statusSentence = totalNeedsAction > 0
+    ? `${totalNeedsAction} ${totalNeedsAction === 1 ? 'thing needs' : 'things need'} your decision`
     : 'Everything is handled';
 
   const handlePromptSubmit = (e: React.FormEvent) => {
@@ -234,12 +247,12 @@ export const OverviewPage: React.FC = () => {
           badgeVolt: true,
         },
         {
-          title: 'My deals',
-          desc: 'Incoming buyer inquiries and active orders',
-          to: '/app/deals',
+          title: 'My projects',
+          desc: 'Incoming buyer requests, active work, and deliverables',
+          to: '/app/projects',
           icon: Handshake,
           badge: dealsBadge,
-          badgeVolt: needsYou.length > 0,
+          badgeVolt: totalNeedsAction > 0,
         },
         {
           title: 'Listings',
@@ -268,9 +281,9 @@ export const OverviewPage: React.FC = () => {
           badgeVolt: true,
         },
         {
-          title: 'My deals',
-          desc: 'Proposals, live negotiations, and outcomes',
-          to: '/app/deals',
+          title: 'My projects',
+          desc: 'Proposals, live negotiations, and deliverables',
+          to: '/app/projects',
           icon: Handshake,
           badge: dealsBadge,
           badgeVolt: needsYou.length > 0,
@@ -442,6 +455,88 @@ export const OverviewPage: React.FC = () => {
 
       {renderCoachMark()}
 
+      {/* SELLER "YOUR PROJECTS" STRIP & INCOMING REQUESTS / CANCELLATIONS */}
+      {isSellerWorkspace && sellerProjectsSummary && (
+        <Card className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface">
+          <div className="flex flex-wrap items-center gap-6">
+            <div>
+              <span className="text-secondary text-text-muted block">Your projects</span>
+              <span className="font-display font-bold text-[18px] text-text-primary">
+                {sellerProjectsSummary.activeCount} of {sellerProjectsSummary.maxConcurrent} in progress
+              </span>
+            </div>
+            <div>
+              <span className="text-secondary text-text-muted block">Due soon</span>
+              <span className="font-semibold text-body text-text-primary">
+                {sellerProjectsSummary.dueSoonCount} due within 48h
+              </span>
+            </div>
+            <div>
+              <span className="text-secondary text-text-muted block">Held / Released</span>
+              <span className="font-semibold text-body text-text-primary">
+                {formatCents(sellerProjectsSummary.heldCents)} held · {formatCents(sellerProjectsSummary.releasedCents)} released
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {sellerCapacity?.isFull && <StatusChip label="At capacity" role="needsYou" size="sm" />}
+            <Link to="/app/projects">
+              <Button variant="secondary" size="sm">Open Projects</Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {isSellerWorkspace && incomingRequests.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <h2 className="font-display font-semibold text-section text-text-primary">New buyer requests</h2>
+              <StatusChip label={`${incomingRequests.length}`} role="needsYou" size="sm" />
+            </div>
+            <Link to="/app/projects" className="text-secondary text-text-muted hover:text-text-primary">
+              View all in Projects
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {incomingRequests.map((reqItem) => (
+              <Card key={reqItem.id} className="p-4 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <span className="font-semibold text-body text-text-primary block truncate">{reqItem.title}</span>
+                  <span className="text-secondary text-text-muted">
+                    From {reqItem.buyerName} · {formatMoney(reqItem.proposedPrice)} · {reqItem.deadlineDays}d
+                  </span>
+                </div>
+                <Button variant="volt" size="sm" onClick={() => navigate(`/app/projects/${reqItem.negotiationId}`)}>
+                  Review
+                </Button>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {isSellerWorkspace && cancellationRequests.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display font-semibold text-section text-text-primary">Cancellation requests</h2>
+          <div className="flex flex-col gap-3">
+            {cancellationRequests.map((cr) => (
+              <Card key={cr.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-status-needs/40">
+                <div>
+                  <span className="font-semibold text-body text-text-primary block">
+                    {cr.projectTitle || 'Active project'} — {cr.buyerName} asked to cancel
+                  </span>
+                  <span className="text-secondary text-text-muted">Reason: &ldquo;{cr.reason}&rdquo;</span>
+                </div>
+                <Button variant="volt" size="sm" onClick={() => navigate(`/app/projects/${cr.dealId}`)}>
+                  Respond
+                </Button>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* SPLIT INBOX SECTION: LIST ON LEFT, DETAIL PANE ON RIGHT (LINEAR INBOX REFERENCE) */}
       {needsYou.length > 0 && (
         <section className="flex flex-col gap-4">
@@ -580,10 +675,10 @@ export const OverviewPage: React.FC = () => {
               <StatusChip label={`${inProgress.length}`} role="inProgress" size="sm" />
             </div>
             <Link
-              to="/app/deals"
+              to="/app/projects"
               className="text-secondary text-text-muted hover:text-text-primary flex items-center gap-1 font-medium"
             >
-              <span>See all deals</span>
+              <span>See all projects</span>
               <ChevronRight className="w-4 h-4" />
             </Link>
           </div>
@@ -606,7 +701,7 @@ export const OverviewPage: React.FC = () => {
                   }}
                 >
                   <Link
-                    to={`/app/deals/${deal.id}`}
+                    to={`/app/projects/${deal.id}`}
                     className="block group"
                   >
                     <div className="bg-surface border border-border-subtle rounded-surface p-5 hover:border-text-muted/40 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -660,7 +755,7 @@ export const OverviewPage: React.FC = () => {
               Handled for you
             </h2>
             <Link
-              to="/app/deals?tab=done"
+              to="/app/projects"
               className="text-secondary text-text-muted hover:text-text-primary flex items-center gap-1 font-medium"
             >
               <span>View past receipts</span>

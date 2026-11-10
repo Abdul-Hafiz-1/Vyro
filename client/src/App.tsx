@@ -26,6 +26,7 @@ import { MemoryPage } from './pages/app/MemoryPage';
 import { NotificationsPage } from './pages/app/NotificationsPage';
 import { NegotiationsListPage } from './pages/app/NegotiationsListPage';
 import { NegotiationDetailPage } from './pages/app/NegotiationDetailPage';
+import { DisputesResolvePage } from './pages/app/DisputesResolvePage';
 import { TransactionsPage } from './pages/app/TransactionsPage';
 import { TransactionDetailPage } from './pages/app/TransactionDetailPage';
 import { SettingsPage } from './pages/app/SettingsPage';
@@ -43,7 +44,7 @@ const queryClient = new QueryClient({
 // Helper component to redirect legacy /negotiations/:id to /deals/:id
 const RedirectDealParam: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  return <Navigate to={`/app/deals/${id}`} replace />;
+  return <Navigate to={`/app/projects/${id}`} replace />;
 };
 
 const AppShell: React.FC = () => {
@@ -84,9 +85,12 @@ const AppShell: React.FC = () => {
             <Route path="/app" element={<AppLayout />}>
               <Route index element={<OverviewPage />} />
               
-              {/* Deals / Negotiations */}
-              <Route path="deals" element={<NegotiationsListPage />} />
-              <Route path="deals/:id" element={<NegotiationDetailPage />} />
+              {/* Projects & Disputes */}
+              <Route path="projects" element={<NegotiationsListPage />} />
+              <Route path="projects/:id" element={<NegotiationDetailPage />} />
+              <Route path="disputes" element={<DisputesResolvePage />} />
+              <Route path="deals" element={<Navigate to="/app/projects" replace />} />
+              <Route path="deals/:id" element={<RedirectDealParam />} />
               
               {/* Buyer Procurement */}
               <Route path="requests" element={<RequestCreatePage />} />
@@ -111,7 +115,7 @@ const AppShell: React.FC = () => {
               <Route path="help" element={<HelpPage />} />
 
               {/* Clean Canonical Redirects for Legacy / Merged Aliases */}
-              <Route path="negotiations" element={<Navigate to="/app/deals" replace />} />
+              <Route path="negotiations" element={<Navigate to="/app/projects" replace />} />
               <Route path="negotiations/:id" element={<RedirectDealParam />} />
               <Route path="memory" element={<Navigate to="/app/rules" replace />} />
               <Route path="network" element={<Navigate to="/app/marketplace" replace />} />

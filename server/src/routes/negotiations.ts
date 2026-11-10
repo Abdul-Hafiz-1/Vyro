@@ -4,6 +4,8 @@ import { store } from '../db/store.js';
 import { config } from '../config/index.js';
 import { negotiationOrchestrator } from '../services/negotiation/orchestrator.js';
 import { payoutService, PayoutGateError } from '../services/paypal/payoutService.js';
+import { projectStateMachine } from '../services/projects/projectStateMachine.js';
+import { disputeService } from '../services/projects/disputeService.js';
 import { AuthenticatedRequest, authenticateUser } from '../middleware/rbac.js';
 import { broadcastEvent } from './events.js';
 
@@ -125,11 +127,34 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
   const sellerPayoutAccount = isSeller && neg.sellerUserId
     ? payoutService.getSellerPayoutAccount(neg.sellerUserId)
     : undefined;
+  const rawEvents = store.getProjectEvents(neg.id);
+  const events = isBuyer && !isSeller
+    ? rawEvents.map(ev =>
+        ev.toStatus === 'declined' && (ev.actorRole === 'seller' || ev.actorRole === 'system')
+          ? { ...ev, reason: neg.sharedRejectNote || null }
+          : ev
+      )
+    : rawEvents;
+  const visibleRejectReason = isSeller
+    ? neg.rejectReason
+    : neg.sharedRejectNote
+    ? `This seller can't take it ("${neg.sharedRejectNote}"). I'm looking at other options.`
+    : neg.projectStatus === 'declined'
+    ? "This seller can't take it. I'm looking at other options."
+    : null;
+  const moneyState = store.getMoneyState(neg.id);
+  const deliveries = store.getDeliveries(neg.id);
+  const cancellationRequest = store.getCancellationRequest(neg.id) || null;
+  const dispute = store.getDisputeByDeal(neg.id) || null;
+  const sellerCapacity = neg.sellerUserId ? projectStateMachine.getSellerCapacity(neg.sellerUserId) : undefined;
+  const buyerAbuseSummary = neg.buyerUserId ? disputeService.getUserAbuseSummary(neg.buyerUserId) : undefined;
 
   return res.json({
     success: true,
     data: {
       ...neg,
+      rejectReason: isSeller ? neg.rejectReason : null,
+      visibleRejectReason,
       messages: sanitizedMessages,
       currentProposal: sanitizedCurrentProp,
       buyerAgent: sanitizedBuyerAgent,
@@ -140,6 +165,13 @@ router.get('/:id', (req: AuthenticatedRequest, res: Response) => {
       transaction,
       payout,
       ledger,
+      events,
+      moneyState,
+      deliveries,
+      cancellationRequest,
+      dispute,
+      sellerCapacity,
+      buyerAbuseSummary,
       platformFeePercent: config.platformFeePercent,
       sellerPayoutReady,
       sellerPayoutAccount,
@@ -216,10 +248,15 @@ router.post('/multi-agent', async (req: AuthenticatedRequest, res: Response) => 
       status: 'active'
     });
 
-    // Exclude own listings (strict counterparty isolation)
+    // Exclude own listings & sellers currently at full project capacity
     const otherUserListings = candidateListings.filter(l => {
       const isOwn = (l.sellerUserId && l.sellerUserId === user.id) || (l.sellerId && l.sellerId === user.id);
-      return !isOwn;
+      if (isOwn) return false;
+      const sellerUid = l.sellerUserId || l.sellerId;
+      if (sellerUid && projectStateMachine.getSellerCapacity(sellerUid).isFull) {
+        return false;
+      }
+      return true;
     });
 
     // Match by category or keywords in title / description / tags (excluding common stop-words)
@@ -335,7 +372,11 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
   }
 
   // 3. Update Negotiation status
+  const prevProjectStatus = neg.projectStatus || 'negotiating';
   neg.status = 'completed';
+  if (['request_sent', 'negotiating'].includes(prevProjectStatus)) {
+    neg.projectStatus = 'agreed';
+  }
   neg.updatedAt = now;
   neg.messages.push({
     id: `msg_app_${Date.now().toString(36)}`,
@@ -349,6 +390,18 @@ router.post('/:id/approve', async (req: AuthenticatedRequest, res: Response) => 
     timestamp: now
   });
   store.saveNegotiation(neg);
+  if (['request_sent', 'negotiating'].includes(prevProjectStatus)) {
+    store.addProjectEvent({
+      dealId: neg.id,
+      actorUserId: user.id,
+      actorRole: neg.buyerUserId === user.id ? 'buyer' : 'seller',
+      fromStatus: prevProjectStatus,
+      toStatus: 'agreed',
+      summary: 'Deal approved. Ready for PayPal checkout.',
+      reason: note,
+      createdAt: now
+    });
+  }
 
   broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'approved' });
   return res.json({ success: true, message: 'Deal approved successfully.', data: neg });
@@ -422,20 +475,35 @@ router.post('/:id/decline', async (req: AuthenticatedRequest, res: Response) => 
     }
   }
 
+  const prevProjectStatus = neg.projectStatus || 'negotiating';
   neg.status = 'rejected';
+  if (['request_sent', 'negotiating', 'agreed'].includes(prevProjectStatus)) {
+    neg.projectStatus = 'declined';
+  }
+  neg.rejectReason = reason;
   neg.updatedAt = now;
   neg.messages.push({
     id: `msg_dec_${Date.now().toString(36)}`,
     negotiationId: neg.id,
     senderAgentId: neg.buyerAgentId,
     recipientAgentId: neg.sellerAgentId,
-    senderRole: 'buyer',
+    senderRole: neg.sellerUserId === user.id ? 'seller' : 'buyer',
     round: neg.currentRound,
     messageType: 'rejection',
     content: `[Human Declined] ${reason}`,
     timestamp: now
   });
   store.saveNegotiation(neg);
+  store.addProjectEvent({
+    dealId: neg.id,
+    actorUserId: user.id,
+    actorRole: neg.sellerUserId === user.id ? 'seller' : 'buyer',
+    fromStatus: prevProjectStatus,
+    toStatus: 'declined',
+    summary: 'Declined before payment.',
+    reason,
+    createdAt: now
+  });
 
   broadcastEvent('deal_updated', { negotiationId: neg.id, status: 'declined' });
   return res.json({ success: true, message: 'Deal declined.', data: neg });

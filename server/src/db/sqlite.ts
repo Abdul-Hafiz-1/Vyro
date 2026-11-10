@@ -571,6 +571,126 @@ export class SQLiteDatabase {
           addCol(`ALTER TABLE users ADD COLUMN motion_preference TEXT NOT NULL DEFAULT 'system';`);
           addCol(`ALTER TABLE users ADD COLUMN coach_marks_dismissed TEXT NOT NULL DEFAULT '[]';`);
         }
+      },
+      {
+        name: '009_projects_state_reject_refunds_disputes',
+        up: (db) => {
+          const addCol = (sql: string) => {
+            try { db.exec(sql); } catch (e) {}
+          };
+
+          addCol(`ALTER TABLE users ADD COLUMN seller_auto_rules TEXT NOT NULL DEFAULT '{}';`);
+          addCol(`ALTER TABLE users ADD COLUMN user_role TEXT NOT NULL DEFAULT 'user';`);
+
+          addCol(`ALTER TABLE negotiations ADD COLUMN project_status TEXT NOT NULL DEFAULT 'negotiating';`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN started_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN delivered_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN due_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN review_due_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN accepted_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN cancelled_at TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN revisions_allowed INTEGER NOT NULL DEFAULT 1;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN revisions_used INTEGER NOT NULL DEFAULT 0;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN delivery_note TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN delivery_links TEXT NOT NULL DEFAULT '[]';`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN reject_reason TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN shared_reject_note TEXT;`);
+          addCol(`ALTER TABLE negotiations ADD COLUMN last_reminder_at TEXT;`);
+
+          addCol(`ALTER TABLE ledger_entries ADD COLUMN idempotency_key TEXT;`);
+          db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ledger_idem ON ledger_entries(idempotency_key) WHERE idempotency_key IS NOT NULL;`);
+
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS project_events (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL,
+              actor_user_id TEXT NOT NULL,
+              actor_role TEXT NOT NULL,
+              from_status TEXT,
+              to_status TEXT NOT NULL,
+              summary TEXT NOT NULL,
+              reason TEXT,
+              metadata TEXT,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_project_events_deal ON project_events(deal_id);
+
+            CREATE TABLE IF NOT EXISTS deliveries (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL,
+              seller_user_id TEXT NOT NULL,
+              revision_number INTEGER NOT NULL DEFAULT 0,
+              note TEXT NOT NULL,
+              links TEXT NOT NULL DEFAULT '[]',
+              files TEXT NOT NULL DEFAULT '[]',
+              evidence_hash TEXT NOT NULL,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_deliveries_deal ON deliveries(deal_id);
+
+            CREATE TABLE IF NOT EXISTS cancellation_requests (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL UNIQUE,
+              buyer_user_id TEXT NOT NULL,
+              seller_user_id TEXT NOT NULL,
+              reason TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'pending',
+              refund_cents INTEGER,
+              seller_note TEXT,
+              respond_due_at TEXT,
+              created_at TEXT NOT NULL,
+              resolved_at TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS disputes (
+              id TEXT PRIMARY KEY,
+              deal_id TEXT NOT NULL,
+              opened_by_user_id TEXT NOT NULL,
+              opened_by_role TEXT NOT NULL,
+              reason_chip TEXT NOT NULL,
+              description TEXT NOT NULL,
+              evidence_links TEXT NOT NULL DEFAULT '[]',
+              evidence_files TEXT NOT NULL DEFAULT '[]',
+              respondent_user_id TEXT NOT NULL,
+              respondent_note TEXT,
+              respondent_evidence_links TEXT NOT NULL DEFAULT '[]',
+              respondent_evidence_files TEXT NOT NULL DEFAULT '[]',
+              response_due_at TEXT NOT NULL,
+              status TEXT NOT NULL DEFAULT 'open',
+              resolution_seller_pct INTEGER,
+              resolution_reason TEXT,
+              resolved_by TEXT,
+              resolved_at TEXT,
+              created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_disputes_deal ON disputes(deal_id);
+          `);
+
+          // Backfill project_status cleanly from existing deals/transactions/payouts
+          const rows = db.prepare(`SELECT id, status, agreement_id, updated_at FROM negotiations`).all() as any[];
+          const getAg = db.prepare(`SELECT * FROM agreements WHERE id = ?`);
+          const getTx = db.prepare(`SELECT * FROM transactions WHERE negotiation_id = ? ORDER BY created_at DESC LIMIT 1`);
+          const getPayout = db.prepare(`SELECT * FROM payouts WHERE deal_id = ? LIMIT 1`);
+          const upd = db.prepare(`UPDATE negotiations SET project_status = ?, revisions_allowed = ? WHERE id = ?`);
+          for (const row of rows) {
+            const ag = row.agreement_id ? (getAg.get(row.agreement_id) as any) : null;
+            const tx = getTx.get(row.id) as any;
+            const pay = getPayout.get(row.id) as any;
+            let ps = 'negotiating';
+            if (tx?.payment_status === 'refunded') ps = 'refunded';
+            else if (pay?.status === 'paid' || pay?.status === 'simulated_paid') ps = 'completed';
+            else if (pay?.status === 'processing') ps = 'payout_released';
+            else if (ag?.work_acceptance_status === 'accepted') ps = 'accepted';
+            else if (ag?.work_acceptance_status === 'disputed') ps = 'disputed';
+            else if (tx?.payment_status === 'completed') ps = 'paid_held';
+            else if (['declined', 'rejected', 'auto_declined', 'REJECTED'].includes(row.status)) ps = 'declined';
+            else if (['cancelled', 'CANCELLED'].includes(row.status)) ps = 'cancelled';
+            else if (['expired', 'EXPIRED'].includes(row.status)) ps = 'expired';
+            else if (row.status === 'agreement_reached' || row.status === 'AGREEMENT_PROPOSED' || row.status === 'APPROVED') ps = 'agreed';
+            const revs = ag?.revisions ?? 1;
+            upd.run(ps, Math.max(0, revs), row.id);
+          }
+        }
       }
     ];
 

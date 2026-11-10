@@ -40,6 +40,9 @@ export const config = {
       : 'https://api-m.sandbox.paypal.com'
   },
   platformFeePercent: Math.max(0, Math.min(30, Number(process.env.PLATFORM_FEE_PERCENT ?? 5))),
+  reviewWindowHours: Math.max(0.001, Number(process.env.REVIEW_WINDOW_HOURS ?? 72)),
+  disputeResponseHours: Math.max(0.001, Number(process.env.DISPUTE_RESPONSE_HOURS ?? 72)),
+  uploadsDir: path.resolve(__dirname, '../../uploads'),
   firebase: {
     projectId: process.env.FIREBASE_PROJECT_ID || '',
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL || '',

@@ -4,6 +4,7 @@ import { store } from '../../db/store.js';
 import { Agreement, Transaction } from '../../types/index.js';
 import { dollarsToCents, centsToDollars, computeFeeAndPayoutCents, formatCents } from '../negotiation/money.js';
 import { paypalPayoutsProvider } from './payoutProvider.js';
+import { broadcastEvent } from '../../routes/events.js';
 
 export interface PayPalErrorDetails {
   status: number;
@@ -669,9 +670,24 @@ export class PayPalService {
     // Update Negotiation and Request statuses
     const negotiation = store.getNegotiation(tx.negotiationId);
     if (negotiation) {
+      const nowIso = new Date().toISOString();
       negotiation.status = 'completed';
-      negotiation.updatedAt = new Date().toISOString();
+      negotiation.projectStatus = 'paid_held';
+      negotiation.revisionsAllowed = agreement.revisions ?? 1;
+      negotiation.dueAt = new Date(Date.now() + (agreement.deliveryDays || 5) * 24 * 60 * 60 * 1000).toISOString();
+      negotiation.updatedAt = nowIso;
       store.saveNegotiation(negotiation);
+      if (!store.getProjectEvents(negotiation.id).some(e => e.toStatus === 'paid_held')) {
+        store.addProjectEvent({
+          dealId: negotiation.id,
+          actorUserId: tx.buyerUserId,
+          actorRole: 'buyer',
+          fromStatus: 'agreed',
+          toStatus: 'paid_held',
+          summary: `Buyer paid ${formatCents(tx.amountCents ?? dollarsToCents(tx.amount))} into PayPal escrow. Waiting for seller to start work.`,
+          createdAt: nowIso
+        });
+      }
     }
 
     const request = store.getRequest(tx.requestId);
@@ -801,9 +817,24 @@ export class PayPalService {
 
     const negotiation = store.getNegotiation(tx.negotiationId);
     if (negotiation) {
+      const nowIso = new Date().toISOString();
       negotiation.status = 'completed';
-      negotiation.updatedAt = new Date().toISOString();
+      negotiation.projectStatus = 'paid_held';
+      negotiation.revisionsAllowed = agreement.revisions ?? 1;
+      negotiation.dueAt = new Date(Date.now() + (agreement.deliveryDays || 5) * 24 * 60 * 60 * 1000).toISOString();
+      negotiation.updatedAt = nowIso;
       store.saveNegotiation(negotiation);
+      if (!store.getProjectEvents(negotiation.id).some(e => e.toStatus === 'paid_held')) {
+        store.addProjectEvent({
+          dealId: negotiation.id,
+          actorUserId: tx.buyerUserId,
+          actorRole: 'buyer',
+          fromStatus: 'agreed',
+          toStatus: 'paid_held',
+          summary: `Buyer funded ${formatCents(grossCents)} into escrow. Waiting for seller to start work.`,
+          createdAt: nowIso
+        });
+      }
     }
 
     const request = store.getRequest(tx.requestId);
@@ -828,11 +859,28 @@ export class PayPalService {
   }
 
   /**
-   * Refunds a captured payment back to the buyer before payout is completed.
+   * Refunds a captured payment (full or partial) back to the buyer under strict stage & money-invariant locks.
    */
-  async refundPayment(agreementId: string, reason: string, requestingUserId?: string): Promise<Transaction> {
+  async refundPayment(
+    agreementId: string,
+    reason: string,
+    requestingUserId?: string,
+    options?: {
+      amountCents?: number;
+      enforceStageRules?: boolean;
+      bypassActorCheck?: boolean;
+      idempotencyKey?: string;
+      actorRole?: 'buyer' | 'seller' | 'system' | 'admin';
+    }
+  ): Promise<Transaction> {
     const agreement = store.getAgreement(agreementId);
-    if (!agreement || (requestingUserId && agreement.buyerUserId !== requestingUserId && agreement.sellerUserId !== requestingUserId)) {
+    if (
+      !agreement ||
+      (!options?.bypassActorCheck &&
+        requestingUserId &&
+        agreement.buyerUserId !== requestingUserId &&
+        agreement.sellerUserId !== requestingUserId)
+    ) {
       throw new PayPalApiException({
         status: 404,
         code: 'AGREEMENT_NOT_FOUND',
@@ -841,37 +889,221 @@ export class PayPalService {
       });
     }
 
-    const tx = store.getTransactionByAgreement(agreementId);
-    if (!tx) {
-      throw new PayPalApiException({
-        status: 404,
-        code: 'TRANSACTION_NOT_FOUND',
-        message: 'No payment transaction found for this deal.',
-        nextStep: 'Verify payment was completed.'
+    const cleanReason = (reason || 'Refund requested').trim();
+    const enforceStages = options?.enforceStageRules !== false;
+
+    // Step 1: Atomic SQLite BEGIN IMMEDIATE check & reservation so refund + payout can NEVER race
+    const reserved = store.runInImmediateTransaction(() => {
+      const tx = store.getTransactionByAgreement(agreementId);
+      if (!tx) {
+        throw new PayPalApiException({
+          status: 404,
+          code: 'TRANSACTION_NOT_FOUND',
+          message: 'No payment transaction found for this deal.',
+          nextStep: 'Verify payment was completed.'
+        });
+      }
+      if (tx.paymentStatus === 'refunded' && !options?.amountCents) {
+        return { alreadyRefunded: true as const, tx };
+      }
+      if (tx.paymentStatus !== 'completed') {
+        throw new PayPalApiException({
+          status: 409,
+          code: 'NOT_REFUNDABLE',
+          message: 'Only completed payments can be refunded.',
+          nextStep: 'Check payment status first.'
+        });
+      }
+
+      const existingPayout = store.getPayoutByDeal(tx.negotiationId);
+      if (
+        tx.sellerPayoutStatus === 'paid' ||
+        tx.sellerPayoutStatus === 'simulated_paid' ||
+        tx.sellerPayoutStatus === 'processing' ||
+        (existingPayout && ['scheduled', 'processing', 'paid', 'simulated_paid'].includes(existingPayout.status))
+      ) {
+        throw new PayPalApiException({
+          status: 409,
+          code: 'PAYOUT_ALREADY_RELEASED',
+          message: 'Cannot refund because seller payout has already been released or scheduled.',
+          nextStep: 'Refunds are only available before seller payout is released.'
+        });
+      }
+
+      const neg = store.getNegotiation(tx.negotiationId);
+      const ps = neg?.projectStatus || 'paid_held';
+      const isBuyerCaller = requestingUserId && requestingUserId === agreement.buyerUserId && requestingUserId !== agreement.sellerUserId;
+      const isSellerCaller = requestingUserId && requestingUserId === agreement.sellerUserId;
+
+      if (enforceStages && !options?.bypassActorCheck && requestingUserId) {
+        if (ps === 'delivered' || ps === 'revision_requested') {
+          if (isBuyerCaller) {
+            throw new PayPalApiException({
+              status: 409,
+              code: 'REFUND_BLOCKED_AFTER_DELIVERY',
+              message: 'Refunds are not available after work is delivered. Accept work, request changes, or report a problem.',
+              nextStep: 'Use Accept work, Request changes, or Report a problem.'
+            });
+          }
+        } else if (ps === 'in_progress') {
+          if (isBuyerCaller) {
+            throw new PayPalApiException({
+              status: 409,
+              code: 'REFUND_REQUIRES_SELLER_APPROVAL',
+              message: 'Work has already started. Request cancellation so the seller can review it.',
+              nextStep: 'Use Request cancellation instead.'
+            });
+          }
+        } else if (ps === 'accepted' || ps === 'payout_released' || ps === 'completed') {
+          if (isBuyerCaller) {
+            throw new PayPalApiException({
+              status: 409,
+              code: 'PAYOUT_ALREADY_APPROVED',
+              message: 'This project has already been accepted and cannot be refunded by the buyer.',
+              nextStep: 'Contact support if there is a post-delivery issue.'
+            });
+          }
+          if (isSellerCaller && ps !== 'accepted') {
+            throw new PayPalApiException({
+              status: 409,
+              code: 'PAYOUT_ALREADY_RELEASED',
+              message: 'Payout has already been released. Issue any voluntary refund from your own PayPal account.',
+              nextStep: 'Send a refund directly in PayPal.'
+            });
+          }
+        }
+      }
+
+      const ledgerEntries = store.getLedgerEntriesForDeal(tx.negotiationId);
+      const capturedCents = ledgerEntries.filter(e => e.type === 'buyer_paid').reduce((s, e) => s + e.amountCents, 0);
+      const refundedSoFar = ledgerEntries.filter(e => e.type === 'refund').reduce((s, e) => s + e.amountCents, 0);
+      const paidOutSoFar = ledgerEntries.filter(e => e.type === 'seller_payout').reduce((s, e) => s + e.amountCents, 0);
+      const feeSoFar = ledgerEntries.filter(e => e.type === 'platform_fee').reduce((s, e) => s + e.amountCents, 0);
+      const feeRefundedSoFar = ledgerEntries.filter(e => e.type === 'platform_fee_refund').reduce((s, e) => s + e.amountCents, 0);
+      const remainingCaptured = Math.max(0, capturedCents - refundedSoFar - paidOutSoFar);
+
+      if (remainingCaptured <= 0) {
+        throw new PayPalApiException({
+          status: 409,
+          code: 'MONEY_INVARIANT_VIOLATION',
+          message: 'No refundable balance remains on this deal.',
+          nextStep: 'Check payment history to review prior refunds or payout releases.'
+        });
+      }
+
+      const targetRefundCents = typeof options?.amountCents === 'number'
+        ? Math.round(options.amountCents)
+        : remainingCaptured;
+
+      if (targetRefundCents <= 0 || targetRefundCents > remainingCaptured) {
+        throw new PayPalApiException({
+          status: 400,
+          code: 'INVALID_REFUND_AMOUNT',
+          message: `Refund amount must be between $0.01 and ${formatCents(remainingCaptured)}.`,
+          nextStep: `Enter a refund amount up to ${formatCents(remainingCaptured)}.`
+        });
+      }
+
+      // Strict money invariant: refunded + paid_out <= captured
+      if (refundedSoFar + paidOutSoFar + targetRefundCents > capturedCents) {
+        throw new PayPalApiException({
+          status: 409,
+          code: 'MONEY_INVARIANT_VIOLATION',
+          message: 'Refund exceeds captured funds invariant.',
+          nextStep: 'No action needed; total refunded plus paid out cannot exceed captured amount.'
+        });
+      }
+
+      const netFeeRemaining = Math.max(0, feeSoFar - feeRefundedSoFar);
+      const isFullRefund = targetRefundCents === remainingCaptured && paidOutSoFar === 0;
+      const feeRefundCents = isFullRefund
+        ? netFeeRemaining
+        : Math.min(netFeeRemaining, Math.round((targetRefundCents / capturedCents) * netFeeRemaining));
+
+      const idemKey = options?.idempotencyKey || `ref_${tx.id}_${refundedSoFar}_${targetRefundCents}`;
+      if (ledgerEntries.some(e => e.idempotencyKey === idemKey)) {
+        return { alreadyRefunded: true as const, tx };
+      }
+
+      const prevTxSnapshot = { ...tx };
+      const prevAgStatus = agreement.workAcceptanceStatus;
+      const prevNegStatus = neg?.status;
+      const prevNegProjectStatus = neg?.projectStatus;
+
+      const now = new Date().toISOString();
+      const provisionalRefundId = `REF-${uuidv4().substring(0, 10).toUpperCase()}`;
+
+      tx.paymentStatus = isFullRefund ? 'refunded' : 'completed';
+      tx.sellerPayoutStatus = isFullRefund ? 'refunded' : tx.sellerPayoutStatus;
+      tx.refundId = provisionalRefundId;
+      tx.refundedAt = now;
+      tx.refundReason = cleanReason;
+      if (!isFullRefund && typeof tx.sellerPayoutCents === 'number') {
+        const netDeductedFromSeller = targetRefundCents - feeRefundCents;
+        tx.sellerPayoutCents = Math.max(0, tx.sellerPayoutCents - netDeductedFromSeller);
+        tx.sellerShareHeld = centsToDollars(tx.sellerPayoutCents);
+      }
+      store.saveTransaction(tx);
+
+      if (isFullRefund) {
+        agreement.workAcceptanceStatus = 'refunded';
+        agreement.disputeReason = cleanReason;
+        store.saveAgreement(agreement);
+      }
+
+      if (neg) {
+        neg.projectStatus = isFullRefund ? 'refunded' : 'partially_refunded';
+        if (isFullRefund) neg.status = 'CANCELLED';
+        neg.updatedAt = now;
+        store.saveNegotiation(neg);
+      }
+
+      const ledRef = store.addLedgerEntry({
+        dealId: tx.negotiationId,
+        type: 'refund',
+        amountCents: targetRefundCents,
+        currency: tx.currency,
+        idempotencyKey: idemKey,
+        note: `Refund ${provisionalRefundId}: ${cleanReason}`
       });
+
+      let ledFeeRefId: string | null = null;
+      if (feeRefundCents > 0) {
+        const ledFee = store.addLedgerEntry({
+          dealId: tx.negotiationId,
+          type: 'platform_fee_refund',
+          amountCents: feeRefundCents,
+          currency: tx.currency,
+          idempotencyKey: `${idemKey}_fee`,
+          note: `Service fee refund (${isFullRefund ? 'full' : 'prorated'})`
+        });
+        ledFeeRefId = ledFee.id;
+      }
+
+      return {
+        alreadyRefunded: false as const,
+        tx,
+        refundCents: targetRefundCents,
+        feeRefundCents,
+        isFullRefund,
+        provisionalRefundId,
+        ledRefId: ledRef.id,
+        ledFeeRefId,
+        prevTxSnapshot,
+        prevAgStatus,
+        prevNegStatus,
+        prevNegProjectStatus,
+        ps
+      };
+    });
+
+    if (reserved.alreadyRefunded) {
+      return reserved.tx;
     }
 
-    if (tx.paymentStatus === 'refunded') {
-      return tx; // Idempotent
-    }
-    if (tx.paymentStatus !== 'completed') {
-      throw new PayPalApiException({
-        status: 409,
-        code: 'NOT_REFUNDABLE',
-        message: 'Only completed payments can be refunded.',
-        nextStep: 'Check payment status first.'
-      });
-    }
-    if (tx.sellerPayoutStatus === 'paid' || tx.sellerPayoutStatus === 'simulated_paid') {
-      throw new PayPalApiException({
-        status: 409,
-        code: 'PAYOUT_ALREADY_RELEASED',
-        message: 'Cannot refund because seller payout has already been released.',
-        nextStep: 'Open a dispute ticket if work was misrepresented.'
-      });
-    }
+    const { tx, refundCents, isFullRefund, provisionalRefundId, prevTxSnapshot, prevAgStatus, prevNegStatus, prevNegProjectStatus } = reserved;
+    let finalRefundId = provisionalRefundId;
 
-    const cleanReason = (reason || 'Refund requested by parties').trim();
     const isRealCapture = Boolean(
       tx.paypalCaptureId &&
       this.isConfigured() &&
@@ -880,63 +1112,80 @@ export class PayPalService {
       !tx.paypalCaptureId.startsWith('CAPTURE-')
     );
 
-    let refundId = `REF-${uuidv4().substring(0, 10).toUpperCase()}`;
     if (isRealCapture) {
-      const token = await this.getAccessToken();
-      const res = await fetch(`${this.baseUrl}/v2/payments/captures/${tx.paypalCaptureId}/refund`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'PayPal-Request-Id': `ref_${tx.id}`
-        },
-        body: JSON.stringify({ note_to_payer: cleanReason.slice(0, 255) })
-      });
-      const debugId = res.headers.get('paypal-debug-id');
-      if (!res.ok) {
-        let errJson: any;
-        try { errJson = await res.json(); } catch { errJson = { message: await res.text() }; }
-        throw new PayPalApiException(mapPayPalError(res.status, errJson, debugId));
+      try {
+        const token = await this.getAccessToken();
+        const bodyObj: any = { note_to_payer: cleanReason.slice(0, 255) };
+        if (!isFullRefund) {
+          bodyObj.amount = {
+            value: (refundCents / 100).toFixed(2),
+            currency_code: tx.currency || 'USD'
+          };
+        }
+        const res = await fetch(`${this.baseUrl}/v2/payments/captures/${tx.paypalCaptureId}/refund`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'PayPal-Request-Id': `ref_${tx.id}_${refundCents}`
+          },
+          body: JSON.stringify(bodyObj)
+        });
+        const debugId = res.headers.get('paypal-debug-id');
+        if (!res.ok) {
+          let errJson: any;
+          try { errJson = await res.json(); } catch { errJson = { message: await res.text() }; }
+          throw new PayPalApiException(mapPayPalError(res.status, errJson, debugId));
+        }
+        const json = await res.json() as any;
+        finalRefundId = json.id || provisionalRefundId;
+        tx.refundId = finalRefundId;
+        store.saveTransaction(tx);
+      } catch (err) {
+        // Compensate DB state if external PayPal API call rejected
+        store.runInImmediateTransaction(() => {
+          store.saveTransaction(prevTxSnapshot);
+          agreement.workAcceptanceStatus = prevAgStatus;
+          store.saveAgreement(agreement);
+          const neg = store.getNegotiation(tx.negotiationId);
+          if (neg && prevNegProjectStatus) {
+            neg.projectStatus = prevNegProjectStatus;
+            if (prevNegStatus) neg.status = prevNegStatus;
+            store.saveNegotiation(neg);
+          }
+          (store as any).db.prepare('DELETE FROM ledger_entries WHERE id = ?').run(reserved.ledRefId);
+          if (reserved.ledFeeRefId) {
+            (store as any).db.prepare('DELETE FROM ledger_entries WHERE id = ?').run(reserved.ledFeeRefId);
+          }
+        });
+        throw err;
       }
-      const json = await res.json() as any;
-      refundId = json.id || refundId;
     }
 
-    const now = new Date().toISOString();
-    tx.paymentStatus = 'refunded';
-    tx.sellerPayoutStatus = 'refunded';
-    tx.refundId = refundId;
-    tx.refundedAt = now;
-    tx.refundReason = cleanReason;
-    store.saveTransaction(tx);
-
-    agreement.workAcceptanceStatus = 'refunded';
-    agreement.disputeReason = cleanReason;
-    store.saveAgreement(agreement);
-
-    const grossCents = tx.amountCents ?? dollarsToCents(tx.amount);
-    const hasRefundLedger = store.getLedgerEntriesForDeal(tx.negotiationId).some(e => e.type === 'refund');
-    if (!hasRefundLedger) {
-      store.addLedgerEntry({
-        dealId: tx.negotiationId,
-        type: 'refund',
-        amountCents: grossCents,
-        currency: tx.currency,
-        note: `Refund ${refundId}: ${cleanReason}`
-      });
-    }
+    store.addProjectEvent({
+      dealId: tx.negotiationId,
+      actorUserId: requestingUserId || 'system',
+      actorRole: options?.actorRole || (requestingUserId === agreement.sellerUserId ? 'seller' : requestingUserId === agreement.buyerUserId ? 'buyer' : 'system'),
+      fromStatus: reserved.ps,
+      toStatus: isFullRefund ? 'refunded' : 'partially_refunded',
+      summary: isFullRefund
+        ? `Issued full refund of ${formatCents(refundCents)} to buyer.`
+        : `Issued partial refund of ${formatCents(refundCents)} to buyer.`,
+      reason: cleanReason
+    });
 
     store.logActivity({
       type: 'paypal_refund_completed',
-      title: `Refund processed: ${formatCents(grossCents)}`,
-      description: `Refund ID ${refundId} issued to buyer. Reason: ${cleanReason}`,
+      title: `${isFullRefund ? 'Full' : 'Partial'} refund processed: ${formatCents(refundCents)}`,
+      description: `Refund ID ${finalRefundId} issued to buyer. Reason: ${cleanReason}`,
       transactionId: tx.id,
       negotiationId: tx.negotiationId,
-      amount: tx.amount,
+      amount: centsToDollars(refundCents),
       currency: tx.currency,
       severity: 'info'
     });
 
+    broadcastEvent('project_updated', { dealId: tx.negotiationId, projectStatus: isFullRefund ? 'refunded' : 'partially_refunded' });
     return tx;
   }
 }

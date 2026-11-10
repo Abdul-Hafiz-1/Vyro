@@ -125,6 +125,28 @@ const FAQS: FAQItem[] = [
         </p>
       </div>
     )
+  },
+  {
+    id: 'refunds-and-disputes',
+    icon: ShieldCheck,
+    question: 'Refunds and disputes',
+    shortAnswer: 'Refund rules protect both sides based on project stage: instant refund before work starts, mutual agreement while in progress, and review or dispute resolution after delivery.',
+    fullAnswer: (
+      <div className="flex flex-col gap-3 text-secondary text-text-muted leading-relaxed">
+        <p>
+          <strong>Before work starts:</strong> After paying with PayPal, funds stay held by VYRO. Until the seller clicks Start work, either party can cancel and return 100% of the payment immediately.
+        </p>
+        <p>
+          <strong>While work is in progress:</strong> Buyers can submit a cancellation request. Sellers can agree to a full refund, propose a partial refund, or decline and finish delivery.
+        </p>
+        <p>
+          <strong>After delivery:</strong> To protect sellers from refund abuse on delivered work, self-service refunds are disabled once work is delivered. Buyers have a 72-hour review window to click <em>Accept work</em>, <em>Request changes</em> (using included revisions), or <em>Report a problem</em> to freeze funds into mediation.
+        </p>
+        <p>
+          <strong>Disputes &amp; PayPal chargebacks:</strong> Both sides have 72 hours to submit evidence against SHA-256 hashed delivery records before a mediator releases, refunds, or splits the held balance. Note that in live PayPal accounts, a buyer may also file an external dispute directly inside PayPal Resolution Center outside VYRO&apos;s app flow.
+        </p>
+      </div>
+    )
   }
 ];
 

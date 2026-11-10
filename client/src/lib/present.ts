@@ -206,8 +206,89 @@ const STATUS_MAP: Record<string, FormattedStatus> = {
     label: 'Waiting for sellers',
     explanation: 'No sellers offer this yet. Your agent will notify you when someone does.',
     role: 'in_progress'
+  },
+
+  // Project delivery & escrow stages
+  request_sent: {
+    label: 'New request',
+    explanation: 'Waiting for seller reply',
+    role: 'needs_you'
+  },
+  agreed: {
+    label: 'Ready to pay',
+    explanation: 'Terms agreed. Waiting for PayPal checkout',
+    role: 'needs_you'
+  },
+  paid_held: {
+    label: 'Paid, held',
+    explanation: 'Paid with PayPal · held safely until work starts and is accepted',
+    role: 'in_progress'
+  },
+  in_progress: {
+    label: 'In progress',
+    explanation: 'Seller is working on deliverables',
+    role: 'in_progress'
+  },
+  delivered: {
+    label: 'Delivered',
+    explanation: 'Ready for buyer review and acceptance',
+    role: 'needs_you'
+  },
+  revision_requested: {
+    label: 'Changes requested',
+    explanation: 'Waiting for seller to deliver revisions',
+    role: 'in_progress'
+  },
+  accepted: {
+    label: 'Accepted',
+    explanation: 'Buyer accepted the work',
+    role: 'handled'
+  },
+  payout_released: {
+    label: 'Released to you',
+    explanation: 'Earnings sent to seller PayPal email',
+    role: 'handled'
+  },
+  disputed: {
+    label: 'Disputed',
+    explanation: 'Held safely while a dispute is reviewed',
+    role: 'needs_you'
+  },
+  refunded: {
+    label: 'Refunded',
+    explanation: 'Full PayPal refund returned to buyer',
+    role: 'declined'
+  },
+  partially_refunded: {
+    label: 'Partially refunded',
+    explanation: 'Settled with partial refund and release',
+    role: 'handled'
   }
 };
+
+export function formatDueCountdown(isoDate: string | null | undefined): { label: string; isOverdue: boolean; isSoon: boolean } | null {
+  if (!isoDate) return null;
+  const target = new Date(isoDate).getTime();
+  if (!Number.isFinite(target)) return null;
+  const diffMs = target - Date.now();
+  const absHours = Math.abs(diffMs) / 3600000;
+  const absDays = Math.round(absHours / 24);
+  if (diffMs < 0) {
+    const label = absHours < 24
+      ? `Overdue by ${Math.max(1, Math.round(absHours))}h`
+      : `Overdue by ${Math.max(1, absDays)} ${absDays === 1 ? 'day' : 'days'}`;
+    return { label, isOverdue: true, isSoon: false };
+  }
+  if (absHours < 1) {
+    const mins = Math.max(1, Math.round(diffMs / 60000));
+    return { label: `Due in ${mins}m`, isOverdue: false, isSoon: true };
+  }
+  if (absHours < 48) {
+    const hrs = Math.round(absHours);
+    return { label: `Due in ${hrs}h`, isOverdue: false, isSoon: true };
+  }
+  return { label: `Due in ${absDays} days`, isOverdue: false, isSoon: false };
+}
 
 export function formatStatus(statusInput: string | null | undefined): FormattedStatus {
   if (!statusInput) {

@@ -95,16 +95,15 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
   // Labeled desktop tabs
   const buyingTabs = [
     { to: '/app', label: 'Today', exact: true },
-    { to: '/app/requests/new', label: 'Requests', exact: false },
-    { to: '/app/deals', label: 'Deals', exact: false, badge: needsCount > 0 ? needsCount : null },
+    { to: '/app/projects', label: 'Projects', exact: false, badge: needsCount > 0 ? needsCount : null },
     { to: '/app/marketplace', label: 'Marketplace', exact: false },
     { to: '/app/transactions', label: 'Payments', exact: false },
   ];
 
   const sellingTabs = [
     { to: '/app', label: 'Today', exact: true },
+    { to: '/app/projects', label: 'Projects', exact: false, badge: needsCount > 0 ? needsCount : null },
     { to: '/app/listings', label: 'Listings', exact: false },
-    { to: '/app/deals', label: 'Deals', exact: false, badge: needsCount > 0 ? needsCount : null },
     { to: '/app/transactions', label: 'Payments', exact: false },
   ];
 
@@ -121,7 +120,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
           action: () => navigate('/app/listings/new'),
           icon: Plus
         },
-        { to: '/app/deals', label: 'Deals', icon: Handshake, exact: false, badge: needsCount > 0 ? needsCount : null },
+        { to: '/app/projects', label: 'Projects', icon: Handshake, exact: false, badge: needsCount > 0 ? needsCount : null },
         { to: '/app/transactions', label: 'Payments', icon: CreditCard, exact: false },
       ]
     : [
@@ -133,7 +132,7 @@ export const AppLayout: React.FC<{ children?: React.ReactNode }> = ({ children }
           action: () => navigate('/app/requests/new'),
           icon: Plus
         },
-        { to: '/app/deals', label: 'Deals', icon: Handshake, exact: false, badge: needsCount > 0 ? needsCount : null },
+        { to: '/app/projects', label: 'Projects', icon: Handshake, exact: false, badge: needsCount > 0 ? needsCount : null },
         { to: '/app/transactions', label: 'Payments', icon: CreditCard, exact: false },
       ];
 

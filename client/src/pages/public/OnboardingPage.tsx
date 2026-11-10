@@ -76,11 +76,11 @@ const SAMPLE_DEAL_STEPS: SampleStep[] = [
     note: 'Nothing binds above your comfort budget without your OK.',
   },
   {
-    title: '7. Escrow holds funds until accepted',
+    title: '7. Escrow protects delivery & payout',
     actor: 'PayPal escrow',
     price: 210,
-    summary: 'Paid with PayPal · held until you accept the finished work.',
-    note: 'Sellers get paid automatically right after you click Accept work.',
+    summary: 'Paid with PayPal · held in Projects until work is delivered and accepted.',
+    note: 'Sellers start work, deliver files, and get paid once you Accept work or after the 72h review window.',
   },
 ];
 

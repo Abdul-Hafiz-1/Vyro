@@ -23,7 +23,9 @@ import systemRoutes from './routes/system.js';
 import aiRoutes from './routes/ai.js';
 import homeRoutes from './routes/home.js';
 import eventsRoutes from './routes/events.js';
+import projectsRoutes from './routes/projects.js';
 import { seedDemoAccounts } from './db/seedDemo.js';
+import { reviewWindowWorker } from './services/projects/reviewWindowWorker.js';
 
 const app = express();
 
@@ -38,7 +40,7 @@ app.options('*', cors({
   origin: (origin, callback) => callback(null, true),
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
 app.use(cookieParser());
 
 // Request logging in development
@@ -74,6 +76,7 @@ app.use('/api/v1/ai', aiRoutes);
 app.use('/api/v1/home', homeRoutes);
 app.use('/api/v1/rules', homeRoutes);
 app.use('/api/v1/events', eventsRoutes);
+app.use('/api/v1/projects', projectsRoutes);
 
 // Global Error Handler
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
@@ -87,6 +90,7 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 app.listen(config.port, () => {
   seedDemoAccounts().catch(err => console.error('[DB] Demo seeding notice:', err));
+  reviewWindowWorker.start();
   console.log(`====================================================`);
   console.log(`  VYRO — Autonomous AI Commerce Network Engine`);
   console.log(`  Running on http://localhost:${config.port}`);

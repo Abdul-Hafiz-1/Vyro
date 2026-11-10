@@ -57,8 +57,139 @@ export interface User {
   isAutomationPaused?: boolean;
   motionPreference?: 'full' | 'reduced' | 'system';
   coachMarksDismissed?: string[];
+  sellerAutoRules?: SellerAutoRules;
+  role?: 'user' | 'admin';
   createdAt: string;
   updatedAt: string;
+}
+
+export type ProjectStatus =
+  | 'request_sent'
+  | 'negotiating'
+  | 'agreed'
+  | 'paid_held'
+  | 'in_progress'
+  | 'delivered'
+  | 'revision_requested'
+  | 'accepted'
+  | 'payout_released'
+  | 'completed'
+  | 'declined'
+  | 'cancelled'
+  | 'disputed'
+  | 'refunded'
+  | 'partially_refunded'
+  | 'expired';
+
+export interface SellerAutoRules {
+  minBudget?: number;
+  blockedCategories?: string[];
+  minDeadlineDays?: number;
+  autoRejectWhenFull?: boolean;
+  reviewIncomingManually?: boolean;
+}
+
+export interface ProjectEvent {
+  id: string;
+  dealId: string;
+  actorUserId: string;
+  actorRole: 'buyer' | 'seller' | 'system' | 'admin';
+  fromStatus?: ProjectStatus | null;
+  toStatus: ProjectStatus;
+  summary: string;
+  reason?: string | null;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface DeliveryFileMeta {
+  id: string;
+  originalName: string;
+  storedName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  uploadedAt: string;
+}
+
+export interface DeliveryRecord {
+  id: string;
+  dealId: string;
+  sellerUserId: string;
+  round?: number;
+  revisionNumber?: number;
+  note: string;
+  links: string[];
+  files: DeliveryFileMeta[];
+  createdAt: string;
+}
+
+export interface CancellationRequestRecord {
+  id: string;
+  dealId: string;
+  buyerUserId: string;
+  sellerUserId: string;
+  reason: string;
+  status: 'pending' | 'approved_full' | 'approved_partial' | 'declined';
+  refundCents?: number | null;
+  sellerNote?: string | null;
+  respondDueAt?: string | null;
+  projectTitle?: string;
+  buyerName?: string;
+  capturedCents?: number;
+  currency?: string;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface DisputeRecord {
+  id: string;
+  dealId: string;
+  openedByUserId: string;
+  openedByRole: 'buyer' | 'seller';
+  respondentUserId: string;
+  reasonChip: string;
+  description: string;
+  evidenceLinks: string[];
+  evidenceFiles: DeliveryFileMeta[];
+  respondentNote?: string | null;
+  respondentEvidenceLinks?: string[];
+  respondentEvidenceFiles?: DeliveryFileMeta[];
+  responseDueAt: string;
+  status: 'open' | 'responded' | 'resolved_release' | 'resolved_refund' | 'resolved_split';
+  resolutionSellerPct?: number | null;
+  resolutionReason?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+}
+
+export interface MoneyState {
+  capturedCents: number;
+  refundedCents: number;
+  feeRefundedCents: number;
+  paidOutCents: number;
+  feeCents: number;
+  heldCents: number;
+}
+
+export interface SellerCapacity {
+  active: number;
+  max: number;
+  isFull: boolean;
+}
+
+export interface HomeIncomingRequestItem {
+  id: string;
+  negotiationId: string;
+  requestId: string;
+  title: string;
+  description: string;
+  deliverables: string[];
+  deadlineDays: number;
+  buyerName: string;
+  proposedPrice: number;
+  createdAt: string;
 }
 
 export interface HomeNeedsYouItem {
@@ -119,6 +250,21 @@ export interface HomePayload {
   needsYou: HomeNeedsYouItem[];
   inProgress: HomeInProgressItem[];
   handledForYou: HomeHandledItem[];
+  incomingRequests?: HomeIncomingRequestItem[];
+  cancellationRequests?: CancellationRequestRecord[];
+  sellerCapacity?: SellerCapacity;
+  sellerProjectsSummary?: {
+    activeCount: number;
+    dueSoonCount: number;
+    heldCents: number;
+    releasedCents: number;
+    maxConcurrent: number;
+  };
+  abuseSummary?: {
+    losses30d: number;
+    flagged: boolean;
+    requiresLargeDealApproval: boolean;
+  };
   stats: {
     todaySpend: number;
     needsCount: number;
@@ -131,6 +277,8 @@ export interface HomePayload {
     balance: number;
     isAutomationPaused: boolean;
   };
+  sellerPayoutAccount?: SellerPayoutAccount | null;
+  platformFeePercent?: number;
 }
 
 export type FlexibilityTier = 'strict' | 'flexible' | 'very_flexible';
@@ -160,6 +308,9 @@ export interface Listing {
   isNegotiable: boolean;
   status: ListingStatus;
   tags: string[];
+  atCapacity?: boolean;
+  sellerActiveProjects?: number;
+  sellerMaxProjects?: number;
   sellerName?: string;
   sellerAvatar?: string;
   sellerRating?: number;
@@ -387,6 +538,20 @@ export interface Negotiation {
   sellerUserId?: string;
   listingId?: string;
   status: NegotiationStatus;
+  projectStatus?: ProjectStatus;
+  startedAt?: string | null;
+  deliveredAt?: string | null;
+  dueAt?: string | null;
+  reviewDueAt?: string | null;
+  acceptedAt?: string | null;
+  cancelledAt?: string | null;
+  revisionsAllowed?: number;
+  revisionsUsed?: number;
+  deliveryNote?: string | null;
+  deliveryLinks?: string[];
+  rejectReason?: string | null;
+  sharedRejectNote?: string | null;
+  lastReminderAt?: string | null;
   currentRound: number;
   maxRounds: number;
   currentProposal: Proposal | null;
@@ -394,6 +559,34 @@ export interface Negotiation {
   agreementId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectSummary extends Negotiation {
+  request?: CommerceRequest | null;
+  buyerAgent?: { id: string; name: string; businessName?: string } | null;
+  sellerAgent?: { id: string; businessName?: string; name?: string; verificationStatus?: string } | null;
+  agreement?: Agreement | null;
+  transaction?: Transaction | null;
+  payout?: PayoutRecord | null;
+  moneyState?: MoneyState;
+  cancellationRequest?: CancellationRequestRecord | null;
+  dispute?: DisputeRecord | null;
+  deliveries?: DeliveryRecord[];
+  events?: ProjectEvent[];
+  stageMeta?: {
+    label: string;
+    explanation: string;
+    tone: 'handled' | 'needsYou' | 'declined' | 'inProgress' | 'neutral';
+  };
+  isOverdue?: boolean;
+  feeBreakdown?: {
+    grossCents: number;
+    feeCents: number;
+    netSellerCents: number;
+    feePercent: number;
+  };
+  visibleRejectReason?: string | null;
+  viewerRole?: 'buyer' | 'seller';
 }
 
 export interface EvaluationScore {

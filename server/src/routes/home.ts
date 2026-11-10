@@ -4,6 +4,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { store } from '../db/store.js';
 import { config } from '../config/index.js';
 import { payoutService } from '../services/paypal/payoutService.js';
+import { projectStateMachine } from '../services/projects/projectStateMachine.js';
+import { disputeService } from '../services/projects/disputeService.js';
 import { AuthenticatedRequest, authenticateUser, requireRole } from '../middleware/rbac.js';
 import { broadcastEvent } from './events.js';
 import { DecisionRecord, DecisionStatus } from '../types/index.js';
@@ -125,11 +127,76 @@ router.get('/', (req: AuthenticatedRequest, res: Response) => {
   });
 
   // Top plain sentence that is the whole status
+  const incomingRequestsRaw = store.getNegotiations({ userId: user.id }).filter(
+    neg => neg.sellerUserId === user.id && neg.projectStatus === 'request_sent'
+  );
+  const incomingRequests = incomingRequestsRaw.map(neg => {
+    const reqItem = store.getRequest(neg.requestId);
+    const buyer = neg.buyerUserId ? store.getUser(neg.buyerUserId) : undefined;
+    return {
+      id: neg.id,
+      negotiationId: neg.id,
+      requestId: neg.requestId,
+      title: reqItem?.title || 'Incoming project request',
+      description: reqItem?.rawInput || reqItem?.qualityRequirements || '',
+      deliverables: reqItem?.deliverables || [],
+      deadlineDays: reqItem?.deadlineDays || 5,
+      buyerName: buyer?.displayName || 'Buyer',
+      proposedPrice: neg.currentProposal?.price || 0,
+      createdAt: neg.createdAt
+    };
+  });
+
+  const pendingCancellations = isSellerMode
+    ? store.getPendingCancellationRequestsForSeller(user.id).map(cr => {
+        const neg = store.getNegotiation(cr.dealId);
+        const reqItem = neg ? store.getRequest(neg.requestId) : undefined;
+        const buyer = store.getUser(cr.buyerUserId);
+        const ms = store.getMoneyState(cr.dealId);
+        return {
+          ...cr,
+          projectTitle: reqItem?.title || 'Active project',
+          buyerName: buyer?.displayName || 'Buyer',
+          capturedCents: ms.capturedCents,
+          currency: 'USD'
+        };
+      })
+    : [];
+
+  const sellerCapacity = projectStateMachine.getSellerCapacity(user.id);
+  const allUserNegs = store.getNegotiations({ userId: user.id }).filter(n => n.sellerUserId === user.id);
+  const nowMs = Date.now();
+  let activeCount = 0;
+  let dueSoonCount = 0;
+  let heldCents = 0;
+  let releasedCents = 0;
+  const activeStageSet = new Set(['paid_held', 'in_progress', 'delivered', 'revision_requested']);
+  for (const n of allUserNegs) {
+    const ps = n.projectStatus || 'negotiating';
+    if (activeStageSet.has(ps)) {
+      activeCount += 1;
+      if (n.dueAt) {
+        const diffHrs = (new Date(n.dueAt).getTime() - nowMs) / 3600000;
+        if (diffHrs <= 48) dueSoonCount += 1;
+      }
+    }
+    const ms = store.getMoneyState(n.id);
+    if (['paid_held', 'in_progress', 'delivered', 'revision_requested', 'disputed'].includes(ps)) {
+      heldCents += Math.max(0, ms.capturedCents - ms.refundedCents - ms.paidOutCents);
+    } else if (['accepted', 'payout_released', 'completed'].includes(ps)) {
+      releasedCents += ms.paidOutCents;
+    }
+  }
+
+  const totalActionNeeded = isSellerMode
+    ? needsYou.length + incomingRequests.length + pendingCancellations.length
+    : needsYou.length;
+
   let statusSentence = 'Everything is handled.';
-  if (needsYou.length === 1) {
+  if (totalActionNeeded === 1) {
     statusSentence = '1 item needs your decision.';
-  } else if (needsYou.length > 1) {
-    statusSentence = `${needsYou.length} things need your decision.`;
+  } else if (totalActionNeeded > 1) {
+    statusSentence = `${totalActionNeeded} things need your decision.`;
   }
 
   res.json({
@@ -139,9 +206,20 @@ router.get('/', (req: AuthenticatedRequest, res: Response) => {
       needsYou,
       inProgress,
       handledForYou,
+      incomingRequests,
+      cancellationRequests: pendingCancellations,
+      sellerCapacity,
+      sellerProjectsSummary: {
+        activeCount,
+        dueSoonCount,
+        heldCents,
+        releasedCents,
+        maxConcurrent: sellerCapacity.max
+      },
+      abuseSummary: disputeService.getUserAbuseSummary(user.id),
       stats: {
         todaySpend,
-        needsCount: needsYou.length,
+        needsCount: totalActionNeeded,
         inProgressCount: inProgress.length,
         handledCount: handledForYou.length
       },
@@ -201,9 +279,25 @@ router.post('/review/:id/approve', (req: AuthenticatedRequest, res: Response) =>
 
   // 3. Mark Agreement approved
   if (neg) {
+    const prevPs = neg.projectStatus || 'negotiating';
     neg.status = 'agreement_reached';
+    if (['request_sent', 'negotiating'].includes(prevPs)) {
+      neg.projectStatus = 'agreed';
+    }
     neg.updatedAt = now;
     store.saveNegotiation(neg);
+    if (['request_sent', 'negotiating'].includes(prevPs)) {
+      store.addProjectEvent({
+        dealId: neg.id,
+        actorUserId: user.id,
+        actorRole: neg.buyerUserId === user.id ? 'buyer' : 'seller',
+        fromStatus: prevPs,
+        toStatus: 'agreed',
+        summary: 'Approved via Today queue. Ready for PayPal checkout.',
+        reason: item.resolutionNote,
+        createdAt: now
+      });
+    }
 
     let agreement = neg.agreementId ? store.getAgreement(neg.agreementId) : null;
     if (!agreement && neg.currentProposal) {
@@ -264,9 +358,24 @@ router.post('/review/:id/decline', (req: AuthenticatedRequest, res: Response) =>
 
   const neg = store.getNegotiation(item.negotiationId);
   if (neg) {
+    const prevPs = neg.projectStatus || 'negotiating';
     neg.status = 'rejected';
+    if (['request_sent', 'negotiating', 'agreed'].includes(prevPs)) {
+      neg.projectStatus = 'declined';
+    }
+    neg.rejectReason = item.resolutionNote || 'Declined by buyer.';
     neg.updatedAt = now;
     store.saveNegotiation(neg);
+    store.addProjectEvent({
+      dealId: neg.id,
+      actorUserId: user.id,
+      actorRole: neg.buyerUserId === user.id ? 'buyer' : 'seller',
+      fromStatus: prevPs,
+      toStatus: 'declined',
+      summary: 'Declined before payment.',
+      reason: item.resolutionNote,
+      createdAt: now
+    });
   }
 
   broadcastEvent('deal_updated', { negotiationId: item.negotiationId, status: 'declined' });

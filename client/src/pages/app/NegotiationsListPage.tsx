@@ -1,71 +1,110 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ArrowLeft, Clock, Plus, ShieldCheck, ChevronRight } from 'lucide-react';
+import { ChevronRight, ArrowLeft, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { api } from '../../api/client';
-import { Button } from '../../components/common/Button';
+import { useAuth } from '../../context/AuthContext';
+import { ProjectSummary } from '../../types';
 import { Card } from '../../components/common/Card';
 import { StatusChip, StatusRole } from '../../components/common/StatusChip';
+import { Button } from '../../components/common/Button';
 import { EmptyState } from '../../components/common/EmptyState';
-import { Avatar } from '../../components/common/Avatar';
-import { useAuth } from '../../context/AuthContext';
-import { formatMoney, formatStatus, formatName, formatDate } from '../../lib/present';
+import { formatMoney, formatCents, formatDate, formatStatus, formatName, formatDueCountdown } from '../../lib/present';
+import { listItemVariants } from '../../lib/motion';
+
+type StageFilter =
+  | 'all'
+  | 'requests'
+  | 'negotiating'
+  | 'agreed'
+  | 'paid_held'
+  | 'in_progress'
+  | 'delivered'
+  | 'attention'
+  | 'completed'
+  | 'declined';
+
+function getPrimaryActionLabel(ps: string, isSeller: boolean): string {
+  if (isSeller) {
+    if (ps === 'request_sent') return 'Review request';
+    if (ps === 'paid_held') return 'Start work';
+    if (ps === 'in_progress' || ps === 'revision_requested') return 'Deliver work';
+    if (ps === 'delivered') return 'Send reminder';
+    if (ps === 'disputed') return 'Resolve dispute';
+    return 'View project';
+  }
+  if (ps === 'agreed') return 'Review & pay';
+  if (ps === 'delivered') return 'Accept work';
+  if (ps === 'disputed') return 'Open dispute';
+  return 'Open project';
+}
+
+function matchesFilter(p: ProjectSummary, filter: StageFilter): boolean {
+  const ps = p.projectStatus || 'negotiating';
+  switch (filter) {
+    case 'all': return true;
+    case 'requests': return ps === 'request_sent';
+    case 'negotiating': return ps === 'negotiating';
+    case 'agreed': return ps === 'agreed';
+    case 'paid_held': return ps === 'paid_held';
+    case 'in_progress': return ps === 'in_progress' || ps === 'revision_requested';
+    case 'delivered': return ps === 'delivered';
+    case 'attention': return ps === 'disputed' || ps === 'revision_requested' || Boolean(p.cancellationRequest?.status === 'pending') || Boolean(p.isOverdue);
+    case 'completed': return ['accepted', 'payout_released', 'completed', 'partially_refunded'].includes(ps);
+    case 'declined': return ['declined', 'cancelled', 'refunded', 'expired'].includes(ps);
+  }
+}
 
 export const NegotiationsListPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isBuyerWorkspace: isBuyer } = useAuth();
-  const [activeFilter, setActiveFilter] = useState<'all' | 'needs_you' | 'in_progress' | 'handled'>('all');
+  const { isBuyerWorkspace, isSellerWorkspace } = useAuth();
+  const [filter, setFilter] = useState<StageFilter>('all');
 
-  const { data: negotiations = [], isLoading } = useQuery({
-    queryKey: ['negotiationsList'],
-    queryFn: () => api.getNegotiations(),
+  const role = isSellerWorkspace ? 'seller' : 'buyer';
+  const isSeller = role === 'seller';
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['projects', role],
+    queryFn: () => api.getProjects(role),
     refetchInterval: 6000
   });
 
-  // Group deals into Linear-style sections
-  const needsYouDeals = negotiations.filter(
-    (n) => (n.status as string) === 'escalated' || (n.status as string) === 'needs_review'
-  );
-  const inProgressDeals = negotiations.filter(
-    (n) => n.status === 'in_negotiation' || (n.status as string) === 'initiated' || n.status === 'agreement_reached'
-  );
-  const handledDeals = negotiations.filter(
-    (n) =>
-      n.status === 'completed' ||
-      (n.status as string) === 'COMPLETED' ||
-      (n.status as string) === 'accepted' ||
-      n.status === 'declined' ||
-      (n.status as string) === 'auto_declined'
-  );
+  const projects = data?.projects || [];
+  const sellerCapacity = data?.sellerCapacity || { active: 0, max: 5, isFull: false };
+  const hasDisputes = projects.some(p => p.projectStatus === 'disputed');
 
-  const getFilteredGroups = () => {
-    if (activeFilter === 'needs_you') {
-      return [{ title: 'Needs your decision', items: needsYouDeals, emptyMessage: 'Nothing currently requires your decision.' }];
-    }
-    if (activeFilter === 'in_progress') {
-      return [{ title: 'In progress', items: inProgressDeals, emptyMessage: 'No negotiations currently in progress.' }];
-    }
-    if (activeFilter === 'handled') {
-      return [{ title: 'Handled & completed', items: handledDeals, emptyMessage: 'No completed deals yet.' }];
-    }
-    return [
-      { title: 'Needs your decision', items: needsYouDeals, emptyMessage: '' },
-      { title: 'In progress', items: inProgressDeals, emptyMessage: '' },
-      { title: 'Handled & completed', items: handledDeals, emptyMessage: '' }
-    ];
-  };
+  const tabs: Array<{ id: StageFilter; label: string }> = isSeller
+    ? [
+        { id: 'all', label: 'All' },
+        { id: 'requests', label: 'New requests' },
+        { id: 'negotiating', label: 'Negotiating' },
+        { id: 'agreed', label: 'Waiting for payment' },
+        { id: 'paid_held', label: 'Paid, held' },
+        { id: 'in_progress', label: 'In progress' },
+        { id: 'delivered', label: 'Delivered' },
+        { id: 'attention', label: 'Needs attention' },
+        { id: 'completed', label: 'Completed' },
+        { id: 'declined', label: 'Declined' }
+      ]
+    : [
+        { id: 'all', label: 'All' },
+        { id: 'requests', label: 'Waiting for reply' },
+        { id: 'negotiating', label: 'Negotiating' },
+        { id: 'agreed', label: 'Ready to pay' },
+        { id: 'paid_held', label: 'Paid, held' },
+        { id: 'in_progress', label: 'In progress' },
+        { id: 'delivered', label: 'Delivered' },
+        { id: 'attention', label: 'Needs attention' },
+        { id: 'completed', label: 'Completed' },
+        { id: 'declined', label: 'Declined' }
+      ];
 
-  const statusRoleMap: Record<string, StatusRole> = {
-    handled: 'handled',
-    needs_you: 'needsYou',
-    declined: 'declined',
-    in_progress: 'inProgress'
-  };
+  const filtered = projects.filter(p => matchesFilter(p, filter));
 
   return (
     <div className="w-full max-w-5xl mx-auto py-8 px-4 flex flex-col gap-6">
-      {/* Way back (Breadcrumb) */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={() => navigate('/app')}
@@ -74,164 +113,187 @@ export const NegotiationsListPage: React.FC = () => {
           <ArrowLeft className="w-4 h-4" />
           <span>Back to Today</span>
         </button>
+        {hasDisputes && (
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<ShieldAlert className="w-3.5 h-3.5 text-status-needs" />}
+            onClick={() => navigate('/app/disputes')}
+          >
+            Resolve disputes
+          </Button>
+        )}
       </div>
 
-      {/* Header */}
+      {/* Header + Seller Capacity Meter */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-border-subtle">
         <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-3">
-            <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
-              Deals
-            </h1>
-            <span className="text-secondary px-2.5 py-0.5 rounded-control bg-raised border border-border-subtle text-text-muted">
-              {negotiations.length} total
-            </span>
-          </div>
+          <h1 className="font-display font-bold text-[28px] text-text-primary tracking-tight">
+            Projects
+          </h1>
           <p className="text-secondary text-text-muted">
-            {isBuyer
-              ? 'Autonomous negotiation channels with sellers. Review terms, approve deals, and track settlement.'
-              : 'Incoming requests where your seller agent negotiates scope and pricing within your authorized rules.'}
+            {isSeller
+              ? 'Manage incoming requests, active client deliverables, and protected payouts.'
+              : 'Track negotiations, escrow-protected deliverables, and completed work.'}
           </p>
         </div>
 
-        <Button
-          variant="volt"
-          size="md"
-          onClick={() => navigate(isBuyer ? '/app/requests/new' : '/app/listings/new')}
-          leftIcon={<Plus className="w-4 h-4" strokeWidth={2} />}
-        >
-          {isBuyer ? 'New request' : 'Create listing'}
-        </Button>
+        <div className="flex items-center gap-3">
+          {isSeller && (
+            <div className="px-3.5 py-2 rounded-control bg-surface border border-border-subtle flex items-center gap-3">
+              <div className="flex flex-col">
+                <span className="text-secondary text-text-muted">Capacity</span>
+                <span className="text-secondary font-semibold text-text-primary">
+                  {sellerCapacity.active} of {sellerCapacity.max} in progress
+                </span>
+              </div>
+              {sellerCapacity.isFull && (
+                <StatusChip label="At capacity" role="needsYou" size="sm" />
+              )}
+            </div>
+          )}
+          <Button
+            variant="volt"
+            size="sm"
+            onClick={() => navigate(isBuyerWorkspace ? '/app/requests/new' : '/app/listings/new')}
+          >
+            {isBuyerWorkspace ? 'New request' : 'New listing'}
+          </Button>
+        </div>
       </div>
 
-      {/* Filter Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        {[
-          { key: 'all', label: 'All deals' },
-          { key: 'needs_you', label: `Needs decision (${needsYouDeals.length})` },
-          { key: 'in_progress', label: `In progress (${inProgressDeals.length})` },
-          { key: 'handled', label: `Handled (${handledDeals.length})` }
-        ].map((tab) => {
-          const isSelected = activeFilter === tab.key;
+      {/* Stage Filter Tabs with Live Counts */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+        {tabs.map((t) => {
+          const count = projects.filter(p => matchesFilter(p, t.id)).length;
+          if (t.id !== 'all' && count === 0) return null;
+          const active = filter === t.id;
           return (
             <button
-              key={tab.key}
+              key={t.id}
               type="button"
-              onClick={() => setActiveFilter(tab.key as any)}
-              className={`px-4 py-2 rounded-control text-secondary font-medium transition-colors cursor-pointer shrink-0 ${
-                isSelected
+              onClick={() => setFilter(t.id)}
+              className={`px-3 py-1.5 rounded-control text-secondary font-medium transition-colors cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                active
                   ? 'bg-volt text-[#0C0E0D] font-bold'
                   : 'bg-surface border border-border-subtle text-text-muted hover:text-text-primary'
               }`}
             >
-              {tab.label}
+              <span>{t.label}</span>
+              <span className={`px-1.5 rounded-chip text-secondary ${active ? 'bg-black/15 text-[#0C0E0D]' : 'bg-raised text-text-muted'}`}>
+                {count}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* Deals Groups (Linear style) */}
+      {/* Projects List */}
       {isLoading ? (
-        <div className="flex flex-col gap-4 opacity-70">
-          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
-          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
-          <div className="h-20 bg-surface rounded-control border border-border-subtle" />
+        <div className="flex flex-col gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-24 rounded-card bg-surface border border-border-subtle opacity-70" />
+          ))}
         </div>
-      ) : negotiations.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <EmptyState
-          title="No deals formed yet"
-          description={
-            isBuyer
-              ? 'Start a new request to let your buyer agent find matching sellers and negotiate the best price.'
-              : 'Create a listing or wait for buyer agents to discover your services.'
-          }
-          actionLabel={isBuyer ? 'Start a request' : 'Create listing'}
-          onAction={() => navigate(isBuyer ? '/app/requests/new' : '/app/listings/new')}
+          title="No projects in this view"
+          description={isBuyerWorkspace
+            ? 'Start by describing what you need — AI agents negotiate and track the project here.'
+            : 'Publish a listing or accept an incoming buyer request to start your first project.'}
+          actionLabel={isBuyerWorkspace ? 'Post a request' : 'Go to Listings'}
+          onAction={() => navigate(isBuyerWorkspace ? '/app/requests/new' : '/app/listings')}
         />
       ) : (
-        <div className="flex flex-col gap-8">
-          {getFilteredGroups().map((group) => {
-            if (activeFilter === 'all' && group.items.length === 0) return null;
+        <div className="flex flex-col gap-3">
+          {filtered.map((p, index) => {
+            const ps = p.projectStatus || 'negotiating';
+            const statusRaw = formatStatus(ps);
+            const roleMap: Record<string, StatusRole> = {
+              handled: 'handled',
+              needs_you: 'needsYou',
+              declined: 'declined',
+              in_progress: 'inProgress'
+            };
+            const chipRole = roleMap[statusRaw.role] || 'inProgress';
+            const title = p.request?.title || 'Commercial Project';
+            const counterpartName = isSeller
+              ? (p.buyerAgent?.name ? formatName(p.buyerAgent.name) : 'Buyer')
+              : (p.sellerAgent?.businessName ? formatName(p.sellerAgent.businessName) : 'Verified Seller');
+            const latestPrice = p.agreement?.finalPrice || p.currentProposal?.price || 0;
+            const days = p.agreement?.deliveryDays || p.currentProposal?.deliveryDays || p.request?.deadlineDays || 5;
+            const dueCountdown = ['in_progress', 'revision_requested', 'paid_held'].includes(ps) ? formatDueCountdown(p.dueAt) : null;
+            const nextLabel = getPrimaryActionLabel(ps, isSeller);
 
             return (
-              <div key={group.title} className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-secondary font-semibold text-text-primary">
-                    {group.title}
-                  </span>
-                  <span className="text-secondary text-text-muted">
-                    {group.items.length} {group.items.length === 1 ? 'deal' : 'deals'}
-                  </span>
-                </div>
+              <motion.div
+                key={p.id}
+                {...listItemVariants(false, index)}
+              >
+                <Card
+                  interactive
+                  onClick={() => navigate(`/app/projects/${p.id}`)}
+                  className="p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 cursor-pointer"
+                >
+                  <div className="flex flex-col gap-1.5 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <span className="font-semibold text-body text-text-primary">
+                        {title}
+                      </span>
+                      <StatusChip label={statusRaw.label} role={chipRole} size="sm" />
+                      {dueCountdown && (
+                        <span className={`px-2 py-0.5 rounded-chip text-secondary font-medium ${
+                          dueCountdown.isOverdue
+                            ? 'bg-status-declined/15 text-status-declined'
+                            : dueCountdown.isSoon
+                            ? 'bg-status-needs/15 text-status-needs'
+                            : 'bg-raised text-text-muted'
+                        }`}>
+                          {dueCountdown.label}
+                        </span>
+                      )}
+                      {p.cancellationRequest?.status === 'pending' && isSeller && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-chip text-secondary font-medium bg-status-needs/15 text-status-needs">
+                          <AlertTriangle className="w-3 h-3" />
+                          <span>Cancel request</span>
+                        </span>
+                      )}
+                    </div>
 
-                {group.items.length === 0 ? (
-                  <div className="p-6 bg-surface border border-border-subtle rounded-surface text-center text-secondary text-text-muted">
-                    {group.emptyMessage}
+                    <div className="flex items-center gap-2 text-secondary text-text-muted flex-wrap">
+                      <span>With {counterpartName}</span>
+                      <span>·</span>
+                      {isSeller && p.feeBreakdown ? (
+                        <span className="text-text-primary font-medium">
+                          Earn {formatCents(p.feeBreakdown.netSellerCents)} after {formatCents(p.feeBreakdown.feeCents)} fee
+                        </span>
+                      ) : (
+                        <span>{formatMoney(latestPrice)} · {days} days</span>
+                      )}
+                      <span>·</span>
+                      <span>{formatDate(p.updatedAt)}</span>
+                    </div>
+
+                    <span className="text-secondary text-text-muted">
+                      {p.visibleRejectReason || p.stageMeta?.explanation || statusRaw.explanation}
+                    </span>
                   </div>
-                ) : (
-                  <div className="bg-surface border border-border-subtle rounded-surface divide-y divide-border-subtle overflow-hidden">
-                    {group.items.map((deal: any) => {
-                      const counterpart = deal.sellerAgent?.businessName || deal.sellerName || 'Verified Seller';
-                      const title = deal.request?.title || deal.title || 'Commercial Project';
-                      const price = deal.agreement?.finalPrice || deal.currentProposal?.price || 150;
-                      const days = deal.agreement?.deliveryDays || deal.currentProposal?.deliveryDays || deal.request?.deadlineDays || 5;
-                      const statusRaw = formatStatus(deal.status);
-                      const statusRole = statusRoleMap[statusRaw.role] || 'inProgress';
 
-                      return (
-                        <div
-                          key={deal.id}
-                          onClick={() => navigate(`/app/deals/${deal.id}`)}
-                          className="p-4 sm:p-5 flex items-center justify-between gap-4 hover:bg-raised transition-colors cursor-pointer group"
-                        >
-                          {/* Left: Avatar + Title & Counterpart */}
-                          <div className="flex items-center gap-3.5 min-w-0">
-                            <Avatar name={formatName(counterpart)} size="md" />
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-semibold text-body text-text-primary group-hover:text-volt transition-colors truncate">
-                                {title}
-                              </span>
-                              <div className="flex items-center gap-2 text-secondary text-text-muted mt-0.5">
-                                <span>With {formatName(counterpart)}</span>
-                                <span>·</span>
-                                <div className="flex items-center gap-1">
-                                  <Clock className="w-3.5 h-3.5 text-text-muted" strokeWidth={2} />
-                                  <span>{days}&nbsp;days</span>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Right: Price + Status + Chevron */}
-                          <div className="flex items-center gap-4 shrink-0">
-                            <div className="text-right">
-                              <span className="font-display font-bold text-[18px] text-text-primary block">
-                                {formatMoney(price)}
-                              </span>
-                              {deal.updatedAt && (
-                                <span className="text-secondary text-text-muted block">
-                                  {formatDate(deal.updatedAt)}
-                                </span>
-                              )}
-                            </div>
-
-                            <StatusChip
-                              label={statusRaw.label}
-                              role={statusRole}
-                              size="sm"
-                            />
-
-                            <ChevronRight
-                              className="w-5 h-5 text-text-muted group-hover:text-text-primary transition-colors hidden sm:block"
-                              strokeWidth={2}
-                            />
-                          </div>
-                        </div>
-                      );
-                    })}
+                  <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
+                    <Button
+                      variant={chipRole === 'needsYou' ? 'volt' : 'secondary'}
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(ps === 'disputed' && isSeller ? '/app/disputes' : `/app/projects/${p.id}`);
+                      }}
+                    >
+                      {nextLabel}
+                    </Button>
+                    <ChevronRight className="w-4 h-4 text-text-muted" strokeWidth={2} />
                   </div>
-                )}
-              </div>
+                </Card>
+              </motion.div>
             );
           })}
         </div>

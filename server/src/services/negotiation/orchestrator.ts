@@ -4,6 +4,7 @@ import { config } from '../../config/index.js';
 import { geminiService } from '../ai/gemini.js';
 import { decisionEngine, PROHIBITED_CATEGORIES } from '../decision/engine.js';
 import { payoutService } from '../paypal/payoutService.js';
+import { projectStateMachine } from '../projects/projectStateMachine.js';
 import { broadcastEvent } from '../../routes/events.js';
 import {
   Negotiation,
@@ -214,6 +215,9 @@ export class NegotiationOrchestrator {
       buyerUserId: request.userId,
       sellerUserId: seller.ownerId,
       status: 'initiated',
+      projectStatus: 'negotiating',
+      revisionsAllowed: 1,
+      revisionsUsed: 0,
       currentRound: 1,
       maxRounds: 8,
       currentProposal: null,
@@ -253,6 +257,8 @@ export class NegotiationOrchestrator {
     const categoryLower = (request.category || '').toLowerCase();
     if (PROHIBITED_CATEGORIES.some(cat => categoryLower.includes(cat))) {
       negotiation.status = 'rejected';
+      negotiation.projectStatus = 'declined';
+      negotiation.rejectReason = `Category "${request.category}" violates network acceptable commerce policy.`;
       negotiation.messages.push({
         id: `msg_${uuidv4().substring(0, 8)}`,
         negotiationId,
@@ -265,7 +271,55 @@ export class NegotiationOrchestrator {
         timestamp: now
       });
       store.saveNegotiation(negotiation);
+      store.addProjectEvent({
+        dealId: negotiationId,
+        actorUserId: request.userId,
+        actorRole: 'system',
+        fromStatus: 'request_sent',
+        toStatus: 'declined',
+        summary: 'Request blocked by commerce safety policy.',
+        reason: negotiation.rejectReason,
+        createdAt: now
+      });
       return negotiation;
+    }
+
+    // 2b. Seller auto-reject rules check
+    if (seller.ownerId) {
+      const autoRule = projectStateMachine.evaluateSellerAutoRules(seller.ownerId, {
+        category: request.category || '',
+        maxBudget: request.maxBudget,
+        deadlineDays: request.deadlineDays
+      });
+      if (autoRule.matched) {
+        negotiation.status = 'rejected';
+        negotiation.projectStatus = 'declined';
+        negotiation.rejectReason = autoRule.reason;
+        negotiation.sharedRejectNote = "This seller can't take it. I'm looking at other options.";
+        negotiation.messages.push({
+          id: `msg_${uuidv4().substring(0, 8)}`,
+          negotiationId,
+          senderAgentId: seller.id,
+          recipientAgentId: buyer.id,
+          senderRole: 'seller',
+          round: 1,
+          messageType: 'rejection',
+          content: "This seller can't take it. I'm looking at other options.",
+          timestamp: now
+        });
+        store.saveNegotiation(negotiation);
+        store.addProjectEvent({
+          dealId: negotiationId,
+          actorUserId: seller.ownerId,
+          actorRole: 'system',
+          fromStatus: 'request_sent',
+          toStatus: 'declined',
+          summary: autoRule.reason || 'Declined by seller automation rules.',
+          reason: autoRule.reason,
+          createdAt: now
+        });
+        return negotiation;
+      }
     }
 
     // 3. Deterministic Seller Opening Quote (95-100% of list price, zero buyer info revealed)
@@ -458,6 +512,7 @@ export class NegotiationOrchestrator {
     );
     if (!overlap.hasOverlap && proposals.length >= 2) {
       negotiation.status = 'rejected';
+      negotiation.projectStatus = 'declined';
       negotiation.updatedAt = now;
       negotiation.messages.push({
         id: `msg_${uuidv4().substring(0, 8)}`,
@@ -494,6 +549,7 @@ export class NegotiationOrchestrator {
       // If no overlap even within stretch limits, early exit cleanly right after seller opening
       if (!overlap.hasOverlap) {
         negotiation.status = 'rejected';
+        negotiation.projectStatus = 'declined';
         negotiation.updatedAt = now;
         negotiation.messages.push({
           id: `msg_${uuidv4().substring(0, 8)}`,
@@ -615,15 +671,27 @@ export class NegotiationOrchestrator {
         );
         negotiation.agreementId = agreement.id;
         negotiation.status = 'agreement_reached';
+        negotiation.projectStatus = 'agreed';
+        negotiation.revisionsAllowed = agreement.revisions ?? 1;
         negotiation.updatedAt = now;
 
         store.saveNegotiation(negotiation);
+        store.addProjectEvent({
+          dealId: negotiation.id,
+          actorUserId: negotiation.buyerUserId || buyer.ownerId,
+          actorRole: 'system',
+          fromStatus: 'negotiating',
+          toStatus: 'agreed',
+          summary: `Agreed at $${agreement.finalPrice} for ${agreement.deliveryDays} days. Waiting for payment.`,
+          createdAt: now
+        });
         broadcastEvent('deal_updated', { negotiationId, status: negotiation.status, agreementId: agreement.id });
         return negotiation;
       }
 
       if (buyerDecision.action === 'decline') {
         negotiation.status = 'rejected';
+        negotiation.projectStatus = 'declined';
         negotiation.updatedAt = now;
 
         negotiation.messages.push({
@@ -903,15 +971,27 @@ export class NegotiationOrchestrator {
         );
         negotiation.agreementId = agreement.id;
         negotiation.status = 'agreement_reached';
+        negotiation.projectStatus = 'agreed';
+        negotiation.revisionsAllowed = agreement.revisions ?? 1;
         negotiation.updatedAt = now;
 
         store.saveNegotiation(negotiation);
+        store.addProjectEvent({
+          dealId: negotiation.id,
+          actorUserId: negotiation.sellerUserId || seller.ownerId,
+          actorRole: 'system',
+          fromStatus: 'negotiating',
+          toStatus: 'agreed',
+          summary: `Agreed at $${agreement.finalPrice} for ${agreement.deliveryDays} days. Waiting for payment.`,
+          createdAt: now
+        });
         broadcastEvent('deal_updated', { negotiationId, status: negotiation.status, agreementId: agreement.id });
         return negotiation;
       }
 
       if (sellerDecision.action === 'decline') {
         negotiation.status = 'rejected';
+        negotiation.projectStatus = 'declined';
         negotiation.updatedAt = now;
 
         negotiation.messages.push({
@@ -1066,6 +1146,7 @@ export class NegotiationOrchestrator {
           );
         } else {
           negotiation.status = 'rejected';
+          negotiation.projectStatus = 'declined';
         }
       }
 

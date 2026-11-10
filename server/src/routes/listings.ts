@@ -4,6 +4,7 @@ import { store } from '../db/store.js';
 import { Listing, ListingCategory, ListingType } from '../types/index.js';
 import { AuthenticatedRequest, authenticateUser, optionalAuthenticateUser } from '../middleware/rbac.js';
 import { geminiService } from '../services/ai/gemini.js';
+import { projectStateMachine } from '../services/projects/projectStateMachine.js';
 
 const router = Router();
 
@@ -12,9 +13,16 @@ const router = Router();
  * Private floor price (minAcceptablePrice) is NEVER returned to third-party buyers.
  */
 function serializeListing(listing: Listing, viewerUserId?: string): any {
+  const sellerUid = listing.sellerUserId || listing.sellerId;
+  const capacity = sellerUid ? projectStateMachine.getSellerCapacity(sellerUid) : { active: 0, max: 5, isFull: false };
   const isOwner = Boolean(viewerUserId && (listing.sellerId === viewerUserId || listing.sellerUserId === viewerUserId));
   if (isOwner) {
-    return listing;
+    return {
+      ...listing,
+      atCapacity: capacity.isFull,
+      sellerActiveProjects: capacity.active,
+      sellerMaxProjects: capacity.max
+    };
   }
   const {
     minAcceptablePrice,
@@ -24,7 +32,10 @@ function serializeListing(listing: Listing, viewerUserId?: string): any {
     flexibility,
     ...publicListing
   } = listing;
-  return publicListing;
+  return {
+    ...publicListing,
+    atCapacity: capacity.isFull
+  };
 }
 
 // GET /api/v1/listings
@@ -236,7 +247,28 @@ router.patch('/:id', authenticateUser, (req: AuthenticatedRequest, res: Response
 
   return res.json({
     success: true,
-    data: updated
+    data: serializeListing(updated, req.user!.id)
+  });
+});
+
+// PATCH /api/v1/listings/:id/pause - Seller pauses or resumes a listing
+router.patch('/:id/pause', authenticateUser, (req: AuthenticatedRequest, res: Response) => {
+  const existing = store.getListing(req.params.id);
+  if (!existing || existing.sellerId !== req.user!.id) {
+    return res.status(404).json({ success: false, error: 'Listing not found' });
+  }
+
+  const nextStatus = req.body?.paused === true || req.body?.status === 'paused' ? 'paused' : 'active';
+  const updated: Listing = {
+    ...existing,
+    status: nextStatus,
+    updatedAt: new Date().toISOString()
+  };
+  store.saveListing(updated);
+
+  return res.json({
+    success: true,
+    data: serializeListing(updated, req.user!.id)
   });
 });
 

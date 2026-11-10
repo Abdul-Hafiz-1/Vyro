@@ -58,8 +58,18 @@ export interface User {
   isAutomationPaused?: boolean;
   motionPreference?: 'full' | 'reduced' | 'system';
   coachMarksDismissed?: string[];
+  sellerAutoRules?: SellerAutoRules;
+  role?: 'user' | 'admin';
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SellerAutoRules {
+  minBudget?: number;
+  blockedCategories?: string[];
+  minDeadlineDays?: number;
+  autoRejectWhenFull?: boolean;
+  reviewIncomingManually?: boolean;
 }
 
 export interface Session {
@@ -362,6 +372,103 @@ export type NegotiationStatus =
   | 'completed'
   | 'rejected';
 
+export type ProjectStatus =
+  | 'request_sent'
+  | 'negotiating'
+  | 'agreed'
+  | 'paid_held'
+  | 'in_progress'
+  | 'delivered'
+  | 'revision_requested'
+  | 'accepted'
+  | 'payout_released'
+  | 'completed'
+  | 'declined'
+  | 'cancelled'
+  | 'disputed'
+  | 'refunded'
+  | 'partially_refunded'
+  | 'expired';
+
+export interface ProjectEvent {
+  id: string;
+  dealId: string;
+  actorUserId: string;
+  actorRole: 'buyer' | 'seller' | 'system' | 'admin';
+  fromStatus: ProjectStatus | null;
+  toStatus: ProjectStatus;
+  summary: string;
+  reason?: string | null;
+  metadata?: Record<string, any>;
+  createdAt: string;
+}
+
+export interface DeliveryFileMeta {
+  id: string;
+  originalName: string;
+  storedName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+}
+
+export interface DeliveryRecord {
+  id: string;
+  dealId: string;
+  sellerUserId: string;
+  revisionNumber: number;
+  note: string;
+  links: string[];
+  files: DeliveryFileMeta[];
+  evidenceHash: string;
+  createdAt: string;
+}
+
+export interface CancellationRequestRecord {
+  id: string;
+  dealId: string;
+  buyerUserId: string;
+  sellerUserId: string;
+  reason: string;
+  status: 'pending' | 'approved_full' | 'approved_partial' | 'declined';
+  refundCents?: number | null;
+  sellerNote?: string | null;
+  respondDueAt?: string | null;
+  createdAt: string;
+  resolvedAt?: string | null;
+}
+
+export interface DisputeRecord {
+  id: string;
+  dealId: string;
+  openedByUserId: string;
+  openedByRole: 'buyer' | 'seller';
+  reasonChip: string;
+  description: string;
+  evidenceLinks: string[];
+  evidenceFiles: DeliveryFileMeta[];
+  respondentUserId: string;
+  respondentNote?: string | null;
+  respondentEvidenceLinks: string[];
+  respondentEvidenceFiles: DeliveryFileMeta[];
+  responseDueAt: string;
+  status: 'open' | 'responded' | 'resolved_release' | 'resolved_refund' | 'resolved_split';
+  resolutionSellerPct?: number | null;
+  resolutionReason?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  createdAt: string;
+}
+
+export interface MoneyState {
+  capturedCents: number;
+  refundedCents: number;
+  paidOutCents: number;
+  feeCents: number;
+  feeRefundedCents: number;
+  heldCents: number;
+}
+
 export interface Negotiation {
   id: string;
   requestId: string;
@@ -371,6 +478,20 @@ export interface Negotiation {
   sellerUserId?: string;
   listingId?: string;
   status: NegotiationStatus;
+  projectStatus: ProjectStatus;
+  startedAt?: string | null;
+  deliveredAt?: string | null;
+  dueAt?: string | null;
+  reviewDueAt?: string | null;
+  acceptedAt?: string | null;
+  cancelledAt?: string | null;
+  revisionsAllowed?: number;
+  revisionsUsed?: number;
+  deliveryNote?: string | null;
+  deliveryLinks?: string[];
+  rejectReason?: string | null;
+  sharedRejectNote?: string | null;
+  lastReminderAt?: string | null;
   currentRound: number;
   maxRounds: number;
   currentProposal: Proposal | null;
@@ -537,9 +658,10 @@ export interface PayoutRecord {
 export interface LedgerEntry {
   id: string;
   dealId: string;
-  type: 'buyer_paid' | 'held_for_seller' | 'platform_fee' | 'seller_payout' | 'refund';
+  type: 'buyer_paid' | 'held_for_seller' | 'platform_fee' | 'platform_fee_refund' | 'seller_payout' | 'refund';
   amountCents: number;
   currency: string;
+  idempotencyKey?: string | null;
   note?: string;
   createdAt: string;
 }

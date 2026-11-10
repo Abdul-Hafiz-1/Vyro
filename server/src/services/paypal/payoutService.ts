@@ -114,127 +114,194 @@ export class PayoutService {
   public async acceptWorkAndReleasePayout(
     dealId: string,
     actorUserId: string,
-    options?: { providerOverride?: 'paypal' | 'simulated'; providerInstance?: PayoutProvider; bypassActorCheck?: boolean }
+    options?: {
+      providerOverride?: 'paypal' | 'simulated';
+      providerInstance?: PayoutProvider;
+      bypassActorCheck?: boolean;
+      overridePayoutCents?: number;
+      requireDelivered?: boolean;
+    }
   ): Promise<{ payout: PayoutRecord; ledger: LedgerEntry[] }> {
-    const neg = store.getNegotiation(dealId);
-    if (!neg) {
-      throw new PayoutGateError(404, 'DEAL_NOT_FOUND', 'Deal not found.');
-    }
-    if (!options?.bypassActorCheck && neg.buyerUserId !== actorUserId) {
-      throw new PayoutGateError(403, 'FORBIDDEN', 'Only the buyer on this deal can accept the work.');
-    }
-
-    const agreement = neg.agreementId ? store.getAgreement(neg.agreementId) : undefined;
-    if (!agreement) {
-      throw new PayoutGateError(404, 'AGREEMENT_NOT_FOUND', 'Agreement record missing for this deal.');
-    }
-
-    // Gate 1: No open dispute / refund
-    if (agreement.workAcceptanceStatus === 'disputed') {
-      throw new PayoutGateError(409, 'DISPUTE_OPEN', 'Payout is blocked while a problem report or dispute is open on this deal.');
-    }
-    if (agreement.workAcceptanceStatus === 'refunded') {
-      throw new PayoutGateError(409, 'ALREADY_REFUNDED', 'This deal has already been refunded.');
-    }
-
-    // Gate 2: Deal must be Paid
-    const tx = store.getTransactionByAgreement(agreement.id);
-    if (!tx || tx.paymentStatus !== 'completed') {
-      throw new PayoutGateError(409, 'DEAL_NOT_PAID', 'Work cannot be accepted until buyer payment is completed.');
-    }
-
-    // Gate 3: Seller payout account must be Ready
-    const sellerUserId = agreement.sellerUserId || neg.sellerUserId;
-    if (!sellerUserId) {
-      throw new PayoutGateError(400, 'SELLER_NOT_LINKED', 'Seller user is not linked to this deal.');
-    }
-    const payoutAcct = store.getSellerPayoutAccount(sellerUserId);
-    if (!payoutAcct || payoutAcct.status !== 'ready' || !payoutAcct.paypalEmail) {
-      store.addNotification({
-        userId: sellerUserId,
-        title: 'Add where to send your earnings',
-        message: 'A buyer accepted your work, but your PayPal payout email is missing. Add it in Selling > Payments to release funds.',
-        type: 'payout_required',
-        linkUrl: '/app/transactions'
-      });
-      throw new PayoutGateError(
-        409,
-        'SELLER_PAYOUT_NOT_READY',
-        'Seller has not finished payout setup yet.',
-        'Seller must set a Ready PayPal email under Selling > Payments.'
-      );
-    }
-
-    // Idempotency gate: If payout already created & succeeded or processing, return existing payout cleanly
-    const existingPayout = store.getPayoutByDeal(dealId);
-    if (existingPayout && ['paid', 'simulated_paid', 'processing'].includes(existingPayout.status)) {
-      if (agreement.workAcceptanceStatus !== 'accepted') {
-        agreement.workAcceptanceStatus = 'accepted';
-        agreement.workAcceptedAt = new Date().toISOString();
-        store.saveAgreement(agreement);
+    // Atomic SQLite BEGIN IMMEDIATE lock prevents any concurrent payout + refund race condition!
+    const prep = store.runInImmediateTransaction(() => {
+      const neg = store.getNegotiation(dealId);
+      if (!neg) {
+        throw new PayoutGateError(404, 'DEAL_NOT_FOUND', 'Deal not found.');
       }
+      if (!options?.bypassActorCheck && neg.buyerUserId !== actorUserId) {
+        throw new PayoutGateError(403, 'FORBIDDEN', 'Only the buyer on this deal can accept the work.');
+      }
+
+      const agreement = neg.agreementId ? store.getAgreement(neg.agreementId) : undefined;
+      if (!agreement) {
+        throw new PayoutGateError(404, 'AGREEMENT_NOT_FOUND', 'Agreement record missing for this deal.');
+      }
+
+      if (neg.projectStatus === 'disputed' || agreement.workAcceptanceStatus === 'disputed') {
+        throw new PayoutGateError(409, 'DISPUTE_OPEN', 'Payout is blocked while a problem report or dispute is open on this deal.');
+      }
+      if (neg.projectStatus === 'refunded' || agreement.workAcceptanceStatus === 'refunded') {
+        throw new PayoutGateError(409, 'ALREADY_REFUNDED', 'This deal has already been refunded.');
+      }
+      if (neg.projectStatus === 'cancelled' || neg.projectStatus === 'declined' || neg.projectStatus === 'expired') {
+        throw new PayoutGateError(409, 'INVALID_PROJECT_STAGE', 'Cannot release payout on a cancelled or declined project.');
+      }
+      if (options?.requireDelivered && neg.projectStatus !== 'delivered' && neg.projectStatus !== 'accepted') {
+        throw new PayoutGateError(409, 'NOT_DELIVERED', 'Work must be marked delivered before the buyer can accept it.');
+      }
+
+      const tx = store.getTransactionByAgreement(agreement.id);
+      if (!tx || (tx.paymentStatus !== 'completed' && !options?.overridePayoutCents)) {
+        throw new PayoutGateError(409, 'DEAL_NOT_PAID', 'Work cannot be accepted until buyer payment is completed.');
+      }
+
+      const sellerUserId = agreement.sellerUserId || neg.sellerUserId;
+      if (!sellerUserId) {
+        throw new PayoutGateError(400, 'SELLER_NOT_LINKED', 'Seller user is not linked to this deal.');
+      }
+      const payoutAcct = store.getSellerPayoutAccount(sellerUserId);
+      if (!payoutAcct || payoutAcct.status !== 'ready' || !payoutAcct.paypalEmail) {
+        store.addNotification({
+          userId: sellerUserId,
+          title: 'Add where to send your earnings',
+          message: 'A buyer accepted your work, but your PayPal payout email is missing. Add it in Selling > Payments to release funds.',
+          type: 'payout_required',
+          linkUrl: '/app/transactions'
+        });
+        throw new PayoutGateError(
+          409,
+          'SELLER_PAYOUT_NOT_READY',
+          'Seller has not finished payout setup yet.',
+          'Seller must set a Ready PayPal email under Selling > Payments.'
+        );
+      }
+
+      const existingPayout = store.getPayoutByDeal(dealId);
+      if (existingPayout && ['paid', 'simulated_paid', 'processing', 'scheduled'].includes(existingPayout.status)) {
+        if (agreement.workAcceptanceStatus !== 'accepted') {
+          agreement.workAcceptanceStatus = 'accepted';
+          agreement.workAcceptedAt = new Date().toISOString();
+          store.saveAgreement(agreement);
+        }
+        return { alreadyHandled: true as const, payout: existingPayout };
+      }
+
+      const grossCents = tx.amountCents ?? agreement.finalPriceCents ?? dollarsToCents(tx.amount);
+      const { feeCents, payoutCents: computedPayoutCents } =
+        tx.sellerPayoutCents !== undefined && tx.platformFeeCents !== undefined
+          ? { feeCents: tx.platformFeeCents, payoutCents: tx.sellerPayoutCents }
+          : this.computeAmounts(grossCents);
+      const payoutCents = typeof options?.overridePayoutCents === 'number'
+        ? Math.max(0, Math.round(options.overridePayoutCents))
+        : computedPayoutCents;
+
+      const ledger = store.getLedgerEntriesForDeal(dealId);
+      const totalBuyerPaid = ledger.filter(e => e.type === 'buyer_paid').reduce((s, e) => s + e.amountCents, 0);
+      const totalRefunded = ledger.filter(e => e.type === 'refund').reduce((s, e) => s + e.amountCents, 0);
+      const totalPaidOut = ledger.filter(e => e.type === 'seller_payout').reduce((s, e) => s + e.amountCents, 0);
+      const totalHeld = ledger.filter(e => e.type === 'held_for_seller').reduce((s, e) => s + e.amountCents, 0);
+
+      // Strict Money Invariant: refunded + paid_out <= captured ALWAYS
+      if (totalRefunded + totalPaidOut + payoutCents > totalBuyerPaid) {
+        throw new PayoutGateError(
+          409,
+          'MONEY_INVARIANT_VIOLATION',
+          'Cannot release payout: funds have already been refunded or paid out.'
+        );
+      }
+      if (!options?.overridePayoutCents && (totalBuyerPaid - totalRefunded < grossCents || totalHeld < payoutCents)) {
+        throw new PayoutGateError(
+          409,
+          'LEDGER_MISMATCH',
+          `Platform ledger mismatch: paid ${totalBuyerPaid - totalRefunded}c, held ${totalHeld}c vs expected payout ${payoutCents}c.`
+        );
+      }
+
+      const now = new Date().toISOString();
+      const prevProjStatus = neg.projectStatus;
+      agreement.workAcceptanceStatus = 'accepted';
+      agreement.workAcceptedAt = now;
+      agreement.platformFeeCents = feeCents;
+      agreement.sellerPayoutCents = payoutCents;
+      store.saveAgreement(agreement);
+
+      neg.acceptedAt = now;
+      neg.projectStatus = 'accepted';
+      neg.updatedAt = now;
+      store.saveNegotiation(neg);
+
+      const provider: PayoutProvider =
+        options?.providerInstance ||
+        getActivePayoutProvider(
+          options?.providerOverride || (payoutAcct.provider === 'simulated' ? 'simulated' : undefined)
+        );
+
+      const payoutId = existingPayout?.id || `pay_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
+      const payout: PayoutRecord = existingPayout || {
+        id: payoutId,
+        dealId,
+        agreementId: agreement.id,
+        sellerUserId,
+        amountCents: payoutCents,
+        feeCents,
+        grossAmountCents: grossCents,
+        currency: agreement.currency || 'USD',
+        status: 'scheduled',
+        provider: provider.id === 'simulated' ? 'simulated' : 'paypal',
+        retryCount: 0,
+        createdAt: now,
+        updatedAt: now
+      };
+      payout.status = 'scheduled';
+      payout.amountCents = payoutCents;
+      store.savePayout(payout);
+
+      store.addProjectEvent({
+        dealId,
+        actorUserId: actorUserId || 'system',
+        actorRole: options?.bypassActorCheck ? 'system' : 'buyer',
+        fromStatus: prevProjStatus,
+        toStatus: 'accepted',
+        summary: options?.bypassActorCheck
+          ? 'Review window ended; project automatically accepted.'
+          : 'Buyer accepted delivered work.',
+        createdAt: now
+      });
+
       return {
-        payout: existingPayout,
+        alreadyHandled: false as const,
+        neg,
+        agreement,
+        tx,
+        sellerUserId,
+        payoutAcct,
+        payout,
+        provider,
+        payoutCents,
+        feeCents,
+        now
+      };
+    });
+
+    if (prep.alreadyHandled) {
+      return {
+        payout: prep.payout,
         ledger: store.getLedgerEntriesForDeal(dealId)
       };
     }
 
-    // Gate 4: Ledger verification in integer cents
-    const grossCents = tx.amountCents ?? agreement.finalPriceCents ?? dollarsToCents(tx.amount);
-    const { feeCents, payoutCents } =
-      tx.sellerPayoutCents !== undefined && tx.platformFeeCents !== undefined
-        ? { feeCents: tx.platformFeeCents, payoutCents: tx.sellerPayoutCents }
-        : this.computeAmounts(grossCents);
+    const { neg, tx, sellerUserId, payoutAcct, payout, provider, payoutCents, feeCents, now } = prep;
 
-    const ledger = store.getLedgerEntriesForDeal(dealId);
-    const totalBuyerPaid = ledger.filter(e => e.type === 'buyer_paid').reduce((s, e) => s + e.amountCents, 0);
-    const totalRefunded = ledger.filter(e => e.type === 'refund').reduce((s, e) => s + e.amountCents, 0);
-    const totalHeld = ledger.filter(e => e.type === 'held_for_seller').reduce((s, e) => s + e.amountCents, 0);
-
-    if (totalBuyerPaid - totalRefunded < grossCents || totalHeld < payoutCents) {
-      throw new PayoutGateError(
-        409,
-        'LEDGER_MISMATCH',
-        `Platform ledger mismatch: paid ${totalBuyerPaid - totalRefunded}c, held ${totalHeld}c vs expected payout ${payoutCents}c.`
-      );
+    if (payoutCents === 0) {
+      payout.status = 'paid';
+      store.savePayout(payout);
+      return { payout, ledger: store.getLedgerEntriesForDeal(dealId) };
     }
-
-    // Mark work accepted first
-    const now = new Date().toISOString();
-    agreement.workAcceptanceStatus = 'accepted';
-    agreement.workAcceptedAt = now;
-    agreement.platformFeeCents = feeCents;
-    agreement.sellerPayoutCents = payoutCents;
-    store.saveAgreement(agreement);
-
-    const provider: PayoutProvider =
-      options?.providerInstance ||
-      getActivePayoutProvider(
-        options?.providerOverride || (payoutAcct.provider === 'simulated' ? 'simulated' : undefined)
-      );
-
-    const payoutId = existingPayout?.id || `pay_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-    let payout: PayoutRecord = existingPayout || {
-      id: payoutId,
-      dealId,
-      agreementId: agreement.id,
-      sellerUserId,
-      amountCents: payoutCents,
-      feeCents,
-      grossAmountCents: grossCents,
-      currency: agreement.currency || 'USD',
-      status: 'scheduled',
-      provider: provider.id === 'simulated' ? 'simulated' : 'paypal',
-      retryCount: 0,
-      createdAt: now,
-      updatedAt: now
-    };
-    store.savePayout(payout);
 
     const res = await provider.createPayout({
       payoutId: payout.id,
       dealId,
-      sellerEmail: payoutAcct.paypalEmail,
+      sellerEmail: payoutAcct.paypalEmail!,
       amountCents: payoutCents,
       currency: payout.currency
     });
@@ -271,19 +338,36 @@ export class PayoutService {
       return { payout, ledger: store.getLedgerEntriesForDeal(dealId) };
     }
 
-    // Record ledger entry for seller_payout (once!)
-    const alreadyLoggedPayout = store.getLedgerEntriesForDeal(dealId).some(e => e.type === 'seller_payout');
-    if (!alreadyLoggedPayout) {
-      store.addLedgerEntry({
-        dealId,
-        type: 'seller_payout',
-        amountCents: payoutCents,
-        currency: payout.currency,
-        note: res.provider === 'simulated'
-          ? `Test payout (simulated) to ${payoutAcct.paypalEmail}`
-          : `PayPal payout batch ${res.providerBatchId || payout.id} to ${payoutAcct.paypalEmail}`
-      });
-    }
+    // Record ledger entry for seller_payout cleanly with unique idempotencyKey inside BEGIN IMMEDIATE
+    store.runInImmediateTransaction(() => {
+      const mState = store.getMoneyState(dealId);
+      if (mState.refundedCents + mState.paidOutCents + payoutCents <= mState.capturedCents) {
+        store.addLedgerEntry({
+          dealId,
+          type: 'seller_payout',
+          amountCents: payoutCents,
+          currency: payout.currency,
+          idempotencyKey: `payout_${dealId}`,
+          note: res.provider === 'simulated'
+            ? `Test payout (simulated) to ${payoutAcct.paypalEmail}`
+            : `PayPal payout batch ${res.providerBatchId || payout.id} to ${payoutAcct.paypalEmail}`
+        });
+      }
+      const n = store.getNegotiation(dealId);
+      if (n) {
+        n.projectStatus = res.status === 'processing' ? 'payout_released' : 'completed';
+        n.updatedAt = new Date().toISOString();
+        store.saveNegotiation(n);
+        store.addProjectEvent({
+          dealId,
+          actorUserId: 'system',
+          actorRole: 'system',
+          fromStatus: 'accepted',
+          toStatus: n.projectStatus,
+          summary: `Seller payout (${formatCents(payoutCents)}) released after ${formatCents(feeCents)} fee.`
+        });
+      }
+    });
 
     tx.sellerPayoutStatus = res.status;
     tx.sellerPayoutAt = now;
@@ -295,7 +379,7 @@ export class PayoutService {
       title: `Work accepted — ${formatCents(payoutCents)} ${res.provider === 'simulated' ? 'test payout' : 'sent'}`,
       message: `${sellerLabel} (${payoutAcct.paypalEmail}) after ${formatCents(feeCents)} service fee.`,
       type: 'payout_released',
-      linkUrl: `/app/deals/${dealId}`
+      linkUrl: `/app/projects/${dealId}`
     });
 
     store.logActivity({
@@ -311,6 +395,7 @@ export class PayoutService {
     });
 
     broadcastEvent('deal_updated', { negotiationId: dealId, status: 'payout_' + res.status });
+    broadcastEvent('project_updated', { dealId, projectStatus: neg.projectStatus });
 
     return {
       payout,
@@ -374,8 +459,14 @@ export class PayoutService {
           type: 'seller_payout',
           amountCents: payout.amountCents,
           currency: payout.currency,
+          idempotencyKey: `payout_${payout.dealId}`,
           note: `Retry succeeded (${res.provider}): batch ${res.providerBatchId || payout.id}`
         });
+      }
+      const neg = store.getNegotiation(payout.dealId);
+      if (neg && neg.projectStatus !== 'completed' && neg.projectStatus !== 'partially_refunded') {
+        neg.projectStatus = res.status === 'processing' ? 'payout_released' : 'completed';
+        store.saveNegotiation(neg);
       }
     }
 
@@ -428,6 +519,20 @@ export class PayoutService {
     agreement.workAcceptanceStatus = 'disputed';
     agreement.disputeReason = cleanReason;
     store.saveAgreement(agreement);
+
+    const prevStatus = neg.projectStatus;
+    neg.projectStatus = 'disputed';
+    neg.reviewDueAt = null;
+    store.saveNegotiation(neg);
+    store.addProjectEvent({
+      dealId,
+      actorUserId,
+      actorRole: actorUserId === neg.buyerUserId ? 'buyer' : 'seller',
+      fromStatus: prevStatus,
+      toStatus: 'disputed',
+      summary: 'Problem reported; funds held and auto-release paused.',
+      reason: cleanReason
+    });
 
     store.logActivity({
       userId: actorUserId,

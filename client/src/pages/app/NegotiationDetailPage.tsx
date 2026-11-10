@@ -24,6 +24,8 @@ import { Drawer } from '../../components/common/Drawer';
 import { Card } from '../../components/common/Card';
 import { RollingNumber } from '../../components/common/RollingNumber';
 import { PayPalCheckoutButton } from '../../components/negotiation/PayPalCheckoutButton';
+import { ProjectStagePanel } from '../../components/projects/ProjectStagePanel';
+import { ProjectEventsTimeline } from '../../components/projects/ProjectEventsTimeline';
 import { useAuth } from '../../context/AuthContext';
 import { formatMoney, formatDate, formatStatus, formatName } from '../../lib/present';
 import { EASE_STANDARD } from '../../lib/motion';
@@ -226,11 +228,27 @@ export const NegotiationDetailPage: React.FC = () => {
 
   const { buyerAgent, sellerAgent, request, agreement, currentProposal, decision, queueItem, proposals = [], messages = [] } = negData;
 
-  const isCompleted = negData.status === 'completed' || (negData.status as string) === 'COMPLETED';
-  const isAgreed = negData.status === 'agreement_reached' || isCompleted;
+  const projectStatus = negData.projectStatus || (
+    negData.transaction?.paymentStatus === 'refunded'
+      ? 'refunded'
+      : negData.transaction?.paymentStatus === 'completed'
+      ? 'paid_held'
+      : ['rejected', 'REJECTED', 'declined'].includes(String(negData.status))
+      ? 'declined'
+      : negData.status === 'agreement_reached'
+      ? 'agreed'
+      : 'negotiating'
+  );
+  const isPaid = Boolean(
+    negData.transaction?.paymentStatus === 'completed' ||
+    negData.transaction?.paymentStatus === 'refunded' ||
+    ['paid_held', 'in_progress', 'delivered', 'revision_requested', 'accepted', 'payout_released', 'completed', 'disputed', 'refunded', 'partially_refunded'].includes(projectStatus)
+  );
+  const isCompleted = isPaid;
+  const isAgreed = negData.status === 'agreement_reached' || projectStatus === 'agreed' || isPaid;
 
   const decisionStatus = decision?.status || (queueItem ? 'needs_review' : isAgreed ? 'auto_approved' : 'in_negotiation');
-  const needsHuman = decisionStatus === 'needs_review' || (queueItem && queueItem.status === 'pending');
+  const needsHuman = !isPaid && !['declined', 'cancelled', 'expired'].includes(projectStatus) && (decisionStatus === 'needs_review' || (queueItem && queueItem.status === 'pending'));
   const isApproved = decisionStatus === 'auto_approved' || decisionStatus === 'human_approved' || (agreement && agreement.humanApprovalStatus === 'approved');
   const isDeclined = decisionStatus === 'auto_declined' || decisionStatus === 'human_declined';
 
@@ -238,6 +256,7 @@ export const NegotiationDetailPage: React.FC = () => {
   const agreedOrLatestDays = agreement?.deliveryDays || currentProposal?.deliveryDays || request?.deadlineDays || 5;
 
   const isBuyer = negData.buyerUserId ? (user?.id === negData.buyerUserId) : isBuyerWorkspace;
+  const isSeller = negData.sellerUserId ? (user?.id === negData.sellerUserId) : !isBuyer;
   const counterpartName = isBuyer 
     ? (sellerAgent?.businessName ? formatName(sellerAgent.businessName) : 'Verified Seller')
     : (buyerAgent?.name ? formatName(buyerAgent.name) : 'Verified Buyer');
@@ -268,7 +287,7 @@ export const NegotiationDetailPage: React.FC = () => {
     actionState = 'waitingCounterparty';
   }
 
-  const statusRaw = formatStatus(negData.status);
+  const statusRaw = formatStatus(projectStatus || negData.status);
   const statusRoleMap: Record<string, StatusRole> = {
     handled: 'handled',
     needs_you: 'needsYou',
@@ -378,10 +397,10 @@ export const NegotiationDetailPage: React.FC = () => {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => navigate('/app/deals')}
+            onClick={() => navigate('/app/projects')}
             leftIcon={<ArrowLeft className="w-4 h-4" strokeWidth={2} />}
           >
-            Deals
+            Projects
           </Button>
 
           <div className="h-4 w-px bg-border-subtle" />
@@ -443,7 +462,7 @@ export const NegotiationDetailPage: React.FC = () => {
               <button
                 key={sNeg.id}
                 type="button"
-                onClick={() => navigate(`/app/deals/${sNeg.id}`)}
+                onClick={() => navigate(`/app/projects/${sNeg.id}`)}
                 className={`px-3 py-1.5 rounded-control text-secondary transition-colors cursor-pointer shrink-0 flex items-center gap-2 ${
                   isCurrent
                     ? 'bg-volt text-[#0C0E0D] font-bold'
@@ -569,6 +588,8 @@ export const NegotiationDetailPage: React.FC = () => {
               </Button>
             </form>
           </Card>
+
+          <ProjectEventsTimeline events={negData.events || []} />
         </div>
 
         {/* Right Column: Sticky SummaryPanel + DecisionCard / Payment */}
@@ -768,76 +789,6 @@ export const NegotiationDetailPage: React.FC = () => {
                   </p>
                 )}
 
-                {/* Buyer Work Acceptance & Problem Controls */}
-                {isBuyer && !isRefunded && workStatus !== 'accepted' && (
-                  <div className="flex flex-col gap-3 pt-1">
-                    {!showProblemForm ? (
-                      <div className="flex flex-col sm:flex-row gap-2.5">
-                        <Button
-                          type="button"
-                          variant="volt"
-                          size="md"
-                          className="flex-1"
-                          isLoading={acceptWorkMutation.isPending}
-                          onClick={() => acceptWorkMutation.mutate()}
-                          leftIcon={<Check className="w-4 h-4" strokeWidth={2.5} />}
-                        >
-                          Accept work
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="md"
-                          onClick={() => setShowProblemForm(true)}
-                        >
-                          Report a problem
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="p-3.5 rounded-control bg-raised border border-border-subtle flex flex-col gap-2.5">
-                        <label className="text-secondary font-medium text-text-primary">
-                          Describe the issue with deliverables
-                        </label>
-                        <textarea
-                          rows={2}
-                          value={problemReason}
-                          onChange={(e) => setProblemReason(e.target.value)}
-                          placeholder="e.g. Deliverables missing requested files…"
-                          className="w-full p-2.5 bg-surface border border-border-subtle rounded-control text-secondary text-text-primary focus:outline-none focus:border-volt resize-none"
-                        />
-                        <div className="flex justify-end gap-2">
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setShowProblemForm(false)}>
-                            Cancel
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="danger"
-                            size="sm"
-                            isLoading={reportProblemMutation.isPending}
-                            disabled={problemReason.trim().length < 5}
-                            onClick={() => reportProblemMutation.mutate(problemReason.trim())}
-                          >
-                            Submit problem
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {workStatus === 'disputed' && agreement?.id && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        isLoading={refundMutation.isPending}
-                        onClick={() => refundMutation.mutate(agreement.disputeReason || 'Disputed work refund')}
-                        leftIcon={<RotateCcw className="w-4 h-4" />}
-                      >
-                        Request PayPal refund
-                      </Button>
-                    )}
-                  </div>
-                )}
-
                 {/* Seller Retry Failed Payout */}
                 {!isBuyer && payoutStatus === 'failed' && payout?.id && (
                   <Button
@@ -860,6 +811,31 @@ export const NegotiationDetailPage: React.FC = () => {
               </Card>
             );
           })()}
+
+          {/* Stage-Aware Actions, Delivery Form, Revisions, Reject/Cancel & Disputes */}
+          <ProjectStagePanel
+            projectId={negData.id}
+            projectStatus={projectStatus}
+            isBuyer={isBuyer}
+            isSeller={isSeller}
+            counterpartName={counterpartName}
+            revisionsAllowed={negData.revisionsAllowed ?? agreement?.revisions ?? 1}
+            revisionsUsed={negData.revisionsUsed ?? 0}
+            dueAt={negData.dueAt}
+            reviewDueAt={negData.reviewDueAt}
+            isOverdue={Boolean(negData.dueAt && new Date(negData.dueAt).getTime() < Date.now() && ['paid_held', 'in_progress', 'revision_requested'].includes(projectStatus))}
+            rejectReason={negData.rejectReason}
+            sharedRejectNote={negData.sharedRejectNote}
+            deliveries={negData.deliveries || []}
+            cancellationRequest={negData.cancellationRequest}
+            dispute={negData.dispute}
+            capturedCents={negData.moneyState?.capturedCents ?? (negData.transaction?.amountCents || Math.round(agreedOrLatestPrice * 100))}
+            paidOutCents={negData.moneyState?.paidOutCents ?? 0}
+            refundedCents={negData.moneyState?.refundedCents ?? 0}
+            currentPrice={agreedOrLatestPrice}
+            currentDays={agreedOrLatestDays}
+            onRefresh={() => refetch()}
+          />
         </div>
       </div>
 
