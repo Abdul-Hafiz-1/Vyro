@@ -40,6 +40,21 @@ export interface ParsedCommerceRequest {
   deadlineDays: number;
   qualityRequirements: string;
   additionalConditions?: string;
+  mustHaves?: string[];
+  followUpQuestion?: string | null;
+  hasExplicitBudget?: boolean;
+  hasExplicitDeadline?: boolean;
+  isAiGenerated: boolean;
+}
+
+export interface DraftListingResult {
+  title: string;
+  category: string;
+  description: string;
+  deliverables: string[];
+  listPrice: number;
+  standardLowestPrice: number;
+  deliveryDays: number;
   isAiGenerated: boolean;
 }
 
@@ -61,25 +76,24 @@ export interface AgentDecisionResponse {
 export class GeminiService {
   private genAI: GoogleGenerativeAI | null = null;
   private currentApiKey: string = '';
-  private currentModel: string = 'gemini-2.0-flash';
+  private currentModel: string = 'gemini-2.5-flash';
   private currentApiVersion: string = 'v1beta';
   private discoveredModels: string[] = [
-    'gemini-2.0-flash',
-    'gemini-2.0-flash-lite',
-    'gemini-1.5-flash',
-    'gemini-1.5-flash-latest',
-    'gemini-2.5-flash-lite',
     'gemini-2.5-flash',
-    'gemini-1.5-pro'
+    'gemini-2.5-flash-lite',
+    'gemini-flash-latest',
+    'gemini-flash-lite-latest',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash'
   ];
   private lastStatus: AIStatusReport = {
     status: 'not_configured',
-    model: 'gemini-2.0-flash (v1beta)',
+    model: 'gemini-2.5-flash (v1beta)',
     isLive: false
   };
 
   constructor() {
-    this.currentModel = config.geminiModel || 'gemini-2.0-flash';
+    this.currentModel = config.geminiModel || 'gemini-2.5-flash';
     if (config.geminiApiKey) {
       this.initClient(config.geminiApiKey);
     }
@@ -185,14 +199,13 @@ export class GeminiService {
 
           // Priority order: models with highest free-tier quota first
           const priorityOrder = [
+            'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
+            'gemini-flash-latest',
+            'gemini-flash-lite-latest',
             'gemini-2.0-flash',
             'gemini-2.0-flash-lite',
-            'gemini-1.5-flash',
-            'gemini-1.5-flash-latest',
-            'gemini-2.5-flash-lite',
-            'gemini-2.5-flash',
-            'gemini-1.5-pro',
-            'gemini-2.5-pro'
+            'gemini-1.5-flash'
           ];
 
           const prioritized: string[] = [];
@@ -253,13 +266,11 @@ export class GeminiService {
 
       const candidateModels = Array.from(new Set([
         ...availableModels,
-        'gemini-2.0-flash',
-        'gemini-2.0-flash-lite',
-        'gemini-1.5-flash',
-        'gemini-1.5-flash-latest',
-        'gemini-2.5-flash-lite',
         'gemini-2.5-flash',
-        'gemini-1.5-pro'
+        'gemini-2.5-flash-lite',
+        'gemini-flash-latest',
+        'gemini-flash-lite-latest',
+        'gemini-2.0-flash'
       ]));
 
       let lastError: Error | null = null;
@@ -376,7 +387,7 @@ export class GeminiService {
   }
 
   // =========================================================================
-  // 1. Natural Language Procurement Parsing
+  // 1. Natural Language Procurement & Offering Parsing
   // =========================================================================
   public async parsePurchasingPrompt(rawPrompt: string): Promise<ParsedCommerceRequest> {
     if (this.genAI && this.currentApiKey) {
@@ -386,18 +397,21 @@ export class GeminiService {
 
         const systemPrompt = `You are the VYRO Procurement Intelligence Engine.
 Analyze the user's purchasing request and extract structured requirements into a strictly valid JSON object.
+If the user writes in Spanish, French, German, Chinese, or any other language, translate the title, deliverables, and mustHaves to English.
 
 User Request: "${rawPrompt}"
 
 JSON Schema:
 {
-  "title": "Short descriptive summary title",
-  "category": "Design" | "Development" | "Security" | "Marketing" | "Content" | "Other",
-  "requiredCapabilities": ["array", "of", "specific", "skills"],
+  "title": "Short descriptive summary title in English",
+  "category": "Design" | "Engineering" | "Security" | "Mobile" | "Writing" | "Other",
+  "requiredCapabilities": ["array", "of", "skills"],
   "deliverables": ["concrete", "deliverable", "items"],
-  "maxBudget": number (numeric value in USD, extract from prompt or default to 150),
-  "currency": "USD",
-  "deadlineDays": number (days to delivery, extract from prompt or default to 5),
+  "mustHaves": ["core", "mandatory", "requirements"],
+  "maxBudget": number | null (numeric USD value if mentioned, or null if NOT specified),
+  "deadlineDays": number | null (days to delivery if mentioned, or null if NOT specified),
+  "hasExplicitBudget": boolean (true ONLY if user explicitly stated a dollar amount/budget),
+  "hasExplicitDeadline": boolean (true ONLY if user explicitly stated a timeframe/days),
   "qualityRequirements": "Specific quality and responsiveness criteria",
   "additionalConditions": "Any extra conditions or notes"
 }
@@ -408,18 +422,40 @@ Do not hallucinate. Faithfully extract the user's intent.`;
         const text = result.response.text();
         const parsed = JSON.parse(text);
 
+        const hasBudget = Boolean(parsed.hasExplicitBudget && typeof parsed.maxBudget === 'number' && parsed.maxBudget > 0);
+        const hasDeadline = Boolean(parsed.hasExplicitDeadline && typeof parsed.deadlineDays === 'number' && parsed.deadlineDays > 0);
+
+        let followUpQuestion: string | null = null;
+        if (!hasBudget && !hasDeadline) {
+          followUpQuestion = "What is your target budget and deadline for this project (e.g. $180 within 5 days)?";
+        } else if (!hasBudget) {
+          followUpQuestion = "What is your target budget for this project (e.g. $150)?";
+        } else if (!hasDeadline) {
+          followUpQuestion = "How many days do you have for delivery (e.g. 5 days)?";
+        }
+
+        const deliverables = Array.isArray(parsed.deliverables) && parsed.deliverables.length > 0
+          ? parsed.deliverables
+          : ['Custom Project Deliverable', 'Source Files & Assets', 'Handover Verification'];
+
+        const mustHaves = Array.isArray(parsed.mustHaves) && parsed.mustHaves.length > 0
+          ? parsed.mustHaves
+          : deliverables.slice(0, 2);
+
         return {
           title: parsed.title || 'Digital Service Procurement',
           category: parsed.category || 'Design',
           requiredCapabilities: Array.isArray(parsed.requiredCapabilities) && parsed.requiredCapabilities.length > 0
             ? parsed.requiredCapabilities
-            : ['Landing Page Design', 'Responsive UI', 'Contact Form'],
-          deliverables: Array.isArray(parsed.deliverables) && parsed.deliverables.length > 0
-            ? parsed.deliverables
-            : ['Responsive Landing Page Layout', 'Interactive Pricing Section', 'Integrated Contact Form'],
-          maxBudget: typeof parsed.maxBudget === 'number' && parsed.maxBudget > 0 ? parsed.maxBudget : 150,
+            : ['Specialized Freelance Work'],
+          deliverables,
+          mustHaves,
+          maxBudget: hasBudget ? parsed.maxBudget : 150,
           currency: 'USD',
-          deadlineDays: typeof parsed.deadlineDays === 'number' && parsed.deadlineDays > 0 ? parsed.deadlineDays : 5,
+          deadlineDays: hasDeadline ? parsed.deadlineDays : 5,
+          hasExplicitBudget: hasBudget,
+          hasExplicitDeadline: hasDeadline,
+          followUpQuestion,
           qualityRequirements: parsed.qualityRequirements || 'Clean responsive layout, verified components, zero errors.',
           additionalConditions: parsed.additionalConditions || 'Source code and assets delivered upon settlement.',
           isAiGenerated: true
@@ -431,7 +467,90 @@ Do not hallucinate. Faithfully extract the user's intent.`;
 
     // Deterministic parser fallback
     const fallback = this.fallbackParse(rawPrompt);
-    return { ...fallback, isAiGenerated: false };
+    const hasBudget = Boolean(rawPrompt.match(/\$?\d+/));
+    const hasDeadline = Boolean(rawPrompt.match(/\d+\s*(day|week|hr|hour)/i));
+    let followUpQuestion: string | null = null;
+    if (!hasBudget && !hasDeadline) {
+      followUpQuestion = "What is your target budget and deadline for this project (e.g. $180 within 5 days)?";
+    } else if (!hasBudget) {
+      followUpQuestion = "What is your target budget for this project (e.g. $150)?";
+    } else if (!hasDeadline) {
+      followUpQuestion = "How many days do you have for delivery (e.g. 5 days)?";
+    }
+
+    return {
+      ...fallback,
+      mustHaves: fallback.deliverables.slice(0, 2),
+      hasExplicitBudget: hasBudget,
+      hasExplicitDeadline: hasDeadline,
+      followUpQuestion,
+      isAiGenerated: false
+    };
+  }
+
+  /**
+   * Turns a seller's plain text offering into a structured marketplace listing draft.
+   */
+  public async parseSellerOffering(rawPrompt: string): Promise<DraftListingResult> {
+    if (this.genAI && this.currentApiKey) {
+      try {
+        const model = this.getGenerativeModel({ responseMimeType: 'application/json' });
+        if (!model) throw new Error('Model unavailable');
+
+        const systemPrompt = `You are the VYRO Marketplace Listing Intelligence Engine.
+Analyze the seller's service description and draft a structured marketplace listing.
+If in another language, translate to English.
+
+Seller Input: "${rawPrompt}"
+
+JSON Schema:
+{
+  "title": "Clear, professional service title (e.g. Full-Stack Web App Development)",
+  "category": "Design" | "Engineering" | "Security" | "Mobile" | "Writing" | "Other",
+  "description": "Engaging, professional 2-sentence description of the service and value proposition",
+  "deliverables": ["3 to 5 concrete deliverables included in this service"],
+  "listPrice": number (suggested standard price in USD, e.g. 250),
+  "standardLowestPrice": number (reasonable floor price for trade-offs, ~75-85% of list price, e.g. 200),
+  "deliveryDays": number (realistic turnaround in business days, e.g. 5)
+}`;
+
+        const result = await model.generateContent(systemPrompt);
+        const text = result.response.text();
+        const parsed = JSON.parse(text);
+
+        const listPrice = typeof parsed.listPrice === 'number' && parsed.listPrice > 0 ? parsed.listPrice : 200;
+        const lowest = typeof parsed.standardLowestPrice === 'number' && parsed.standardLowestPrice > 0
+          ? parsed.standardLowestPrice
+          : Math.round(listPrice * 0.8);
+
+        return {
+          title: parsed.title || 'Professional Freelance Service',
+          category: parsed.category || 'Engineering',
+          description: parsed.description || 'Verified production-grade service tailored to your project requirements.',
+          deliverables: Array.isArray(parsed.deliverables) && parsed.deliverables.length > 0
+            ? parsed.deliverables
+            : ['Initial Consultation & Architecture', 'Core Implementation', 'QA & Delivery Handover'],
+          listPrice,
+          standardLowestPrice: lowest,
+          deliveryDays: typeof parsed.deliveryDays === 'number' && parsed.deliveryDays > 0 ? parsed.deliveryDays : 5,
+          isAiGenerated: true
+        };
+      } catch (err: any) {
+        console.warn('[GeminiService] AI seller draft parsing failed:', err.message);
+      }
+    }
+
+    // Fallback for seller listing
+    return {
+      title: rawPrompt.slice(0, 50).trim() || 'Custom Freelance Service',
+      category: 'Engineering',
+      description: rawPrompt || 'High quality commercial service with verified deliverables.',
+      deliverables: ['Core Deliverable', 'Documentation & Assets', 'Handover Verification'],
+      listPrice: 220,
+      standardLowestPrice: 175,
+      deliveryDays: 5,
+      isAiGenerated: false
+    };
   }
 
   // =========================================================================
@@ -856,17 +975,17 @@ Return strictly a JSON object:
       else if (lower.includes('two weeks') || lower.includes('2 weeks') || lower.includes('14 days')) deadline = 14;
     }
 
-    // 3. Category detection
-    let category = 'Design';
-    if (lower.includes('security') || lower.includes('audit') || lower.includes('pentest') || lower.includes('vulnerability') || lower.includes('owasp') || lower.includes('compliance')) {
+    // 3. Category detection with strict word boundaries
+    let category = 'Other';
+    if (/\b(security|audit|pentest|vulnerability|owasp|compliance)\b/i.test(lower)) {
       category = 'Security';
-    } else if (lower.includes('app') || lower.includes('code') || lower.includes('api') || lower.includes('backend') || lower.includes('frontend') || lower.includes('fullstack') || lower.includes('react') || lower.includes('python') || lower.includes('database') || lower.includes('bug') || lower.includes('feature')) {
-      category = 'Development';
-    } else if (lower.includes('seo') || lower.includes('marketing') || lower.includes('campaign') || lower.includes('ad') || lower.includes('traffic')) {
+    } else if (/\b(app|apps|code|coding|api|backend|frontend|fullstack|react|node|nodejs|python|database|postgres|sql|bug|feature|engineering|developer|software)\b/i.test(lower)) {
+      category = 'Engineering';
+    } else if (/\b(seo|marketing|campaign|ads?|traffic|growth)\b/i.test(lower)) {
       category = 'Marketing';
-    } else if (lower.includes('copy') || lower.includes('article') || lower.includes('blog') || lower.includes('writing') || lower.includes('content') || lower.includes('translation')) {
+    } else if (/\b(copy|copywriting|article|blog|writing|content|translation)\b/i.test(lower)) {
       category = 'Content';
-    } else if (lower.includes('design') || lower.includes('ui') || lower.includes('ux') || lower.includes('logo') || lower.includes('brand') || lower.includes('figma') || lower.includes('landing page')) {
+    } else if (/\b(design|ui|ux|logo|brand|branding|figma|landing\s+page)\b/i.test(lower)) {
       category = 'Design';
     }
 

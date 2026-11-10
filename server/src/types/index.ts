@@ -262,7 +262,7 @@ export interface CommerceRequest {
   additionalConditions?: string;
   targetLanguage?: string;
   maxCandidates?: number;
-  status: 'draft' | 'analyzed' | 'active' | 'negotiating' | 'agreement_reached' | 'completed' | 'cancelled';
+  status: 'draft' | 'analyzed' | 'active' | 'negotiating' | 'agreement_reached' | 'completed' | 'cancelled' | 'waiting_for_sellers';
   selectedSellerAgentIds?: string[];
   createdAt: string;
   updatedAt: string;

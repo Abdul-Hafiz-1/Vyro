@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { store } from '../db/store.js';
 import { Listing, ListingCategory, ListingType } from '../types/index.js';
 import { AuthenticatedRequest, authenticateUser, optionalAuthenticateUser } from '../middleware/rbac.js';
+import { geminiService } from '../services/ai/gemini.js';
 
 const router = Router();
 
@@ -78,6 +79,22 @@ router.get('/:id', optionalAuthenticateUser, (req: AuthenticatedRequest, res: Re
       sellerAgent
     }
   });
+});
+
+// POST /api/v1/listings/parse-draft
+// Analyzes seller natural language description and generates a drafted marketplace listing
+router.post('/parse-draft', async (req: AuthenticatedRequest, res: Response) => {
+  const { prompt } = req.body;
+  if (!prompt || typeof prompt !== 'string') {
+    return res.status(400).json({ success: false, error: 'A service offering description is required.' });
+  }
+
+  try {
+    const draft = await geminiService.parseSellerOffering(prompt);
+    return res.json({ success: true, data: draft });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to parse seller offering' });
+  }
 });
 
 // POST /api/v1/listings

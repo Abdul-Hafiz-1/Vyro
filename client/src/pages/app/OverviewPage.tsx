@@ -25,6 +25,7 @@ import { Card } from '../../components/common/Card';
 import { Chip } from '../../components/common/Chip';
 import { DecisionCard } from '../../components/common/DecisionCard';
 import { EmptyState } from '../../components/common/EmptyState';
+import { HomePromptBox } from '../../components/home/HomePromptBox';
 import { formatMoney, formatDate, formatName } from '../../lib/present';
 
 export const OverviewPage: React.FC = () => {
@@ -289,60 +290,8 @@ export const OverviewPage: React.FC = () => {
         {/* 4 Quick Action Cards */}
         {renderQuickActions()}
 
-        {/* Hero Prompt Card */}
-        <div className="bg-surface border border-border-subtle rounded-surface p-6 md:p-8 flex flex-col gap-6">
-          <div className="flex flex-col gap-1">
-            <h2 className="font-display font-semibold text-section text-text-primary">
-              {isSellerWorkspace ? 'What do you offer?' : 'What do you need done?'}
-            </h2>
-            <p className="text-secondary text-text-muted">
-              {isSellerWorkspace
-                ? 'Name the service, your standard price, and normal delivery window.'
-                : 'State the service and requirements in plain words.'}
-            </p>
-          </div>
-
-          <form onSubmit={handlePromptSubmit} className="flex flex-col gap-4">
-            <div className="relative">
-              <input
-                type="text"
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                placeholder={
-                  isSellerWorkspace
-                    ? 'e.g. Next.js SaaS architecture and production deployment'
-                    : 'e.g. Modern landing page in Figma for a Lisbon fintech'
-                }
-                className="w-full h-13 px-4 bg-raised border border-border-subtle rounded-control text-body text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-volt focus:ring-1 focus:ring-volt transition-colors"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-secondary text-text-muted">Examples:</span>
-                {(isSellerWorkspace
-                  ? ['UI/UX design sprints', 'Fullstack React development', 'API security testing']
-                  : ['Figma landing page for fintech', 'Smart contract security audit', 'Next.js migration']
-                ).map((chip) => (
-                  <Chip
-                    key={chip}
-                    label={chip}
-                    onClick={() => handleChipClick(chip)}
-                  />
-                ))}
-              </div>
-
-              <Button
-                type="submit"
-                variant="volt"
-                size="md"
-                icon={<ArrowRight className="w-4 h-4" />}
-              >
-                {isSellerWorkspace ? 'Create listing' : 'Find sellers'}
-              </Button>
-            </div>
-          </form>
-        </div>
+        {/* Hero Prompt Box (Interactive AI-driven brief & matching) */}
+        <HomePromptBox isSeller={isSellerWorkspace} />
       </div>
     );
   }
@@ -361,58 +310,8 @@ export const OverviewPage: React.FC = () => {
       {/* 4 Quick Action Cards */}
       {renderQuickActions()}
 
-      {/* Hero Prompt Panel (Lovable Reference) */}
-      <div className="bg-surface border border-border-subtle rounded-surface p-6 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-display font-semibold text-section text-text-primary">
-            {isSellerWorkspace ? 'What do you offer?' : 'What do you need done?'}
-          </h2>
-          <span className="text-secondary text-text-muted">
-            {isSellerWorkspace ? 'New listing' : 'New request'}
-          </span>
-        </div>
-
-        <form onSubmit={handlePromptSubmit} className="flex flex-col gap-3">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={promptText}
-                onChange={(e) => setPromptText(e.target.value)}
-                placeholder={
-                  isSellerWorkspace
-                    ? 'e.g. Backend API development in Node.js'
-                    : 'e.g. Brand identity and design system for Lisbon studio'
-                }
-                className="w-full h-11 px-3.5 bg-raised border border-border-subtle rounded-control text-body text-text-primary placeholder:text-text-muted/60 focus:outline-none focus:border-volt focus:ring-1 focus:ring-volt transition-colors"
-              />
-            </div>
-            <Button
-              type="submit"
-              variant="volt"
-              size="md"
-              icon={<ArrowRight className="w-4 h-4" />}
-              className="shrink-0"
-            >
-              {isSellerWorkspace ? 'List service' : 'Find talent'}
-            </Button>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-secondary text-text-muted">Suggested:</span>
-            {(isSellerWorkspace
-              ? ['Fullstack architecture', 'Security code audit', 'Mobile React Native app']
-              : ['Figma design system', 'Smart contract review', 'Next.js web application']
-            ).map((chip) => (
-              <Chip
-                key={chip}
-                label={chip}
-                onClick={() => handleChipClick(chip)}
-              />
-            ))}
-          </div>
-        </form>
-      </div>
+      {/* Hero Prompt Box (Interactive AI-driven brief & matching) */}
+      <HomePromptBox isSeller={isSellerWorkspace} />
 
       {/* SPLIT INBOX SECTION: LIST ON LEFT, DETAIL PANE ON RIGHT (LINEAR INBOX REFERENCE) */}
       {needsYou.length > 0 && (

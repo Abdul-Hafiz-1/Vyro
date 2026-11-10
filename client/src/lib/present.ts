@@ -191,6 +191,11 @@ const STATUS_MAP: Record<string, FormattedStatus> = {
     label: 'Cancelled',
     explanation: 'Deal was cancelled',
     role: 'declined'
+  },
+  waiting_for_sellers: {
+    label: 'Waiting for sellers',
+    explanation: 'No sellers offer this yet. Your agent will notify you when someone does.',
+    role: 'in_progress'
   }
 };
 

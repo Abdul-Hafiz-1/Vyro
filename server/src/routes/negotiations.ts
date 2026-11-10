@@ -165,33 +165,63 @@ router.post('/multi-agent', async (req: AuthenticatedRequest, res: Response) => 
 
   let sellerIds = parsed.data.sellerIds || parsed.data.sellerAgentIds;
   if (!sellerIds || sellerIds.length === 0) {
-    // Autonomous Matchmaking: Resolve sellers from marketplace listings matching category/specs
+    // Autonomous Matchmaking: Resolve sellers strictly from other users' active marketplace listings
     const userAgents = store.getAgents({ ownerId: user.id });
     const userAgentIds = userAgents.map(a => a.id);
 
     const candidateListings = store.getListings({
-      category: request.category,
       status: 'active'
     });
 
-    const matchedSellerAgentIds = candidateListings
+    // Exclude own listings (strict counterparty isolation)
+    const otherUserListings = candidateListings.filter(l => {
+      const isOwn = (l.sellerUserId && l.sellerUserId === user.id) || (l.sellerId && l.sellerId === user.id);
+      return !isOwn;
+    });
+
+    // Match by category or keywords in title / description / tags (excluding common stop-words)
+    const STOP_WORDS = new Set([
+      'the', 'and', 'with', 'for', 'from', 'this', 'that', 'your', 'have', 'need', 'want',
+      'some', 'will', 'each', 'into', 'over', 'more', 'also', 'about', 'like', 'than',
+      'them', 'then', 'when', 'what', 'where', 'which', 'who', 'how', 'why', 'can', 'could',
+      'would', 'should', 'all', 'any', 'both', 'each', 'few', 'most', 'other', 'such',
+      'only', 'own', 'same', 'too', 'very', 'just', 'dollars', 'dollar', 'days', 'day', 'full'
+    ]);
+
+    const reqCategory = (request.category || '').toLowerCase();
+    const reqTerms = (request.title || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter(t => t.length > 3 && !STOP_WORDS.has(t));
+
+    const matchedListings = otherUserListings.filter(l => {
+      const listCat = (l.category || '').toLowerCase();
+      if (listCat === reqCategory && reqCategory !== 'other') return true;
+      const listText = `${l.title} ${l.description} ${(l.tags || []).join(' ')}`.toLowerCase();
+      return reqTerms.some(term => listText.includes(term));
+    });
+
+    const matchedSellerAgentIds = matchedListings
       .map(l => l.sellerAgentId)
       .filter((id): id is string => Boolean(id) && !userAgentIds.includes(id));
 
     sellerIds = Array.from(new Set(matchedSellerAgentIds));
-
-    // Fallback: If no direct category match, search all verified third-party seller agents
-    if (sellerIds.length === 0) {
-      const allSellerAgents = store.getAgents({ type: 'seller' })
-        .filter(a => a.ownerId !== user.id && !userAgentIds.includes(a.id));
-      sellerIds = allSellerAgents.slice(0, 3).map(a => a.id);
-    }
   }
 
   if (!sellerIds || sellerIds.length === 0) {
-    return res.status(404).json({
-      success: false,
-      error: 'No available seller agents found in the marketplace. Create a seller listing or wait for suppliers to join.'
+    request.status = 'waiting_for_sellers';
+    request.updatedAt = new Date().toISOString();
+    store.saveRequest(request);
+    return res.json({
+      success: true,
+      matched: false,
+      message: "No one offers this yet. I'll keep looking and tell you when someone does.",
+      data: {
+        negotiations: [],
+        evaluation: null,
+        request
+      }
     });
   }
 

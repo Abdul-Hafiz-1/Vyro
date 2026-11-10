@@ -153,6 +153,7 @@ export const api = {
   getMyListings: () => fetchJson<Listing[]>(`${API_BASE}/listings/my`),
   getListing: (id: string) => fetchJson<Listing & { seller?: User; sellerAgent?: Agent }>(`${API_BASE}/listings/${id}`),
   createListing: (data: Partial<Listing>) => fetchJson<Listing>(`${API_BASE}/listings`, { method: 'POST', body: JSON.stringify(data) }),
+  parseSellerOffering: (prompt: string) => fetchJson<any>(`${API_BASE}/listings/parse-draft`, { method: 'POST', body: JSON.stringify({ prompt }) }),
   updateListing: (id: string, data: Partial<Listing>) => fetchJson<Listing>(`${API_BASE}/listings/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
   deleteListing: (id: string) => fetchJson<{ message: string }>(`${API_BASE}/listings/${id}`, { method: 'DELETE' }),
 
