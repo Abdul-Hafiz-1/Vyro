@@ -19,6 +19,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Runtime Playwright videos & scratch captures
+audit/pass3/video/
+screenshots/
+screenshots_pass3/
+capture_*.js
+
 # Editor & OS
 .DS_Store
 Thumbs.db

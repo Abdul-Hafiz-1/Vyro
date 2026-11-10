@@ -69,6 +69,8 @@ The interface avoids raw data: every status, price, and decision is written in p
 
 ### Installation & Run
 ```bash
+git clone https://github.com/Abdul-Hafiz-1/Vyro.git
+cd Vyro
 npm install
 npm --prefix client install
 npm --prefix server install
