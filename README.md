@@ -88,7 +88,7 @@ VYRO separates responsibilities into two distinct workspaces (switched via the a
 ### Installation
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/vyro.git
+git clone https://github.com/Abdul-Hafiz-1/Vyro.git
 cd vyro
 
 # Install dependencies
