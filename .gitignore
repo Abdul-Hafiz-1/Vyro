@@ -6,21 +6,33 @@ node_modules
 dist
 build
 .tmp
+.wrangler
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 *.local
 
+# Databases & local uploads
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+server/uploads/
+
 # Logs
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Runtime Playwright videos & scratch captures
-audit/pass3/video/
+# Test artifacts, scratch captures & reference materials
+/references
+references/
+audit/pass*/video/
 screenshots/
 screenshots_pass3/
 capture_*.js
@@ -31,6 +43,7 @@ Thumbs.db
 .vscode
 .idea
 *.suo
+.neon
 *.ntvs*
 *.njsproj
 *.sln

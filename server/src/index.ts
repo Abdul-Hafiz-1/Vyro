@@ -24,6 +24,7 @@ import aiRoutes from './routes/ai.js';
 import homeRoutes from './routes/home.js';
 import eventsRoutes from './routes/events.js';
 import projectsRoutes from './routes/projects.js';
+import { createRateLimiter } from './middleware/rateLimit.js';
 import { seedDemoAccounts } from './db/seedDemo.js';
 import { reviewWindowWorker } from './services/projects/reviewWindowWorker.js';
 
@@ -56,8 +57,13 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Mount versioned API routes
-app.use('/api/v1/auth', authRoutes);
+// Mount versioned API routes with per-IP rate limiting on auth, AI, and payment endpoints
+const defaultRateMax = Math.max(5, parseInt(process.env.RATE_LIMIT_MAX || '60', 10));
+const authLimiter = createRateLimiter({ windowMs: 60_000, max: defaultRateMax, label: 'auth' });
+const aiLimiter = createRateLimiter({ windowMs: 60_000, max: defaultRateMax, label: 'AI' });
+const paymentLimiter = createRateLimiter({ windowMs: 60_000, max: defaultRateMax, label: 'payment' });
+
+app.use('/api/v1/auth', authLimiter, authRoutes);
 app.use('/api/v1/listings', listingRoutes);
 app.use('/api/v1/memory', memoryRoutes);
 app.use('/api/v1/notifications', notificationRoutes);
@@ -66,13 +72,13 @@ app.use('/api/v1/network', agentRoutes); // Alias for network explorer
 app.use('/api/v1/requests', requestRoutes);
 app.use('/api/v1/negotiations', negotiationRoutes);
 app.use('/api/v1/agreements', agreementRoutes);
-app.use('/api/v1/payments', paymentRoutes);
-app.use('/api/v1/payouts', payoutRoutes);
+app.use('/api/v1/payments', paymentLimiter, paymentRoutes);
+app.use('/api/v1/payouts', paymentLimiter, payoutRoutes);
 app.use('/api/v1/transactions', transactionRoutes);
 app.use('/api/v1/analytics', analyticsRoutes);
 app.use('/api/v1/activity', activityRoutes);
 app.use('/api/v1/system', systemRoutes);
-app.use('/api/v1/ai', aiRoutes);
+app.use('/api/v1/ai', aiLimiter, aiRoutes);
 app.use('/api/v1/home', homeRoutes);
 app.use('/api/v1/rules', homeRoutes);
 app.use('/api/v1/events', eventsRoutes);
