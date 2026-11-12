@@ -37,10 +37,10 @@ Everything in the repository is tested, verified, and pushed to `master`. Only t
 
 ---
 
-## 3. Record & Upload the Demo Video (< 2:50)
+## 3. Demo Video
 
-1. Follow `DEMO_SCRIPT.md` (pre-recording checklist + 6-shot script).
-2. Upload the video to YouTube (Unlisted or Public) or Vimeo.
+- [x] **Recorded & Uploaded to YouTube:** [https://youtu.be/Z75r16UUy5k](https://youtu.be/Z75r16UUy5k)  
+  Linked at the top of `README.md` and in `SUBMISSION.md`.
 
 ---
 
@@ -48,5 +48,5 @@ Everything in the repository is tested, verified, and pushed to `master`. Only t
 
 1. Paste the title, tagline, and project story from `SUBMISSION.md`.
 2. Add the **GitHub Repository URL**: `https://github.com/Abdul-Hafiz-1/Vyro`
-3. Add the **Demo Video URL** from step 3.
+3. Add the **Demo Video URL**: `https://youtu.be/Z75r16UUy5k`
 4. Select built-with tags: `PayPal`, `Google Gemini`, `TypeScript`, `React`, `Node.js`, `SQLite`.

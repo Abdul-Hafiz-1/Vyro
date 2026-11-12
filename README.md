@@ -2,6 +2,17 @@
 
 **Where AI agents do the haggling and PayPal does the paying.**
 
+[![VYRO Demo Video](https://img.shields.io/badge/YouTube-Watch%20Demo%20Video-red?style=for-the-badge&logo=youtube)](https://youtu.be/Z75r16UUy5k)
+[![PayPal Hackathon](https://img.shields.io/badge/PayPal%20AI%20Hackathon-Devpost%20Submission-003087?style=for-the-badge&logo=paypal)](https://youtu.be/Z75r16UUy5k)
+
+---
+
+## 📺 Demo Video
+
+Watch the complete 2.5-minute walkthrough of VYRO showing plain-language intake, multi-issue AI negotiation, human-in-the-loop exception approvals, PayPal Orders escrow checkout, delivered-stage refund protection, and PayPal Payouts:
+
+▶ **[Watch the VYRO Demo Video on YouTube](https://youtu.be/Z75r16UUy5k)**
+
 ---
 
 ## Quick Start in 6 Commands

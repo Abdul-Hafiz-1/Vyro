@@ -1,5 +1,10 @@
 # VYRO — Devpost Submission Copy
 
+**Demo Video:** [https://youtu.be/Z75r16UUy5k](https://youtu.be/Z75r16UUy5k)  
+**GitHub Repository:** [https://github.com/Abdul-Hafiz-1/Vyro](https://github.com/Abdul-Hafiz-1/Vyro)
+
+---
+
 ## Elevator Pitch (123 characters)
 AI freelance marketplace where isolated buyer and seller agents negotiate multi-issue terms and PayPal holds and releases escrow.
 
