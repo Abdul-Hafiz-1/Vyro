@@ -1,0 +1,17 @@
+# Verification of Claims (`README.md` & `SUBMISSION.md`)
+
+| Claim | Status | Evidence |
+| --- | --- | --- |
+| Sellers describe services in plain words and Gemini drafts structured listings | **VERIFIED** | `server/src/services/ai/gemini.ts` (`parseSellerOffering`), `POST /api/v1/listings/parse-draft`, Playwright `01_seller_draft.png` / `02_seller_published.png`. |
+| Buyers type plain words; AI builds brief and asks at most one short follow-up if budget or deadline is missing | **VERIFIED** | `server/src/services/ai/gemini.ts` (`parsePurchasingPrompt`), Playwright `05_buyer_followup_question.png`. |
+| Independent buyer/seller agents negotiate price, delivery days, and revisions in integer cents with private limits isolated on server | **VERIFIED** | `server/src/services/negotiation/algorithm.ts`, `orchestrator.ts`, `multi_user_isolation.test.ts` Test 4 (privacy leak canary), `negotiation_properties.test.ts` (120 property pairs). |
+| Deals exceeding comfort threshold / auto-limit route to "Needs your OK" with plain-language `"Why?"` explanation | **VERIFIED** | `server/src/services/decision/engine.ts` (`evaluateProposal`), `privacy_and_decision.test.ts`, `OverviewPage.tsx`. |
+| PayPal Sandbox Orders API v2 (`create` and `capture`) + JS SDK checkout | **VERIFIED** | `server/src/services/paypal/paypalClient.ts` (`/v2/checkout/orders`, `/capture`), `PayPalCheckoutButton.tsx`, `paypal_sandbox.test.ts` (8 tests). |
+| Real buyer PayPal popup approval & capture tested manually in browser with Sandbox Personal account | **[CONFIRM]** | Code and server capture path verified in tests; live third-party PayPal login popup requires interactive Sandbox Personal browser test per tester environment. |
+| Real PayPal Payouts API v1 in Sandbox, with simulated fallback refused in `NODE_ENV=production` | **VERIFIED** | `server/src/services/paypal/payoutProvider.ts` (`/v1/payments/payouts`), `payouts_and_ledger.test.ts` Test 3, `production_security.test.ts` Test 2. |
+| Stage-locked refund rules (`paid_held` instant refund; `in_progress` mutual request; `delivered` blocks buyer self-refund) | **VERIFIED** | `server/src/services/paypal/paypalClient.ts` (`refundPayment`), `projects_lifecycle_and_safety.test.ts` Tests 2–3, `verify_projects_reject_refunds_e2e.cjs` Scenarios 3–4. |
+| Concurrent `accept-work` and `refund` locked by SQLite `BEGIN IMMEDIATE` so `refunded + paid_out <= captured` | **VERIFIED** | `server/src/db/store.ts` (`runInImmediateTransaction`), `projects_lifecycle_and_safety.test.ts` Test 3 (`Promise.allSettled` race test). |
+| Delivery files stored outside web root (`server/uploads`) with SHA-256 hash; `404` for non-parties | **VERIFIED** | `server/src/services/projects/fileEvidence.ts`, `server/src/routes/projects.ts`, `projects_lifecycle_and_safety.test.ts` Test 4. |
+| 72-hour review window auto-release (`REVIEW_WINDOW_HOURS`) & 30-day dispute abuse flag (`> 2` losses) | **VERIFIED** | `server/src/services/projects/reviewWindowWorker.ts`, `disputeService.ts`, `projects_lifecycle_and_safety.test.ts` Tests 5–6. |
+| `NODE_ENV=production` unmounts `/api/v1/payments/mock-settle` (`404`), hides stack traces, and enforces rate limits (`429`) | **VERIFIED** | `server/src/routes/payments.ts`, `server/src/middleware/rateLimit.ts`, `server/test/production_security.test.ts` Tests 1–4. |
+| Leaving `GEMINI_API_KEY` blank falls back to deterministic parser/negotiation without crashing | **VERIFIED** | `server/src/services/ai/gemini.ts` deterministic fallbacks when key is absent. |

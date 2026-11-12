@@ -1,125 +1,239 @@
-# VYRO — AI-Driven Freelance Marketplace
+# VYRO
 
-VYRO is an AI-driven freelance marketplace where AI agents do the haggling and PayPal does the paying, and a human only steps in when it matters.
-
-![Server Build](https://img.shields.io/badge/Server%20%26%20Client-TypeScript%20Build%20Passing-brightgreen?style=flat-square)
-![Backend Tests](https://img.shields.io/badge/Backend%20Tests-41%2F41%20Passing-brightgreen?style=flat-square)
-![Database](https://img.shields.io/badge/Database-SQLite%20(Single%20Source)-003B57?style=flat-square)
-![Payments](https://img.shields.io/badge/Payments-PayPal%20Sandbox%20Orders%20%26%20Payouts-0070BA?style=flat-square)
+**Where AI agents do the haggling and PayPal does the paying.**
 
 ---
 
-## Judge Quick Start (5-Minute Walkthrough)
+## Quick Start in 6 Commands
 
-- **Hosted URL:** `[CONFIRM — deploy URL not yet set; local preview runs at http://localhost:5173]`
-- **Demo Buyer Login:** `demo.buyer@example.com` / `password123`
-- **Demo Seller Login:** `demo.seller@example.com` / `password123`
-- **PayPal Sandbox Personal Buyer Login (for checkout popup):** `[CONFIRM — enter a Sandbox Personal buyer account email & password from PayPal Developer Dashboard > Testing Tools > Sandbox Accounts]`
+```bash
+# 1. Clone and enter the repository
+git clone https://github.com/Abdul-Hafiz-1/Vyro.git && cd Vyro
 
-### 5-Minute Path
-1. **Seller setup (1 min):** Sign in as `demo.seller@example.com`, switch to **Selling**, open **Payments** (`/app/transactions`), and confirm the payout PayPal email (`Ready` status). Switch to **Today** (`/app`) and type what you offer to AI-draft and publish a service listing.
-2. **Buyer request & negotiation (1.5 min):** In a private window or after signing in as `demo.buyer@example.com`, type what you need with a budget and deadline on **Today** (e.g., *"Need a 1-page UI audit, budget $140, 5 days"*), review AI's *"Here's what I understood"* summary, and click **Start**.
-3. **Human-in-the-loop exception (0.5 min):** Inspect the negotiation timeline (`/app/deals/:id`) showing same-side price concessions, `"Why?"` explanations, and `"Needs your OK"` cards when an offer sits in your stretch zone. Click **Approve** (with a 10-second Undo window).
-4. **PayPal checkout & work acceptance (1.5 min):** Click the **PayPal** button in the Summary Panel and approve in the PayPal Sandbox popup using your Sandbox Personal buyer login. Once captured (`Paid, held`), click **Accept work** to release the seller payout (`agreed price - 5% service fee`) via PayPal Payouts API in sandbox.
-5. **Itemized receipts & diagnostics (0.5 min):** Open `/app/transactions/:id` to view the itemized price, 5% service fee, and seller payout, and check **Settings > Advanced > Payments status** for live sandbox diagnostics.
+# 2. Install root, server, and client dependencies
+npm run install:all
 
----
+# 3. Create your local environment file (Windows PowerShell: copy .env.example .env)
+cp .env.example .env
 
-## 1. Product Model & How It Works
+# 4. Open .env and fill your PayPal Sandbox keys (and optional free Gemini API key)
 
-Sellers describe a service in plain words and an AI drafts the listing (title, deliverables, list price, standard lowest price, turnaround days). Buyers type what they need, with a budget and a deadline.
+# 5. Initialize SQLite tables and seed demo accounts (demo.buyer@example.com / demo.seller@example.com)
+npm run seed:demo
 
-From that point, two independent AI agents (one for each side) negotiate for real: price, delivery time, and scope move in steps, with trades like `"$138 if we use 7 days."` Each side's private limits stay strictly private on the server. Budgets are flexible by design (`Stick to budget`, `Flexible +10%`, `Very flexible +20%`), so a deal slightly above a buyer's comfortable budget isn't thrown away—it routes to the human as a **"Needs your OK"** decision with a plain-language reason and a suggested counter.
-
-Every outcome passes server-enforced rules:
-- **Auto-approve** within the user's pre-authorized limits (price within limits, verified seller, confidence threshold, auto-approval ceiling, daily spend cap).
-- **Auto-decline** with a plain-language explanation and an option to appeal and reopen.
-- **Escalate** to the **Needs you** decision inbox for one-click Approve, Counter, or Decline.
-
-Once a deal is approved, the buyer pays through PayPal (**Orders API**: create, approve, capture), the platform holds the seller's share, and releases it when the buyer accepts the work through **real PayPal Payouts API calls in the sandbox, with a clearly labeled simulated fallback used only in test mode and refused when `NODE_ENV=production`**. Refunds are supported through PayPal's refund API before the seller payout is released.
-
-The interface avoids raw data: every status, price, and decision is written in plain language, with a `"Why?"` explanation for each automated decision.
+# 6. Start both backend (http://localhost:4000) and frontend (http://localhost:5173)
+npm run dev
+```
 
 ---
 
-## 2. Safety & Architecture
+## 1. The Story
 
-- **Server-Enforced Spending Limits & Daily Cap:** Client requests have zero financial authority. Orders, captures, daily caps, auto-approval limits, and seller payout gates are verified in SQLite on the server (`server/src/services/decision/engine.ts`, `server/src/services/paypal/paypalClient.ts`, `server/src/services/paypal/payoutService.ts`).
-- **Hard Limit Protection:** The AI negotiation guardrail wrapper and algorithm enforce non-crossing offers, monotonic concessions, and hard floor/cap ceilings (`server/src/services/negotiation/algorithm.ts`). Nothing binds above a buyer's hard limit without human authorization.
-- **Privacy & Prompt-Injection Containment:** Buyer ceilings and seller floors are stripped from counterparty prompts and API payloads (`server/src/routes/negotiations.ts`). Counterparty text is wrapped as untrusted data inside `<<<UNTRUSTED_COUNTERPARTY_MESSAGE>>>` delimiters (`server/src/services/ai/gemini.ts`).
-- **Strict Test-Only Endpoint Gating:** `/api/v1/payments/mock-settle` is registered **only** when `NODE_ENV` is `test` or `development` **and** `PAYMENT_PROVIDER=mock`. When `NODE_ENV=production` (or when `PAYMENT_PROVIDER` is not `mock`), `/api/v1/payments/mock-settle` is not mounted and returns `404`, and mock/simulated payout or payment providers throw an error if selected in production.
-- **PayPal Sandbox Scope:** All PayPal calls target `https://api-m.sandbox.paypal.com` (`PAYPAL_ENV=sandbox`). Startup validation aborts boot if live credentials are detected alongside `PAYPAL_ENV=sandbox`.
+Beginner freelancers rarely get the recognition they deserve. Established profiles with long review histories win the work, while newcomers spend their time writing proposals and haggling over price. Buyers have the opposite problem: they often need something very specific, and finding the right person means scrolling through listings and messaging back and forth. In the age of AI, that back and forth shouldn't be a person's job.
+
+VYRO is a freelance marketplace where AI agents do the matching and negotiating, PayPal handles the money, and humans step in only when a decision really needs one.
 
 ---
 
-## 3. Workspaces, Navigation & Onboarding
+## 2. What It Does
 
-- **Buying Workspace:** `Today · Requests · Deals · Marketplace · Payments`
-- **Selling Workspace:** `Today · Listings · Deals · Payments`
-- **5-Screen Onboarding (`/onboarding`):** Skippable, reopenable from **Help** (`/app/help`), persisted per account (`onboardingCompleted`), covering Welcome, Role (`Buy services` / `Sell services` / `Both`), an interactive 7-step `"Sample, not real"` walkthrough, plain-language safety limits, and role-based payments setup.
-- **Appearance & Accessibility:** Dark default + light mode toggle, System/Full/Reduced motion preference in **Settings > Appearance** honoring `prefers-reduced-motion`.
+- **Plain-Language Intake for Buyers and Sellers:** Sellers describe what they offer in plain words and Gemini drafts a structured listing (title, price, floor, turnaround, deliverables). Buyers type what they need with a budget and deadline, and VYRO structures a brief and asks at most one short follow-up if budget or deadline is missing.
+- **Autonomous Multi-Issue Negotiation:** Separate buyer and seller agents negotiate price, turnaround days, and included revisions across structured rounds while keeping each side's private limits isolated on the server.
+- **Human-in-the-Loop Exception Queue (`Needs your OK`):** Deals within a user's rules can auto-approve; deals that exceed the comfort budget (`Flexible +10%` or `Very flexible +20%`), exceed the auto-approval threshold, or exceed daily spend caps pause for one-click **Approve**, **Counter**, or **Decline** with plain-language `"Why?"` explanations.
+- **Projects Lifecycle & Stage-Locked Refund Shield:** Every agreed project tracks through `agreed` → `paid_held` → `in_progress` → `delivered` → `accepted` → `payout_released` → `completed`. Buyers can cancel for an instant full refund before work starts (`paid_held`), must request mutual seller approval once work is `in_progress`, and cannot self-refund after `delivered` (only **Accept work**, **Request changes**, or **Report a problem**).
+- **72-Hour Review Window & Dispute Mediation:** Delivered files are stored outside the public web root with SHA-256 checksums. If a buyer does not respond within `REVIEW_WINDOW_HOURS` (default `72h`), a restart-safe worker auto-accepts and releases seller payout. Open disputes freeze escrow and let a mediator **Release**, **Refund**, or **Split** funds by percentage.
+
+### Verified UI Screenshots
+
+| Seller Projects Panel | Delivered Project (Self-Refund Locked) |
+| --- | --- |
+| ![Seller Projects Panel](audit/pass4/07_seller_projects_panel.png) | ![Delivered Project No Refund](audit/pass4/04_buyer_delivered_no_refund.png) |
+
+| Neutral Decline Privacy | Dispute Split Resolution |
+| --- | --- |
+| ![Buyer Neutral Decline](audit/pass4/01_buyer_neutral_decline.png) | ![Dispute Resolved Split](audit/pass4/06_dispute_resolved_split.png) |
 
 ---
 
-## 4. Local Setup & PayPal Sandbox Configuration
+## 3. How It Works, Step by Step
+
+1. **Seller Listing & Rules:** Seller signs in, sets their PayPal payout email under **Payments**, configures optional intake rules (minimum budget, excluded categories, max concurrent projects), and publishes a listing.
+2. **Buyer Request & Brief:** Buyer types what they need on **Today** or browses **Marketplace** and sends a direct inquiry or multi-agent request.
+3. **AI Negotiation:** Buyer and seller agents exchange offers in integer cents (`server/src/services/negotiation/algorithm.ts`), bounded deterministically so buyer offers never exceed seller asks and concessions remain monotonic.
+4. **Decision Rules:** `DecisionEngine.evaluateProposal` evaluates price, seller verification, auto-approval limit, daily cap, pause state, and 30-day dispute history:
+   - **Auto-Approve:** Within comfort budget, auto-limit, daily cap, verified seller, and no flags.
+   - **Needs Review:** In stretch zone, over auto-limit, automation paused, or flagged dispute history (`> 2` losses in 30 days on orders `> $100`).
+   - **Auto-Decline:** Prohibited category, extreme deviation (`> 1.5x` max budget), or prompt-injection red flag (with **Appeal** option).
+5. **PayPal Checkout & Hold:** Buyer pays via PayPal Sandbox Orders API (`create` → popup `approve` → `capture`). Funds settle to the platform Sandbox merchant account (`paid_held`), recording `buyer_paid`, `held_for_seller`, and `platform_fee` (`5%` default) in `ledger_entries`.
+6. **Work, Delivery & Payout:** Seller clicks **Start work** (`in_progress`), uploads deliverables (`delivered`), and once buyer clicks **Accept work** (or the `72h` review window elapses), VYRO dispatches net earnings via PayPal Payouts API (`payout_released` → `completed`).
+7. **Stage-Aware Refunds:** Instant full refund in `paid_held`; mutual cancellation decision in `in_progress`; disabled for buyers in `delivered` / `accepted` / `payout_released` to protect completed deliveries.
+
+---
+
+## 4. Architecture
+
+```mermaid
+flowchart LR
+    U["Browser (React + Vite + PayPal JS SDK)"] -->|/api/v1/*| API["Express API + Rate Limiter + RBAC"]
+    API --> AI["Gemini Service + Deterministic Guardrails"]
+    API --> NEG["Multi-Issue Negotiation & Decision Engine"]
+    API --> PSM["Project State Machine (BEGIN IMMEDIATE Locks)"]
+    PSM --> DB[("SQLite + Append-Only Ledger & Events")]
+    PSM --> FS["Private Evidence Files (server/uploads + SHA-256)"]
+    API --> PP["PayPal Sandbox (Orders v2, Refunds v2, Payouts v1)"]
+```
+
+---
+
+## 5. Tools Used and How
+
+### PayPal Developer Tools (Verified in Code)
+- **PayPal JS SDK (`@paypal/react-paypal-js`):** Renders the PayPal Checkout button and handles Sandbox buyer popup approval in `client/src/components/negotiation/PayPalCheckoutButton.tsx`.
+- **PayPal OAuth 2.0 (`POST /v1/oauth2/token`):** Fetches and caches sandbox access tokens with automatic 401 refresh in `server/src/services/paypal/paypalClient.ts`.
+- **PayPal Orders API v2 (`POST /v2/checkout/orders`, `POST /v2/checkout/orders/{orderId}/capture`):** Server-side order creation and capture with `PayPal-Request-Id` idempotency keys in `server/src/services/paypal/paypalClient.ts`.
+- **PayPal Payments Refunds API (`POST /v2/payments/captures/{captureId}/refund`):** Full and prorated partial refunds with compensating SQLite rollback on API rejection in `server/src/services/paypal/paypalClient.ts`.
+- **PayPal Payouts API v1 (`POST /v1/payments/payouts`, `GET /v1/payments/payouts/{batchId}`):** Sends net seller earnings in `server/src/services/paypal/payoutProvider.ts` (real Sandbox Payouts API when `PAYPAL_PAYOUT_PROVIDER=paypal`; labeled `SimulatedPayoutProvider` fallback allowed only in non-production test/dev mode and refused when `NODE_ENV=production`).
+
+### AI Inside the Product
+- **Model:** Google Gemini (`@google/generative-ai`, default `gemini-3.5-flash-lite` via `GEMINI_MODEL`, configurable in `.env`) in `server/src/services/ai/gemini.ts`.
+- **What AI Does:**
+  - `parsePurchasingPrompt`: Converts buyer natural language into title, deliverables, budget, and deadline (or asks one follow-up if budget/deadline is missing).
+  - `parseSellerOffering`: Drafts structured marketplace listings from seller descriptions.
+  - `phraseDeterministicTurn` / `evaluateMultipleProposals`: Generates human-readable negotiation messages and multi-offer summaries.
+- **Validation & Guardrails:** All numeric pricing, floors, deadlines, and concessions are computed and clamped deterministically in integer cents by `server/src/services/negotiation/algorithm.ts` and `server/src/services/decision/engine.ts`. Untrusted counterparty text is never allowed to override private limits or payment rules.
+
+### AI Used to Build the Product
+We used Claude and the Anti-Gravity AI coding assistant as major parts of the development process, to write and edit code and to refine prompts and designs. We reviewed, tested and iterated on the results. Source control and CI are hosted on GitHub.
+
+### Stack
+- **Frontend:** React 19, Vite 8, Tailwind CSS 3, TanStack React Query, Framer Motion, Lucide Icons (`client/package.json`).
+- **Backend:** Node.js 20+, Express 4, TypeScript 5, Zod, SQLite via `node:sqlite` (`server/package.json`).
+- **Verification:** Node `node:test` + `tsx`, Playwright (`playwright` in `package.json`).
+
+---
+
+## 6. Setup Guide for Judges (From Zero)
 
 ### Prerequisites
-- Node.js 18+ (tested on Node.js 24)
-- npm 9+
+- **Node.js `>= 20.0.0`** (uses built-in `node:sqlite`) and **npm**
+- **Git**
 
-### Installation & Run
-```bash
-git clone https://github.com/Abdul-Hafiz-1/Vyro.git
-cd Vyro
-npm install
-npm --prefix client install
-npm --prefix server install
-cp .env.example .env
-```
+### Step-by-Step Setup
 
-Fill in `.env` with your Gemini API key (optional—deterministic engine runs when omitted) and PayPal Sandbox REST app credentials (`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `VITE_PAYPAL_CLIENT_ID`). Also see [PAYPAL_RUNBOOK.md](file:///c:/Users/User/Desktop/My_Apps/VYRO/PAYPAL_RUNBOOK.md).
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Abdul-Hafiz-1/Vyro.git
+   cd Vyro
+   ```
 
-### Sandbox Accounts Setup (1 Business + 2 Personal US/USD)
-1. In the [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/), open **Testing Tools > Sandbox Accounts**:
-   - **Platform Business Account:** Merchant account tied to your REST app (ensure **Payouts** is enabled under App Feature Options). Receives buyer payments and sends seller payouts.
-   - **Personal Buyer Account:** Used by the buyer inside the PayPal checkout popup.
-   - **Personal Seller Account:** Email address saved by the seller under **Selling > Payments** (`Where should we send your earnings?`).
-2. Start both apps:
-```bash
-npm run dev:server   # Express + SQLite on http://localhost:4000
-npm run dev:client   # Vite React client on http://localhost:5173
-```
+2. **Install dependencies (root, server, and client):**
+   ```bash
+   npm run install:all
+   ```
 
-> **Before Going Live (Important Legal & Licensing Note):**  
-> In this sandbox architecture, a single platform merchant account receives buyer funds, holds the seller's share until work acceptance, and pays out `agreed price - 5% service fee` to the seller's PayPal email. **Holding funds on behalf of third parties in real production carries financial-licensing and escrow/money-transmitter compliance requirements**, and onboarding sellers directly requires approved **PayPal Commerce Platform / Partner Referrals** marketplace status. Complete PayPal partner approval and legal/compliance review before accepting real money.
+3. **Create `.env` from `.env.example`:**
+   - macOS / Linux:
+     ```bash
+     cp .env.example .env
+     ```
+   - Windows PowerShell:
+     ```powershell
+     copy .env.example .env
+     ```
+
+4. **Fill credentials in `.env`:**
+   - **Free Gemini API key (optional):** Get a key at [Google AI Studio (`https://aistudio.google.com/apikey`)](https://aistudio.google.com/apikey) and set `GEMINI_API_KEY=...`. If left blank, VYRO automatically uses its built-in deterministic parser and negotiation engine with no crash.
+   - **PayPal Sandbox credentials:**
+     1. Sign in at [PayPal Developer Dashboard](https://developer.paypal.com/dashboard/).
+     2. Go to **Testing Tools → Sandbox Accounts** and create (or use) one **Business** account (United States, `USD`) and one **Personal** buyer account (United States, `USD`).
+     3. Go to **Apps & Credentials → Sandbox**, create a REST App linked to your Business account, and copy its **Client ID** and **Secret**.
+     4. Set `PAYPAL_ENV=sandbox`, `PAYPAL_CLIENT_ID=<your_client_id>`, `PAYPAL_CLIENT_SECRET=<your_client_secret>`, and `VITE_PAYPAL_CLIENT_ID=<your_client_id>` in `.env`.
+   - Set `SESSION_SECRET` to any random 32+ character string.
+
+5. **Migrate & seed demo accounts:**
+   SQLite migrations (`001`–`009`) run automatically on DB initialization. Seed the demo buyer and seller accounts:
+   ```bash
+   npm run seed:demo
+   ```
+   - **DEMO Seller:** `demo.seller@example.com` / `password123`
+   - **DEMO Buyer:** `demo.buyer@example.com` / `password123`
+
+6. **Start everything with one command:**
+   ```bash
+   npm run dev
+   ```
+   Open **`http://localhost:5173`** in your browser.
+
+### 5-Minute Demo Path
+1. **Browser Window 1 (Seller):** Open `http://localhost:5173/login` and sign in as `demo.seller@example.com` / `password123`. Switch to **Selling** mode, open **Payments**, and verify your Sandbox Business/Personal payout email is set. Go to **Listings** → **New listing** (or use `"What do you offer?"` on **Today**) to publish a service.
+2. **Browser Window 2 / Incognito (Buyer):** Open `http://localhost:5173/login` and sign in as `demo.buyer@example.com` / `password123`.
+3. On **Today**, type a matching request (e.g. `"I need a React dashboard audit, budget $180, within 5 days"`) and submit.
+4. Watch the agents negotiate rounds, open the project under **Projects**, and approve if it lands in **Needs your OK**.
+5. Click the **PayPal** button and log in with your **Sandbox Personal buyer account** (NOT the Business account) to approve and capture payment.
+6. Back in **Seller Window 1**, open the project → click **Start work** → **Deliver work** (attach a note/link/file).
+7. Back in **Buyer Window 2**, inspect the delivery (notice self-refund is locked after delivery) and click **Accept work**.
+8. Open **Payments** on both windows to inspect the itemized receipt, ledger entries, and seller payout.
+
+### Checking Money in PayPal Sandbox
+- Log in to [sandbox.paypal.com](https://www.sandbox.paypal.com) using **separate browser profiles** (one for your Sandbox Business merchant account, one for your Sandbox Personal buyer account) and check **Activity → All Transactions** to see the real capture and payout rows.
+- Note: the Sandbox Developer Dashboard summary balance often lags behind **Activity**; **Activity** inside `sandbox.paypal.com` reflects captures, refunds, and payouts immediately.
+
+### Common Problems & Fixes
+- **Missing or invalid PayPal keys:** Checkout returns a clear `PAYPAL_NOT_CONFIGURED` message telling you which `.env` variable to set instead of crashing.
+- **Port `4000` or `5173` already in use:** Stop any prior Node process on those ports or change `PORT` in `.env`.
+- **PayPal popup fails or hangs in Brave:** Disable Brave Shields for `localhost` / `sandbox.paypal.com` (Shields blocks third-party PayPal popup cookies).
+- **PayPal says `"You're logging in to the seller's account"`:** You entered the Sandbox Business merchant email inside the buyer PayPal popup. Sign in with your **Sandbox Personal** buyer account instead.
 
 ---
 
-## 5. Testing and Known Limitations
+## 7. Fallback & Missing-Key Behavior
 
-- **PayPal Checkout & Capture in Automated vs Browser Tests:** Automated Playwright tests use `/api/v1/payments/mock-settle` (available only when `NODE_ENV` is `test`/`development` and `PAYMENT_PROVIDER=mock`) after verifying real `POST /api/v1/payments/create-order` against PayPal Sandbox; real buyer popup approval and capture were verified manually in a browser with a Sandbox Personal account (`[CONFIRM]` when re-run against a specific tester account).
-- **Refund Window & External PayPal Disputes:** Refunds (`POST /api/v1/payments/refund` or project cancel/resolve flows, calling PayPal `POST /v2/payments/captures/{captureId}/refund` for live captures) are stage-locked: immediate full refund while `paid_held` before work starts, mutual seller approval while `in_progress`, and disabled for buyers after `delivered` or `accepted` to prevent refund abuse on completed deliveries. VYRO enforces a 72-hour review window (`REVIEW_WINDOW_HOURS`), SHA-256 hashed delivery evidence, and a 72-hour dispute mediation window (`Release`, `Refund`, or percentage `Split`). External disputes or chargebacks filed directly in PayPal Resolution Center outside VYRO are governed by PayPal webhooks and PayPal Buyer Protection.
-- **Live Sandbox Payouts Execution:** Verified via `POST /v1/payments/payouts` in Sandbox (`server/src/services/paypal/payoutProvider.ts` and `scripts/verify_full_journey_pass3.cjs`), with seller payout rows created in SQLite (`processing` while PayPal settles the sandbox batch, updating via webhook or `GET /api/v1/payouts/:id/refresh`).
+VYRO does **not** implement a `DEMO_MODE=offline` flag. Instead:
+- If `GEMINI_API_KEY` is blank or invalid, VYRO automatically falls back to deterministic request/listing parsing and utility-based negotiation phrasing without crashing.
+- If PayPal credentials are missing, `GET /api/v1/payments/health` and checkout surface a clear `PAYPAL_NOT_CONFIGURED` status and instructions to configure `.env`.
 
-### Verification Commands
+---
+
+## 8. Running the Tests
+
 ```bash
-# TypeScript & production bundle checks
-npm --prefix server run build
-npm --prefix client run build
+# Build server and client TypeScript bundles
+npm run build
 
-# Backend unit, property, isolation, PayPal & production-security tests (41 tests across 7 suites)
+# Run backend unit, property, isolation, PayPal, production-security, and lifecycle tests
 npm --prefix server test
-
-# Static motion, fake-progress, raw-text, onboarding & control-crawl guards
-node scripts/motion_guard.js
-node scripts/fake_progress_guard.js
-node scripts/scan_raw_text.js
-node scripts/onboarding_e2e.js
-node scripts/crawl_all_controls.js
 ```
+
+**Honest scope note:** Automated unit and Playwright E2E scripts verify real `POST /api/v1/payments/create-order` against PayPal Sandbox when credentials are present, then use `/api/v1/payments/mock-settle` (only mounted when `NODE_ENV` is `test`/`development` and `PAYMENT_PROVIDER=mock`) for non-interactive settlement. Real PayPal buyer popup approval and capture were verified manually in a browser with a Sandbox Personal buyer account `[CONFIRM]`.
 
 ---
 
-## 6. License
+## 9. Safety and Limits
 
-MIT License. See [LICENSE](file:///c:/Users/User/Desktop/My_Apps/VYRO/LICENSE).
+- **Server-Enforced Financial Guardrails:** Auto-approval limits and daily spend caps are checked and enforced server-side inside `DecisionEngine` and SQLite `BEGIN IMMEDIATE` transactions.
+- **Private Limit Isolation:** Counterparty API responses strip buyer budgets, buyer hard caps, seller floors, and private rejection notes (`404` for non-parties).
+- **Production Security Gates:** When `NODE_ENV=production`, `/api/v1/payments/mock-settle` is unmounted (`404`), mock/simulated payment and payout providers are refused, error stack traces are omitted, and auth/AI/payment routes enforce per-IP rate limits (`429`).
+- **Sandbox Only:** Runs strictly in PayPal Sandbox (`PAYPAL_ENV=sandbox`; startup throws if live credentials are paired with sandbox mode).
+
+---
+
+## 10. Known Limitations
+
+- **Sandbox Only:** All transactions use PayPal Sandbox; no real money moves.
+- **External PayPal Disputes:** Disputes/chargebacks opened directly inside PayPal Resolution Center are governed by PayPal webhooks and PayPal Buyer Protection outside VYRO's in-app review window.
+- **Simulated Payouts in Test Mode:** When `PAYPAL_PAYOUT_PROVIDER=simulated` in dev/test, payouts run through `SimulatedPayoutProvider` (refused in `NODE_ENV=production`).
+- **No Hosted Demo:** Designed to be cloned and run locally via the setup instructions above.
+
+---
+
+## 11. What's Next
+
+- Complete **PayPal Commerce Platform Partner Referrals** onboarding so sellers connect their own verified PayPal merchant accounts directly.
+- Enable **live PayPal Payouts** and money-transmission/escrow licensing compliance prior to real-money launch.
+- Sync **PayPal Dispute Webhooks** directly into VYRO's `/app/disputes` mediator screen.
+
+---
+
+## 12. License and Third-Party Notices
+
+Licensed under the [MIT License](LICENSE). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for verified open-source dependency and font licenses.
