@@ -1,6 +1,6 @@
 /**
  * VYRO Premium Design Tokens
- * Derived from Linear, Stripe, and Ramp reference teardown.
+ * Derived from Editorial dark-first design token architecture.
  * Dark by default. Light fully supported.
  */
 

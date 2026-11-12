@@ -47,7 +47,7 @@ export const StyleguidePage: React.FC = () => {
         <div>
           <div className="flex items-center gap-2 mb-2">
             <StatusChip label="Design System" role="neutral" size="sm" />
-            <span className="text-secondary text-text-muted">Linear & Stripe Reference Foundation</span>
+            <span className="text-secondary text-text-muted">Editorial Commerce Design Tokens</span>
           </div>
           <h1 className="font-display font-bold text-hero text-text-primary">
             VYRO System Specs
@@ -188,7 +188,7 @@ export const StyleguidePage: React.FC = () => {
       {/* 5. DECISION CARD (RAMP APPROVAL PATTERN) */}
       <section className="flex flex-col gap-4">
         <h2 className="font-display font-semibold text-section text-text-primary">
-          Decision Exception Cockpit (Ramp / Linear Pattern)
+          Decision Exception Cockpit (Decision Exception Pattern)
         </h2>
         <DecisionCard
           title="Landing page design · Pixel Studio"
@@ -205,10 +205,10 @@ export const StyleguidePage: React.FC = () => {
         />
       </section>
 
-      {/* 6. DEAL TIMELINE NODE & SUMMARY PANEL (STRIPE CHECKOUT PATTERN) */}
+      {/* 6. DEAL TIMELINE NODE & SUMMARY PANEL (ESCROW CHECKOUT PATTERN) */}
       <section className="flex flex-col gap-4">
         <h2 className="font-display font-semibold text-section text-text-primary">
-          Deal Timeline Node & Sticky Summary Panel (Stripe Pattern)
+          Deal Timeline Node & Sticky Summary Panel (Escrow Pattern)
         </h2>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div className="lg:col-span-7 flex flex-col">

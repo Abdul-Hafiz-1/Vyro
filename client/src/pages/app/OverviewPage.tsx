@@ -119,7 +119,7 @@ export const OverviewPage: React.FC = () => {
     cancellationRequests.length === 0 &&
     (!isSellerWorkspace || ((sellerProjectsSummary?.activeCount || 0) === 0 && (sellerProjectsSummary?.releasedCents || 0) === 0));
 
-  // Linear-style Keyboard Navigation: J (next), K (prev)
+  // Keyboard Inbox Navigation: J (next), K (prev)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement).tagName)) {
@@ -537,7 +537,7 @@ export const OverviewPage: React.FC = () => {
         </section>
       )}
 
-      {/* SPLIT INBOX SECTION: LIST ON LEFT, DETAIL PANE ON RIGHT (LINEAR INBOX REFERENCE) */}
+      {/* SPLIT INBOX SECTION: LIST ON LEFT, DETAIL PANE ON RIGHT (SPLIT INBOX LAYOUT) */}
       {needsYou.length > 0 && (
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between">

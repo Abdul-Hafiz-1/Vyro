@@ -139,7 +139,7 @@ Disputes may be raised within 7 days of settlement.
         </div>
       </div>
 
-      {/* Stripe-Style Clean Invoice Paper */}
+      {/* Clean Invoice Paper */}
       <Card className="p-8 sm:p-10 flex flex-col gap-8 bg-surface">
         {/* Invoice Top: Brand + Status */}
         <div className="flex items-start justify-between gap-4 border-b border-border-subtle pb-6">

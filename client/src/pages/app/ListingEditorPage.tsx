@@ -129,7 +129,7 @@ export const ListingEditorPage: React.FC = () => {
         </button>
       </div>
 
-      {/* Top Stepper (Airbnb style) */}
+      {/* Top Stepper (Multi-step wizard) */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-secondary font-medium text-text-muted">

@@ -319,7 +319,7 @@ export const ListingsPage: React.FC = () => {
             </Card>
           )}
 
-          {/* Standard Listings Cards (Fiverr style) */}
+          {/* Standard Listings Cards (Catalog grid) */}
           {regularListings.map((listing) => {
             const isOwn = listing.sellerId === user?.id;
             return (

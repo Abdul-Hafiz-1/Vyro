@@ -1,6 +1,10 @@
 {
   "name": "vyro-server",
   "version": "1.0.0",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "VYRO Autonomous AI Commerce Network Backend",
   "main": "dist/index.js",
   "scripts": {

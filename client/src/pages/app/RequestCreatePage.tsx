@@ -208,7 +208,7 @@ export const RequestCreatePage: React.FC = () => {
         </button>
       </div>
 
-      {/* Top Stepping Bar (Airbnb booking flow reference) */}
+      {/* Top Stepping Bar (Multi-step request flow) */}
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between">
           <span className="text-secondary font-medium text-text-muted">

@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "install:all": "cd server && npm install && cd ../client && npm install",
+    "dev": "node scripts/dev.cjs",
     "dev:server": "cd server && npm run dev",
     "dev:client": "cd client && npm run dev",
     "build:server": "cd server && npm run build",
@@ -12,6 +13,7 @@
     "build": "npm run build:server && npm run build:client",
     "db:reset": "npm --prefix server run db:reset",
     "db:seed:demo": "npm --prefix server run db:seed:demo",
+    "seed:demo": "npm --prefix server run db:seed:demo",
     "start": "cd server && npm start"
   },
   "keywords": [
@@ -21,11 +23,18 @@
     "paypal",
     "negotiation"
   ],
-  "author": "VYRO Technologies",
+  "author": "Abdul Hafiz Nizamuddin",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "devDependencies": {
+    "@neondatabase/serverless": "^1.2.0",
     "pixelmatch": "^8.0.0",
     "playwright": "^1.65.0",
-    "pngjs": "^7.0.0"
+    "pngjs": "^7.0.0",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.160.0"
   }
 }

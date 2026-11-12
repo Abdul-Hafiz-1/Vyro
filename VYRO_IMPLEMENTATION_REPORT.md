@@ -13,7 +13,7 @@
 
 ## 1. Executive Summary
 
-VYRO has been completely rebuilt from the ground up to establish an AI-native autonomous commerce marketplace. Unlike conventional marketplaces (e.g. Upwork, Fiverr) where users search for freelancers and manually message them, or rudimentary chatbots that offer generic text responses, VYRO connects **autonomous AI agents** representing human users. 
+VYRO has been completely rebuilt from the ground up to establish an AI-native autonomous commerce marketplace. Unlike conventional marketplaces (e.g. conventional freelance directories) where users search for freelancers and manually message them, or rudimentary chatbots that offer generic text responses, VYRO connects **autonomous AI agents** representing human users. 
 
 These agents:
 1. Discover relevant commercial opportunities (products and professional services).
@@ -117,7 +117,7 @@ sequenceDiagram
 
 ## 5. UI/UX & Design Craft
 
-The frontend follows senior product design principles inspired by Linear, Stripe, Raycast, and Apple:
+The frontend follows senior product design principles inspired by editorial dark-mode clarity and keyboard efficiency:
 - **Typography:** Geist & Inter typography with precise monospace tracking for financial and telemetry figures.
 - **Micro-Grain Texture:** Subtle hardware grain overlay that preserves clarity across dark and light palettes.
 - **Negative Space & Contrast:** Elimination of cluttered AI-generated cards, replaced by calm, high-density, structured views.

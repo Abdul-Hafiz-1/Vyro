@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main, submission-prep]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install root, server, and client dependencies
+        run: |
+          npm install --no-audit --no-fund
+          npm --prefix server install --no-audit --no-fund
+          npm --prefix client install --no-audit --no-fund
+
+      - name: Type-check and build server
+        run: npm --prefix server run build
+
+      - name: Type-check and build client
+        run: npm --prefix client run build
+
+      - name: Run server unit, security, and PayPal tests
+        env:
+          NODE_ENV: test
+          PAYMENT_PROVIDER: mock
+          PAYPAL_PAYOUT_PROVIDER: simulated
+          PAYPAL_ENV: sandbox
+          RATE_LIMIT_MAX: 1000
+        run: |
+          node server/dist/index.js &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4000/health > /dev/null; then
+              break
+            fi
+            sleep 1
+          done
+          npm --prefix server test
+          kill $SERVER_PID || true
